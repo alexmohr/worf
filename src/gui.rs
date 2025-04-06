@@ -1,22 +1,27 @@
+use crate::config::Config;
+use anyhow::Context;
+use gdk4::Display;
 use gdk4::gio::File;
 use gdk4::glib::Propagation;
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt};
-use gdk4::Display;
-use gtk4::prelude::{ApplicationExt, ApplicationExtManual, BoxExt, ButtonExt, EditableExt, EntryExt, FlowBoxChildExt, GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt};
-use gtk4::{Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, Label, ListBox, ListBoxRow, PolicyType, ScrolledWindow, SearchEntry, Widget};
+use gtk4::prelude::{
+    ApplicationExt, ApplicationExtManual, BoxExt, ButtonExt, EditableExt, EntryExt,
+    FlowBoxChildExt, GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
+};
+use gtk4::{
+    Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, Label, ListBox, ListBoxRow,
+    PolicyType, ScrolledWindow, SearchEntry, Widget,
+};
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{KeyboardMode, LayerShell};
-use std::process::exit;
-use anyhow::Context;
 use log::error;
-use crate::config::Config;
+use std::process::exit;
 
 pub struct EntryElement {
     pub label: String, // todo support empty label?
     pub icon_path: Option<String>,
     pub action: Box<dyn Fn() + Send + 'static>,
     pub sub_elements: Option<Vec<EntryElement>>,
-
 }
 
 pub fn init(config: Config, elements: Vec<EntryElement>) -> anyhow::Result<()> {
@@ -33,7 +38,6 @@ pub fn init(config: Config, elements: Vec<EntryElement>) -> anyhow::Result<()> {
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-
     let display = Display::default().expect("Could not connect to a display");
     // Apply CSS to the display
     gtk4::style_context_add_provider_for_display(
@@ -43,9 +47,7 @@ pub fn init(config: Config, elements: Vec<EntryElement>) -> anyhow::Result<()> {
     );
 
     // No need for application_id unless you want portal support
-    let app = Application::builder()
-        .application_id("ravi")
-        .build();
+    let app = Application::builder().application_id("ravi").build();
 
     app.connect_activate(move |app| {
         // Create a toplevel undecorated window
@@ -141,8 +143,6 @@ pub fn init(config: Config, elements: Vec<EntryElement>) -> anyhow::Result<()> {
 
         window.show();
 
-
-
         // Get the display where the window resides
         let display = window.display();
 
@@ -151,17 +151,22 @@ pub fn init(config: Config, elements: Vec<EntryElement>) -> anyhow::Result<()> {
             let monitor = display.monitor_at_surface(&surface);
             if let Some(monitor) = monitor {
                 let geometry = monitor.geometry();
-                if let Some(w) = percent_or_absolute(&config.width.clone().unwrap_or("800".to_owned()), geometry.width()) {
+                if let Some(w) = percent_or_absolute(
+                    &config.width.clone().unwrap_or("800".to_owned()),
+                    geometry.width(),
+                ) {
                     window.set_width_request(w);
                 }
-                if let Some(h) = percent_or_absolute(&config.height.clone().unwrap_or("500".to_owned()), geometry.height()) {
+                if let Some(h) = percent_or_absolute(
+                    &config.height.clone().unwrap_or("500".to_owned()),
+                    geometry.height(),
+                ) {
                     window.set_height_request(h);
                 }
             } else {
                 error!("failed to get monitor to init window size");
             }
         });
-
     });
 
     let empty_array: [&str; 0] = [];
@@ -233,9 +238,9 @@ fn percent_or_absolute(value: &String, base_value: i32) -> Option<i32> {
         let value = value.trim();
         match value.parse::<i32>() {
             Ok(n) => {
-                let result = ((n as f32/ 100.0) * base_value as f32) as i32;
+                let result = ((n as f32 / 100.0) * base_value as f32) as i32;
                 Some(result)
-            },
+            }
             Err(_) => None,
         }
     } else {

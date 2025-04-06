@@ -1,8 +1,7 @@
-use std::str::FromStr;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use thiserror::Error;
-
 
 // Define a custom error type using the `thiserror` crate
 #[derive(Debug, Error)]
@@ -19,18 +18,20 @@ pub enum Mode {
     Drun,
 
     /// reads from stdin and displays options which when selected will be output to stdout.
-    Dmenu
+    Dmenu,
 }
 
 impl FromStr for Mode {
     type Err = ArgsError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s  {
+        match s {
             "run" => Ok(Mode::Run),
             "drun" => Ok(Mode::Drun),
             "dmenu" => Ok(Mode::Dmenu),
-            _ => Err(ArgsError::InvalidParameter(format!("{s} is not a valid argument show this, see help for details").to_owned()))
+            _ => Err(ArgsError::InvalidParameter(
+                format!("{s} is not a valid argument show this, see help for details").to_owned(),
+            )),
         }
     }
 }
@@ -38,7 +39,6 @@ impl FromStr for Mode {
 #[derive(Parser, Debug, Deserialize, Serialize)]
 #[clap(about = "Ravi is a wofi clone written in rust, it aims to be a drop in replacement")]
 pub struct Args {
-
     /// Forks the menu so you can close the terminal
     #[clap(short = 'f', long = "fork")]
     fork: bool,

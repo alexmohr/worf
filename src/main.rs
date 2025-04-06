@@ -3,6 +3,7 @@
 
 use crate::args::{Args, Mode};
 use crate::config::Config;
+use crate::desktop::find_desktop_files;
 use crate::gui::EntryElement;
 use clap::Parser;
 use gdk4::prelude::Cast;
@@ -18,7 +19,6 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
-use crate::desktop::find_desktop_files;
 
 mod args;
 mod config;
@@ -65,11 +65,14 @@ fn main() -> anyhow::Result<()> {
     match args.mode {
         Mode::Run => {}
         Mode::Drun => {
-            let mut entries : Vec<EntryElement> = Vec::new();
+            let mut entries: Vec<EntryElement> = Vec::new();
             for file in &find_desktop_files() {
                 if let Some(desktop_entry) = file.get("desktop entry") {
-                    let icon = desktop_entry.get("icon").and_then(|x| x.as_ref().map(|x| x.to_owned()));
-                    let Some(exec) = desktop_entry.get("exec").and_then(|x| x.as_ref().cloned()) else {
+                    let icon = desktop_entry
+                        .get("icon")
+                        .and_then(|x| x.as_ref().map(|x| x.to_owned()));
+                    let Some(exec) = desktop_entry.get("exec").and_then(|x| x.as_ref().cloned())
+                    else {
                         continue;
                     };
 
@@ -87,7 +90,9 @@ fn main() -> anyhow::Result<()> {
                         })
                     };
 
-                    let name = desktop_entry.get("name").and_then(|x| x.as_ref().map(|x| x.to_owned()));
+                    let name = desktop_entry
+                        .get("name")
+                        .and_then(|x| x.as_ref().map(|x| x.to_owned()));
                     if let Some(name) = name {
                         entries.push({
                             EntryElement {
@@ -100,7 +105,7 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-            entries.sort_by(|l, r|l.label.cmp(&r.label));
+            entries.sort_by(|l, r| l.label.cmp(&r.label));
             if config.prompt.is_none() {
                 config.prompt = Some("dmenu".to_owned());
             }

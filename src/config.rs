@@ -1,9 +1,9 @@
+use crate::args::Args;
 use anyhow::anyhow;
 use gtk4::prelude::ToValue;
 use merge::Merge;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::args::Args;
 
 #[derive(Debug, Deserialize, Serialize, Merge, Clone)]
 pub struct Config {
@@ -77,7 +77,7 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config{
+        Config {
             style: None,
             stylesheet: None,
             color: None,
@@ -235,7 +235,6 @@ fn default_width() -> Option<String> {
 fn default_password_char() -> Option<String> {
     Some("*".to_owned())
 }
-
 
 pub fn merge_config_with_args(config: &mut Config, args: &Args) -> anyhow::Result<Config> {
     let args_json = serde_json::to_value(args)?;

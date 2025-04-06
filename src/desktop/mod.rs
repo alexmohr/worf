@@ -46,24 +46,23 @@ pub fn default_icon() -> String {
 }
 
 fn fetch_icon_from_desktop_file(icon_name: &str) -> Option<String> {
-    find_desktop_files().into_iter()
-        .find_map(|desktop_file| {
-            desktop_file
-                .get("Desktop Entry")
-                .filter(|desktop_entry| {
-                    desktop_entry
-                        .get("Exec")
-                        .and_then(|opt| opt.as_ref())
-                        .is_some_and(|exec| exec.to_lowercase().contains(icon_name))
-                })
-                .map(|desktop_entry| {
-                    desktop_entry
-                        .get("Icon")
-                        .and_then(|opt| opt.as_ref())
-                        .map(ToOwned::to_owned)
-                        .unwrap_or_default()
-                })
-        })
+    find_desktop_files().into_iter().find_map(|desktop_file| {
+        desktop_file
+            .get("Desktop Entry")
+            .filter(|desktop_entry| {
+                desktop_entry
+                    .get("Exec")
+                    .and_then(|opt| opt.as_ref())
+                    .is_some_and(|exec| exec.to_lowercase().contains(icon_name))
+            })
+            .map(|desktop_entry| {
+                desktop_entry
+                    .get("Icon")
+                    .and_then(|opt| opt.as_ref())
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_default()
+            })
+    })
 }
 
 fn fetch_icon_from_theme(icon_name: &str) -> Option<String> {
@@ -143,7 +142,7 @@ pub(crate) fn find_desktop_files() -> Vec<HashMap<String, HashMap<String, Option
         paths.push(home.join(".local/share/applications"));
     }
 
-   let p: Vec<_> = paths
+    let p: Vec<_> = paths
         .into_iter()
         .filter(|icon_dir| icon_dir.exists())
         .filter_map(|icon_dir| {
@@ -154,6 +153,7 @@ pub(crate) fn find_desktop_files() -> Vec<HashMap<String, HashMap<String, Option
                 let mut conf = Ini::new();
                 conf.load(desktop_file.as_path().to_str().unwrap()).ok()
             })
-        }).collect();
-   p
+        })
+        .collect();
+    p
 }
