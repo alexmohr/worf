@@ -144,12 +144,12 @@ impl Default for Config {
 }
 
 fn default_normal_window() -> Option<bool> {
-    Some(true)
+    Some(false)
 }
 
 // TODO
 // GtkOrientation orientation = config_get_mnemonic(config, "orientation", "vertical", 2, "vertical", "horizontal");
-// outer_orientation = config_get_mnemonic(config, "orientation", "vertical", 2, "horizontal", "vertical");
+// outer_orientation = config_get_mnemonic(cstoonfig, "orientation", "vertical", 2, "horizontal", "vertical");
 // GtkAlign halign = config_get_mnemonic(config, "halign", "fill", 4, "fill", "start", "end", "center");
 // content_halign = config_get_mnemonic(config, "content_halign", "fill", 4, "fill", "start", "end", "center");
 // char* default_valign = "start";
@@ -252,7 +252,9 @@ fn merge_json(a: &mut Value, b: &Value) {
             }
         }
         (a_val, b_val) => {
-            *a_val = b_val.clone();
+            if *b_val != Value::Null {
+                *a_val = b_val.clone();
+            }
         }
     }
 }

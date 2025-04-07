@@ -77,11 +77,11 @@ pub struct Args {
 
     /// The x offset
     #[clap(short = 'x', long = "xoffset")]
-    x: Option<String>,
+    x: Option<i32>,
 
     /// The y offset
     #[clap(short = 'y', long = "yoffset")]
-    y: Option<String>,
+    y: Option<i32>,
 
     /// Render to a normal window
     #[clap(short = 'n', long = "normal-window")]
@@ -149,7 +149,7 @@ pub struct Args {
 
     /// Sets the number of columns to display
     #[clap(short = 'w', long = "columns")]
-    columns: Option<String>,
+    columns: Option<u8>,
 
     /// Sets the sort order
     #[clap(short = 'O', long = "sort-order")]
