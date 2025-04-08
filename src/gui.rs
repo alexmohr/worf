@@ -50,7 +50,7 @@ pub fn show(config: Config, elements: Vec<EntryElement>) -> anyhow::Result<(i32)
     );
 
     // No need for application_id unless you want portal support
-    let app = Application::builder().application_id("ravi").build();
+    let app = Application::builder().application_id("worf").build();
     let (sender, receiver) = channel::bounded(1);
 
     app.connect_activate(move |app| {
@@ -185,7 +185,7 @@ fn setup_key_event_handler(
     let key_controller = EventControllerKey::new();
     key_controller.connect_key_pressed(move |_, key_value, _, _| {
         match key_value {
-            Key::Escape => exit(1),
+            Key::Escape => exit(1), // todo better way to do this?
             Key::Return => {
                 for s in &inner_box.selected_children() {
                     // let element : &Option<&EntryElement> = &elements.get(s.index() as usize);
