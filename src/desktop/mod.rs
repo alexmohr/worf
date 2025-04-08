@@ -1,8 +1,9 @@
+use freedesktop_file_parser::DesktopFile;
 use gtk4::prelude::*;
 use gtk4::{IconLookupFlags, IconTheme, TextDirection};
 use home::home_dir;
 use ini::configparser::ini::Ini;
-use log::{info, warn};
+use log::{debug, info, warn};
 use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
@@ -46,23 +47,25 @@ pub fn default_icon() -> String {
 }
 
 fn fetch_icon_from_desktop_file(icon_name: &str) -> Option<String> {
-    find_desktop_files().into_iter().find_map(|desktop_file| {
-        desktop_file
-            .get("Desktop Entry")
-            .filter(|desktop_entry| {
-                desktop_entry
-                    .get("Exec")
-                    .and_then(|opt| opt.as_ref())
-                    .is_some_and(|exec| exec.to_lowercase().contains(icon_name))
-            })
-            .map(|desktop_entry| {
-                desktop_entry
-                    .get("Icon")
-                    .and_then(|opt| opt.as_ref())
-                    .map(ToOwned::to_owned)
-                    .unwrap_or_default()
-            })
-    })
+    // find_desktop_files().into_iter().find_map(|desktop_file| {
+    //     desktop_file
+    //         .get("Desktop Entry")
+    //         .filter(|desktop_entry| {
+    //             desktop_entry
+    //                 .get("Exec")
+    //                 .and_then(|opt| opt.as_ref())
+    //                 .is_some_and(|exec| exec.to_lowercase().contains(icon_name))
+    //         })
+    //         .map(|desktop_entry| {
+    //             desktop_entry
+    //                 .get("Icon")
+    //                 .and_then(|opt| opt.as_ref())
+    //                 .map(ToOwned::to_owned)
+    //                 .unwrap_or_default()
+    //         })
+    // })
+    //todo
+    None
 }
 
 fn fetch_icon_from_theme(icon_name: &str) -> Option<String> {
@@ -135,8 +138,11 @@ fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<Pa
     })
 }
 
-pub(crate) fn find_desktop_files() -> Vec<HashMap<String, HashMap<String, Option<String>>>> {
-    let mut paths = vec![PathBuf::from("/usr/share/applications")];
+pub(crate) fn find_desktop_files() -> Vec<DesktopFile> {
+    let mut paths = vec![
+        PathBuf::from("/usr/share/applications"),
+        PathBuf::from("/usr/local/share/applications"),
+    ];
 
     if let Some(home) = home_dir() {
         paths.push(home.join(".local/share/applications"));
@@ -150,8 +156,10 @@ pub(crate) fn find_desktop_files() -> Vec<HashMap<String, HashMap<String, Option
         })
         .flat_map(|desktop_files| {
             desktop_files.into_iter().filter_map(|desktop_file| {
-                let mut conf = Ini::new();
-                conf.load(desktop_file.as_path().to_str().unwrap()).ok()
+                debug!("loading desktop file {:?}", desktop_file);
+                fs::read_to_string(desktop_file)
+                    .ok()
+                    .and_then(|content| freedesktop_file_parser::parse(&content).ok())
             })
         })
         .collect();

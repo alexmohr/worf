@@ -27,3 +27,4 @@ smithay-client-toolkit = { version = "0.19.2", features = ["calloop"]}
 calloop = "0.14.2"
 crossbeam = "0.8.4"
 libc = "0.2.171"
+freedesktop-file-parser = "0.1.0"

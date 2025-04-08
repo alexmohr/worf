@@ -37,7 +37,7 @@ impl FromStr for Mode {
 }
 
 #[derive(Parser, Debug, Deserialize, Serialize)]
-#[clap(about = "Ravi is a wofi clone written in rust, it aims to be a drop in replacement")]
+#[clap(about = "Worf is a wofi clone written in rust, it aims to be a drop in replacement")]
 pub struct Args {
     /// Forks the menu so you can close the terminal
     #[clap(short = 'f', long = "fork")]

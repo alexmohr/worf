@@ -12,14 +12,16 @@ use gtk4::prelude::{
     FlowBoxChildExt, GtkWindowExt, ListBoxRowExt, NativeExt, ObjectExt, SurfaceExt, WidgetExt,
 };
 use gtk4_layer_shell::LayerShell;
+use log::{debug, warn};
 use merge::Merge;
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread::sleep;
-use std::{fs, time};
+use std::{env, fs, time};
 
 mod args;
 mod config;
@@ -80,43 +82,139 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn get_locale_variants() -> Vec<String> {
+    let locale = env::var("LC_ALL")
+        .or_else(|_| env::var("LC_MESSAGES"))
+        .or_else(|_| env::var("LANG"))
+        .unwrap_or_else(|_| "c".to_string());
+
+    let lang = locale.split('.').next().unwrap_or(&locale).to_lowercase();
+    let mut variants = vec![];
+
+    if let Some((lang_part, region)) = lang.split_once('_') {
+        variants.push(format!("{}_{region}", lang_part)); // en_us
+        variants.push(lang_part.to_string()); // en
+    } else {
+        variants.push(lang.clone()); // e.g. "fr"
+    }
+
+    variants
+}
+
+fn extract_desktop_fields(
+    category: &str,
+    //keys: Vec<String>,
+    desktop_map: &HashMap<String, HashMap<String, Option<String>>>,
+) -> HashMap<String, String> {
+    let mut result: HashMap<String, String> = HashMap::new();
+    let category_map = desktop_map.get(category);
+    if category_map.is_none() {
+        debug!("No desktop map for category {category}, map data: {desktop_map:?}");
+        return result;
+    }
+
+    let keys_needed = ["name", "exec", "icon"];
+    let locale_variants = get_locale_variants();
+
+    for (map_key, map_value) in category_map.unwrap() {
+        for key in keys_needed {
+            if result.contains_key(key) || map_value.is_none() {
+                continue;
+            }
+
+            let (k, v) = locale_variants
+                .iter()
+                .find(|locale| {
+                    let localized_key = format!("{}[{}]", key, locale);
+                    key == localized_key
+                })
+                .map(|_| (Some(key), map_value))
+                .unwrap_or_else(|| {
+                    if key == map_key {
+                        (Some(key), map_value)
+                    } else {
+                        (None, &None)
+                    }
+                });
+            if let Some(k) = k {
+                if let Some(v) = v {
+                    result.insert(k.to_owned(), v.clone());
+                }
+            }
+        }
+
+        if result.len() == keys_needed.len() {
+            break;
+        }
+    }
+
+    result
+}
 fn drun(mut config: Config) -> anyhow::Result<()> {
     let mut entries: Vec<EntryElement> = Vec::new();
     for file in &find_desktop_files() {
-        if let Some(desktop_entry) = file.get("desktop entry") {
-            let icon = desktop_entry
-                .get("icon")
-                .and_then(|x| x.as_ref().map(|x| x.to_owned()));
-            let Some(exec) = desktop_entry.get("exec").and_then(|x| x.as_ref().cloned()) else {
-                continue;
-            };
+        let n = get_locale_variants()
+            .iter()
+            .filter_map(|local| file.entry.name.variants.get(local))
+            .next()
+            .map(|name| name.deref().clone())
+            .or_else(|| Some(&file.entry.name.default));
 
-            if let Some((cmd, _)) = exec.split_once(' ') {
-                if !PathBuf::from(cmd).exists() {
-                    continue;
-                }
-            }
+        debug!("{n:?}")
 
-            let name = desktop_entry
-                .get("name")
-                .and_then(|x| x.as_ref().map(|x| x.to_owned()));
-            if let Some(name) = name {
-                entries.push({
-                    EntryElement {
-                        label: name,
-                        icon_path: icon,
-                        action: Some(exec),
-                        sub_elements: None,
-                    }
-                })
-            }
-        }
+        // let desktop = Some("desktop entry");
+        // let locale =
+        //     env::var("LC_ALL")
+        //     .or_else(|_| env::var("LC_MESSAGES"))
+        //     .or_else(|_| env::var("LANG"))
+        //     .unwrap_or_else(|_| "en_US.UTF-8".to_string()).split_once(".").map(|(k,_)| k.to_owned().to_lowercase());
+        //
+        //
+        //
+        //
+        // if let Some(desktop_entry) = file.get("desktop entry") {
+        //     let icon = desktop_entry
+        //         .get("icon")
+        //         .and_then(|x| x.as_ref().map(|x| x.to_owned()));
+        //
+        //
+        //     let Some(exec) = desktop_entry.get("exec")
+        //
+        //
+        //
+        //         .and_then(|x| x.as_ref()) else {
+        //         warn!("Skipping desktop file {file:#?}");
+        //         continue;
+        //     };
+        //
+        //     if let Some((cmd, _)) = exec.split_once(' ') {
+        //         if !PathBuf::from(cmd).exists() {
+        //             continue;
+        //         }
+        //     }
+        //
+        //     let name = desktop_entry
+        //         .get("name")
+        //         .and_then(|x| x.as_ref().map(|x| x.to_owned()));
+        //
+        //     if let Some(name) = name {
+        //         entries.push({
+        //             EntryElement {
+        //                 label: name,
+        //                 icon_path: icon,
+        //                 action: Some(exec.clone()),
+        //                 sub_elements: None,
+        //             }
+        //         })
+        //     }
+        // }
     }
 
     entries.sort_by(|l, r| l.label.cmp(&r.label));
     if config.prompt.is_none() {
         config.prompt = Some("drun".to_owned());
     }
+
     // todo ues a arc instead of cloning the config
     let selected_index = gui::show(config.clone(), entries.clone())?;
     entries.get(selected_index as usize).map(|e| {
@@ -130,6 +228,7 @@ fn drun(mut config: Config) -> anyhow::Result<()> {
 
 fn spawn_fork(cmd: &str) {
     // todo fork this for real
+    // todo probably remove arguments?
     // Unix-like systems (Linux, macOS)
     let _ = Command::new(cmd)
         .stdin(Stdio::null()) // Disconnect stdin
