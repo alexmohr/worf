@@ -20,14 +20,14 @@ use log::{debug, error, info};
 use std::process::exit;
 
 #[derive(Clone)]
-pub struct EntryElement {
+pub struct MenuItem {
     pub label: String, // todo support empty label?
     pub icon_path: Option<String>,
     pub action: Option<String>,
-    pub sub_elements: Option<Vec<EntryElement>>,
+    pub sub_elements: Vec<MenuItem>,
 }
 
-pub fn show(config: Config, elements: Vec<EntryElement>) -> anyhow::Result<(i32)> {
+pub fn show(config: Config, elements: Vec<MenuItem>) -> anyhow::Result<(i32)> {
     // Load CSS
     let provider = CssProvider::new();
     let css_file_path = File::for_path("/home/me/.config/wofi/style.css");
@@ -118,7 +118,7 @@ pub fn show(config: Config, elements: Vec<EntryElement>) -> anyhow::Result<(i32)
         inner_box.set_activate_on_single_click(true);
 
         for entry in &elements {
-            add_entry_element(&inner_box, &entry);
+            add_menu_item(&inner_box, &entry);
         }
 
         // Set focus after everything is realized
@@ -216,8 +216,8 @@ fn setup_key_event_handler(
     window.add_controller(key_controller);
 }
 
-fn add_entry_element(inner_box: &FlowBox, entry_element: &EntryElement) {
-    let parent: Widget = if entry_element.sub_elements.is_some() {
+fn add_menu_item(inner_box: &FlowBox, entry_element: &MenuItem) {
+    let parent: Widget = if !entry_element.sub_elements.is_empty() {
         let expander = Expander::new(None);
 
         // Inline label as expander label
@@ -228,11 +228,12 @@ fn add_entry_element(inner_box: &FlowBox, entry_element: &EntryElement) {
         // todo subelements do not fill full space yet.
         // todo multi nesting is not supported yet.
 
-        for x in entry_element.sub_elements.iter().flatten() {
+        for x in entry_element.sub_elements.iter(){
             let row = ListBoxRow::new();
             row.set_widget_name("entry");
 
             let label = Label::new(Some(&x.label));
+            label.set_halign(Align::Start);
             row.set_child(Some(&label));
             list_box.append(&row);
         }
