@@ -3,8 +3,8 @@
 
 use crate::args::{Args, Mode};
 use crate::config::{Config, merge_config_with_args};
-use crate::desktop::find_desktop_files;
-use crate::gui::EntryElement;
+use crate::desktop::{default_icon, find_desktop_files, get_locale_variants};
+use crate::gui::MenuItem;
 use clap::Parser;
 use gdk4::prelude::Cast;
 use gtk4::prelude::{
@@ -12,7 +12,7 @@ use gtk4::prelude::{
     FlowBoxChildExt, GtkWindowExt, ListBoxRowExt, NativeExt, ObjectExt, SurfaceExt, WidgetExt,
 };
 use gtk4_layer_shell::LayerShell;
-use log::{debug, warn};
+use log::{debug, info, warn};
 use merge::Merge;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -22,6 +22,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread::sleep;
 use std::{env, fs, time};
+use freedesktop_file_parser::{DesktopAction, EntryType};
 
 mod args;
 mod config;
@@ -82,85 +83,61 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn get_locale_variants() -> Vec<String> {
-    let locale = env::var("LC_ALL")
-        .or_else(|_| env::var("LC_MESSAGES"))
-        .or_else(|_| env::var("LANG"))
-        .unwrap_or_else(|_| "c".to_string());
-
-    let lang = locale.split('.').next().unwrap_or(&locale).to_lowercase();
-    let mut variants = vec![];
-
-    if let Some((lang_part, region)) = lang.split_once('_') {
-        variants.push(format!("{}_{region}", lang_part)); // en_us
-        variants.push(lang_part.to_string()); // en
-    } else {
-        variants.push(lang.clone()); // e.g. "fr"
-    }
-
-    variants
+fn lookup_name_with_locale(
+    locale_variants: &Vec<String>,
+    variants: &HashMap<String, String>,
+    fallback: &str,
+) -> Option<String> {
+    locale_variants
+        .iter()
+        .filter_map(|local| variants.get(local))
+        .next()
+        .map(|name| name.to_owned())
+        .or_else(|| Some(fallback.to_owned()))
 }
 
-fn extract_desktop_fields(
-    category: &str,
-    //keys: Vec<String>,
-    desktop_map: &HashMap<String, HashMap<String, Option<String>>>,
-) -> HashMap<String, String> {
-    let mut result: HashMap<String, String> = HashMap::new();
-    let category_map = desktop_map.get(category);
-    if category_map.is_none() {
-        debug!("No desktop map for category {category}, map data: {desktop_map:?}");
-        return result;
-    }
-
-    let keys_needed = ["name", "exec", "icon"];
-    let locale_variants = get_locale_variants();
-
-    for (map_key, map_value) in category_map.unwrap() {
-        for key in keys_needed {
-            if result.contains_key(key) || map_value.is_none() {
-                continue;
-            }
-
-            let (k, v) = locale_variants
-                .iter()
-                .find(|locale| {
-                    let localized_key = format!("{}[{}]", key, locale);
-                    key == localized_key
-                })
-                .map(|_| (Some(key), map_value))
-                .unwrap_or_else(|| {
-                    if key == map_key {
-                        (Some(key), map_value)
-                    } else {
-                        (None, &None)
-                    }
-                });
-            if let Some(k) = k {
-                if let Some(v) = v {
-                    result.insert(k.to_owned(), v.clone());
-                }
-            }
-        }
-
-        if result.len() == keys_needed.len() {
-            break;
-        }
-    }
-
-    result
-}
 fn drun(mut config: Config) -> anyhow::Result<()> {
-    let mut entries: Vec<EntryElement> = Vec::new();
-    for file in &find_desktop_files() {
-        let n = get_locale_variants()
-            .iter()
-            .filter_map(|local| file.entry.name.variants.get(local))
-            .next()
-            .map(|name| name.deref().clone())
-            .or_else(|| Some(&file.entry.name.default));
+    let mut entries: Vec<MenuItem> = Vec::new();
+    let locale_variants = get_locale_variants();
+    let default_icon = default_icon();
 
-        debug!("{n:?}")
+    for file in find_desktop_files().iter().filter(|f| {
+            f.entry.hidden.map_or(true, |hidden| !hidden)
+            && f.entry.no_display.map_or(true, |no_display| !no_display)
+        // todo handle not shown in?
+    }) {
+        let name = lookup_name_with_locale(
+            &locale_variants,
+            &file.entry.name.variants,
+            &file.entry.name.default,
+        );
+        if name.is_none() {
+            debug!("Skipping desktop entry without name {file:?}")
+        }
+
+        let mut entry = MenuItem {
+            label: name.unwrap(),
+            icon_path: None,
+            action: None,
+            sub_elements: Vec::default(),
+        };
+
+        file.actions.iter().for_each(|(_, action)| {
+            let action_name = lookup_name_with_locale(
+                &locale_variants,
+                &action.name.variants,
+                &action.name.default,
+            );
+            let sub_entry = MenuItem {
+                label: action_name.unwrap().trim().to_owned(),
+                icon_path: None, 
+                action: None,
+                sub_elements: Vec::default(),
+            };
+            entry.sub_elements.push(sub_entry);
+        });
+
+        entries.push(entry);
 
         // let desktop = Some("desktop entry");
         // let locale =

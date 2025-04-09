@@ -8,7 +8,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
-use std::{fs, string};
+use std::{env, fs, string};
 
 pub struct IconResolver {
     cache: HashMap<String, String>,
@@ -164,4 +164,74 @@ pub(crate) fn find_desktop_files() -> Vec<DesktopFile> {
         })
         .collect();
     p
+}
+
+
+pub fn get_locale_variants() -> Vec<String> {
+    let locale = env::var("LC_ALL")
+        .or_else(|_| env::var("LC_MESSAGES"))
+        .or_else(|_| env::var("LANG"))
+        .unwrap_or_else(|_| "c".to_string());
+
+    let lang = locale.split('.').next().unwrap_or(&locale).to_lowercase();
+    let mut variants = vec![];
+
+    if let Some((lang_part, region)) = lang.split_once('_') {
+        variants.push(format!("{}_{region}", lang_part)); // en_us
+        variants.push(lang_part.to_string()); // en
+    } else {
+        variants.push(lang.clone()); // e.g. "fr"
+    }
+
+    variants
+}
+
+pub fn extract_desktop_fields(
+    category: &str,
+    //keys: Vec<String>,
+    desktop_map: &HashMap<String, HashMap<String, Option<String>>>,
+) -> HashMap<String, String> {
+    let mut result: HashMap<String, String> = HashMap::new();
+    let category_map = desktop_map.get(category);
+    if category_map.is_none() {
+        debug!("No desktop map for category {category}, map data: {desktop_map:?}");
+        return result;
+    }
+
+    let keys_needed = ["name", "exec", "icon"];
+    let locale_variants = get_locale_variants();
+
+    for (map_key, map_value) in category_map.unwrap() {
+        for key in keys_needed {
+            if result.contains_key(key) || map_value.is_none() {
+                continue;
+            }
+
+            let (k, v) = locale_variants
+                .iter()
+                .find(|locale| {
+                    let localized_key = format!("{}[{}]", key, locale);
+                    key == localized_key
+                })
+                .map(|_| (Some(key), map_value))
+                .unwrap_or_else(|| {
+                    if key == map_key {
+                        (Some(key), map_value)
+                    } else {
+                        (None, &None)
+                    }
+                });
+            if let Some(k) = k {
+                if let Some(v) = v {
+                    result.insert(k.to_owned(), v.clone());
+                }
+            }
+        }
+
+        if result.len() == keys_needed.len() {
+            break;
+        }
+    }
+
+    result
 }
