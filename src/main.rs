@@ -115,9 +115,12 @@ fn drun(mut config: Config) -> anyhow::Result<()> {
             debug!("Skipping desktop entry without name {file:?}")
         }
 
+        let icon =  file.entry.icon.as_ref().map(|s| s.content.clone());
+        debug!("file, name={name:?}, icon={icon:?}");
+
         let mut entry = MenuItem {
             label: name.unwrap(),
-            icon_path: None,
+            icon_path: icon.clone(),
             action: None,
             sub_elements: Vec::default(),
         };
@@ -128,9 +131,13 @@ fn drun(mut config: Config) -> anyhow::Result<()> {
                 &action.name.variants,
                 &action.name.default,
             );
+            let action_icon = action.icon.as_ref().map(|s| s.content.clone()).or(icon.as_ref().map(|s| s.clone()));
+
+            debug!("sub, action_name={action_name:?}, action_icon={action_icon:?}");
+
             let sub_entry = MenuItem {
                 label: action_name.unwrap().trim().to_owned(),
-                icon_path: None, 
+                icon_path: action_icon,
                 action: None,
                 sub_elements: Vec::default(),
             };
