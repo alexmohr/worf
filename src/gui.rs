@@ -10,14 +10,13 @@ use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, ButtonExt, EditableExt, EntryExt, FileChooserExt,
     FlowBoxChildExt, GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
 };
-use gtk4::{
-    Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, Label, ListBox, ListBoxRow,
-    PolicyType, ScrolledWindow, SearchEntry, Widget,
-};
+use gtk4::{Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, Image, Label, ListBox, ListBoxRow, PolicyType, ScrolledWindow, SearchEntry, Widget};
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{KeyboardMode, LayerShell};
 use log::{debug, error, info};
 use std::process::exit;
+use hyprland::ctl::output::create;
+use hyprland::ctl::plugin::list;
 
 #[derive(Clone)]
 pub struct MenuItem {
@@ -219,29 +218,24 @@ fn setup_key_event_handler(
 fn add_menu_item(inner_box: &FlowBox, entry_element: &MenuItem) {
     let parent: Widget = if !entry_element.sub_elements.is_empty() {
         let expander = Expander::new(None);
+        expander.set_widget_name("expander-box");
+        expander.set_halign(Align::Fill);
 
-        // Inline label as expander label
-        let label = Label::new(Some(&entry_element.label));
-        expander.set_label_widget(Some(&label));
+        let menu_row = create_menu_row(entry_element);
+        expander.set_label_widget(Some(&menu_row));
 
         let list_box = ListBox::new();
-        // todo subelements do not fill full space yet.
+        list_box.set_widget_name("entry");
+
         // todo multi nesting is not supported yet.
-
-        for x in entry_element.sub_elements.iter(){
-            let row = ListBoxRow::new();
-            row.set_widget_name("entry");
-
-            let label = Label::new(Some(&x.label));
-            label.set_halign(Align::Start);
-            row.set_child(Some(&label));
-            list_box.append(&row);
+        for sub_item in entry_element.sub_elements.iter(){
+            list_box.append(&create_menu_row(sub_item));
         }
 
         expander.set_child(Some(&list_box));
         expander.upcast()
     } else {
-        Label::new(Some(&entry_element.label)).upcast()
+        create_menu_row(entry_element).upcast()
     };
 
     parent.set_halign(Align::Start);
@@ -251,6 +245,32 @@ fn add_menu_item(inner_box: &FlowBox, entry_element: &MenuItem) {
     child.set_child(Some(&parent));
 
     inner_box.append(&child);
+}
+
+fn create_menu_row(menu_item: &MenuItem) -> Widget {
+    let row = ListBoxRow::new();
+    row.set_widget_name("entry");
+    row.set_hexpand(true);
+    row.set_halign(Align::Start);
+
+    let row_box = gtk4::Box::new(Orientation::Horizontal, 0);
+    row.set_child(Some(&row_box));
+
+    if let Some(image_path) = &menu_item.icon_path {
+        // todo check config too
+        let image = Image::from_icon_name(image_path);
+        image.set_pixel_size(24);
+        image.set_widget_name("img");
+        row_box.append(&image);
+    }
+
+    let label = Label::new(Some(&menu_item.label));
+
+    label.set_widget_name("unselected");
+    row_box.append(&label);
+
+
+    row.upcast()
 }
 
 fn percent_or_absolute(value: &String, base_value: i32) -> Option<i32> {

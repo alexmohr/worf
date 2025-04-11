@@ -22,6 +22,7 @@ layerrule = blur, worf
 ## Breaking changes to Wofi
 * Error messages differ
 * Configuration files are not 100% compatible, Worf is using toml files instead, for most part this only means strings have to be quoted
+* Themes are not 100% compatible
 
 
 ## Not supported
