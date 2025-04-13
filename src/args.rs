@@ -1,3 +1,4 @@
+use crate::lib::config::{Align, MatchMethod, Orientation};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -50,10 +51,6 @@ pub struct Args {
     /// Selects a stylesheet to use
     #[clap(short = 's', long = "style")]
     style: Option<String>,
-
-    /// Selects a colors file to use
-    #[clap(short = 'C', long = "color")]
-    color: Option<String>,
 
     /// Runs in dmenu mode
     #[clap(short = 'd', long = "dmenu")]
@@ -117,7 +114,7 @@ pub struct Args {
 
     /// Sets the matching method, default is contains
     #[clap(short = 'M', long = "matching")]
-    matching: Option<String>,
+    matching: Option<MatchMethod>,
 
     /// Allows case insensitive searching
     #[clap(short = 'i', long = "insensitive")]
@@ -170,4 +167,35 @@ pub struct Args {
     /// Runs command for the displayed entries, without changing the output. %s for the real string
     #[clap(short = 'r', long = "pre-display-cmd")]
     pre_display_cmd: Option<String>,
+
+    /// Defines how good a fuzzy match must be, to be shown.
+    #[clap(long = "fuzzy-min-score")]
+    fuzzy_min_score: Option<f64>,
+
+    /// Size of displayed images
+    #[clap(long = "image-size")]
+    image_size: Option<i32>,
+
+    /// Orientation of main window
+    #[clap(long = "orientation")]
+    orientation: Option<Orientation>,
+
+    /// Orientation of the row box, defining if label is below or at the side.
+    #[clap(long = "row-box-orientation")]
+    row_bow_orientation: Option<Orientation>,
+
+    /// Specifies the horizontal align for the entire scrolled area,
+    /// it can be any of fill, start, end, or center, default is fill.
+    #[clap(long = "halign")]
+    pub halign: Option<Align>,
+    //// Specifies the horizontal align for the individual entries,
+    // it can be any of fill, start, end, or center, default is fill.
+    #[clap(long = "content-halign")]
+    pub content_halign: Option<Align>,
+
+    /// Specifies the vertical align for the entire scrolled area, it can be any of fill, start, e
+    /// nd, or center, the default is orientation dependent. If vertical then  it  defaults  to
+    /// start, if horizontal it defaults to center.
+    #[clap(long = "valign")]
+    pub valign: Option<Align>,
 }

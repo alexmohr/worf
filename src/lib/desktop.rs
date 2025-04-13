@@ -121,19 +121,14 @@ fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<Pa
     fs::read_dir(folder).ok().map(|entries| {
         entries
             .filter_map(Result::ok)
-            .filter(|entry| {
-                entry
-                    .file_type()
-                    .ok()
-                    .is_some_and(|file_type| file_type.is_file())
-            })
+            .filter_map(|entry| entry.path().canonicalize().ok())
             .filter(|entry| {
                 entry
                     .file_name()
-                    .to_str()
-                    .is_some_and(|name| file_name.is_match(name))
+                    .and_then(|e| e.to_str()) // Handle the Option here.
+                    .map(|name| file_name.is_match(name))
+                    .unwrap_or(false) // Handle the case where the file name is not a valid string.
             })
-            .map(|entry| entry.path())
             .collect()
     })
 }
@@ -142,6 +137,7 @@ pub(crate) fn find_desktop_files() -> Vec<DesktopFile> {
     let mut paths = vec![
         PathBuf::from("/usr/share/applications"),
         PathBuf::from("/usr/local/share/applications"),
+        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
     ];
 
     if let Some(home) = home_dir() {
@@ -165,7 +161,6 @@ pub(crate) fn find_desktop_files() -> Vec<DesktopFile> {
         .collect();
     p
 }
-
 
 pub fn get_locale_variants() -> Vec<String> {
     let locale = env::var("LC_ALL")
