@@ -1,16 +1,41 @@
 use crate::args::Args;
+use crate::lib::system;
 use anyhow::anyhow;
+use clap::ValueEnum;
 use gtk4::prelude::ToValue;
 use merge::Merge;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::env;
+use std::path::PathBuf;
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]
+pub enum MatchMethod {
+    Fuzzy,
+    Contains,
+    MultiContains,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]
+pub enum Orientation {
+    Vertical,
+    Horizontal,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]
+pub enum Align {
+    Fill,
+    Start,
+    Center,
+}
 
 #[derive(Debug, Deserialize, Serialize, Merge, Clone)]
 pub struct Config {
+    /// Defines the path to the stylesheet being used.
+    /// Defaults to XDG_CONFIG_DIR/worf/style.css
+    /// If XDG_CONFIG_DIR is not defined $HOME/.config will be used instead
+    #[serde(default = "default_style")]
     pub style: Option<String>,
-    pub stylesheet: Option<String>,
-    pub color: Option<String>,
-    pub colors: Option<String>,
     pub show: Option<String>,
     pub mode: Option<String>,
     #[serde(default = "default_width")]
@@ -32,24 +57,46 @@ pub struct Config {
     pub password: Option<String>,
     pub exec_search: Option<bool>,
     pub hide_scroll: Option<bool>,
-    pub matching: Option<String>,
+
+    /// Defines how matching is done
+    #[serde(default = "default_match_method")]
+    pub matching: Option<MatchMethod>,
     pub insensitive: Option<bool>,
     pub parse_search: Option<bool>,
     pub location: Option<String>,
     pub no_actions: Option<bool>,
     pub lines: Option<u32>,
+    /// Defines how many columns are shown per row
+    #[serde(default = "default_columns")]
     pub columns: Option<u32>,
     pub sort_order: Option<String>,
     pub gtk_dark: Option<bool>,
     pub search: Option<String>,
     pub monitor: Option<String>,
     pub pre_display_cmd: Option<String>,
-    pub orientation: Option<String>,
-    pub halign: Option<String>,
-    pub content_halign: Option<String>,
-    pub valign: Option<String>,
+    /// Defines how the entries root container are ordered
+    /// Default is vertical
+    #[serde(default = "default_orientation")]
+    pub orientation: Option<Orientation>,
+    /// Specifies the horizontal align for the entire scrolled area,
+    /// it can be any of fill, start, end, or center, default is fill.
+    #[serde(default = "default_halign")]
+    pub halign: Option<Align>,
+    //// Specifies the horizontal align for the individual entries,
+    // it can be any of fill, start, end, or center, default is fill.
+    #[serde(default = "default_content_halign")]
+    pub content_halign: Option<Align>,
+
+    /// Specifies the vertical align for the entire scrolled area, it can be any of fill, start, e
+    /// nd, or center, the default is orientation dependent. If vertical then  it  defaults  to
+    /// start, if horizontal it defaults to center.
+    pub valign: Option<Align>,
+
     pub filter_rate: Option<u32>,
-    pub image_size: Option<u32>,
+    /// Specifies the image size when enabled.
+    /// Defaults to 32.
+    #[serde(default = "default_image_size")]
+    pub image_size: Option<i32>,
     pub key_up: Option<String>,
     pub key_down: Option<String>,
     pub key_left: Option<String>,
@@ -73,19 +120,28 @@ pub struct Config {
     pub copy_exec: Option<String>,
     pub single_click: Option<bool>,
     pub pre_display_exec: Option<bool>,
+
+    // Exclusive options
+    /// Minimum score for the fuzzy finder to accept a match.
+    /// Must be a value between 0 and 1
+    /// Defaults to 0.1.
+    #[serde(default = "default_fuzzy_min_score")]
+    pub fuzzy_min_score: Option<f64>,
+
+    /// Defines how the content in the row box is aligned
+    /// Defaults to vertical
+    #[serde(default = "default_row_box_orientation")]
+    pub row_bow_orientation: Option<Orientation>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
-            style: None,
-            stylesheet: None,
-            color: None,
-            colors: None,
+            style: default_style(),
             show: None,
             mode: None,
-            width: None,
-            height: None,
+            width: default_width(),
+            height: default_height(),
             prompt: None,
             xoffset: None,
             x: None,
@@ -105,18 +161,18 @@ impl Default for Config {
             location: None,
             no_actions: None,
             lines: None,
-            columns: None,
+            columns: default_columns(),
             sort_order: None,
             gtk_dark: None,
             search: None,
             monitor: None,
             pre_display_cmd: None,
-            orientation: None,
-            halign: None,
-            content_halign: None,
+            orientation: default_row_box_orientation(),
+            halign: default_halign(),
+            content_halign: default_content_halign(),
             valign: None,
             filter_rate: None,
-            image_size: None,
+            image_size: default_image_size(),
             key_up: None,
             key_down: None,
             key_left: None,
@@ -139,8 +195,30 @@ impl Default for Config {
             copy_exec: None,
             single_click: None,
             pre_display_exec: None,
+            fuzzy_min_score: default_fuzzy_min_score(),
+            row_bow_orientation: default_row_box_orientation(),
         }
     }
+}
+
+fn default_row_box_orientation() -> Option<Orientation> {
+    Some(Orientation::Horizontal)
+}
+
+fn default_orientation() -> Option<Orientation> {
+    Some(Orientation::Vertical)
+}
+
+fn default_halign() -> Option<Align> {
+    Some(Align::Fill)
+}
+
+fn default_content_halign() -> Option<Align> {
+    Some(Align::Fill)
+}
+
+fn default_columns() -> Option<u32> {
+    Some(1)
 }
 
 fn default_normal_window() -> Option<bool> {
@@ -224,16 +302,42 @@ fn default_normal_window() -> Option<bool> {
 // key_default = "Ctrl-c";
 // char* key_copy = (i == 0) ? key_default : config_get(config, "key_copy", key_default);
 
-fn default_height() -> Option<String> {
+fn default_style() -> Option<String> {
+    system::config_path(None)
+        .ok()
+        .and_then(|pb| Some(pb.display().to_string()))
+        .or_else(|| {
+            log::error!("no stylesheet found, using system styles");
+            None
+        })
+}
+
+pub fn default_height() -> Option<String> {
     Some("40%".to_owned())
 }
 
-fn default_width() -> Option<String> {
+pub fn default_width() -> Option<String> {
     Some("50%".to_owned())
 }
 
-fn default_password_char() -> Option<String> {
+pub fn default_password_char() -> Option<String> {
     Some("*".to_owned())
+}
+
+pub fn default_fuzzy_min_length() -> Option<i32> {
+    Some(10)
+}
+
+pub fn default_fuzzy_min_score() -> Option<f64> {
+    Some(0.1)
+}
+
+pub fn default_match_method() -> Option<MatchMethod> {
+    Some(MatchMethod::Contains)
+}
+
+pub fn default_image_size() -> Option<i32> {
+    Some(32)
 }
 
 pub fn merge_config_with_args(config: &mut Config, args: &Args) -> anyhow::Result<Config> {

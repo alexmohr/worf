@@ -1,0 +1,69 @@
+* {
+  font-family: DejaVu;
+}
+
+#window {
+  all: unset;
+  background-color: rgba(33, 33, 33, 0.8); /* Matches #212121BB */
+  border-radius: 0px;
+}
+
+#window #outer-box {
+  /* The name of the search bar */
+  /* The name of the scrolled window containing all of the entries */
+  border: 2px solid rgba(63, 81, 181, 1);
+  border-radius: 6px;
+}
+
+#window #outer-box #input {
+  background-color: rgba(32, 32, 32, 0.6);
+  color: #f2f2f2;
+  border-bottom: 2px solid rgba(214, 174, 0, 1);
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+}
+
+#window #outer-box #input:focus, #window #outer-box #input:focus-visible, #window #outer-box #input:active {
+  all: unset;
+  background-color: rgba(32, 32, 32, 0.6);
+  color: #f2f2f2;
+  border-bottom: 2px solid rgba(214, 174, 2, 1);
+  font-size: 1rem;
+}
+
+#window #outer-box #scroll {
+  /* The name of the box containing all of the entries */
+}
+#window #outer-box #scroll #inner-box {
+  /* The name of all entries */
+  /* The name of all boxes shown when expanding  */
+  /* entries with multiple actions */
+}
+#window #outer-box #scroll #inner-box #entry {
+  color: #fff;
+  background-color: rgba(32, 32, 32, 0.1);
+  padding: 1rem;
+  margin: 1rem;
+  border-radius: 0.5rem;
+}
+#window #outer-box #scroll #inner-box #entry #img {
+  width: 1rem;
+  margin-right: 0.5rem;
+}
+#window #outer-box #scroll #inner-box #entry:selected {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+
+#row:hover {
+  background-color:  rgba(255, 255, 255, 0);;
+  outline: inherit;
+  outline-color: inherit;
+
+}
+#window #outer-box #scroll #inner-box #entry:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  outline: inherit;
+  outline-color: inherit;
+}
