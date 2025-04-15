@@ -72,7 +72,6 @@ pub fn show(config: Config, elements: Vec<MenuItem>) -> Result<MenuItem, anyhow:
         );
     }
 
-    // No need for application_id unless you want portal support
     let app = Application::builder().application_id("worf").build();
     let (sender, receiver) = channel::bounded(1);
 
@@ -80,8 +79,8 @@ pub fn show(config: Config, elements: Vec<MenuItem>) -> Result<MenuItem, anyhow:
         build_ui(&config, &elements, sender.clone(), app);
     });
 
-    let empty_array: [&str; 0] = [];
-    app.run_with_args(&empty_array);
+    let gtk_args: [&str; 0] = [];
+    app.run_with_args(&gtk_args);
     let selection = receiver.recv()?;
     selection
 }
@@ -129,15 +128,6 @@ fn build_ui(
     scroll.set_widget_name("scroll");
     scroll.set_hexpand(true);
     scroll.set_vexpand(true);
-    // if let Some(valign) = config.valign {
-    //     scroll.set_valign(valign.into());
-    // } else {
-    //     if config.orientation.unwrap() == config::Orientation::Horizontal {
-    //         scroll.set_valign(Align::Center);
-    //     } else {
-    //         scroll.set_valign(Align::Start);
-    //     }
-    // }
 
     let hide_scroll = false; // todo
     if hide_scroll {
@@ -151,6 +141,11 @@ fn build_ui(
     inner_box.set_css_classes(&["inner-box"]);
     inner_box.set_hexpand(true);
     inner_box.set_vexpand(false);
+    if let Some(halign) = config.halign {
+        inner_box.set_halign(halign.into());
+    } else {
+        inner_box.set_halign(Align::Fill);
+    }
 
     inner_box.set_selection_mode(gtk4::SelectionMode::Browse);
     inner_box.set_max_children_per_line(config.columns.unwrap());
