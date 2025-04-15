@@ -6,7 +6,7 @@ use crossbeam::channel::Sender;
 use gdk4::gio::{File, Menu};
 use gdk4::glib::{GString, Propagation, Unichar};
 use gdk4::prelude::{Cast, DisplayExt, ListModelExtManual, MonitorExt};
-use gdk4::{Display, Key};
+use gdk4::{pango, Display, Key};
 use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, ButtonExt, EditableExt, EntryExt, FileChooserExt,
     FlowBoxChildExt, GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt,
@@ -143,8 +143,6 @@ fn build_ui(
     inner_box.set_vexpand(false);
     if let Some(halign) = config.halign {
         inner_box.set_halign(halign.into());
-    } else {
-        inner_box.set_halign(Align::Fill);
     }
 
     if let Some(valign) = config.valign {
@@ -435,8 +433,11 @@ fn create_menu_row(
         row_box.append(&image);
     }
 
-    let label = Label::new(Some(&menu_item.label));
+    // todo make max length configurable
+    let label = Label::new(Some(&wrap_text(&menu_item.label, 15)));
     label.set_hexpand(true);
+    label.set_widget_name("label");
+    label.set_wrap(true);
     row_box.append(&label);
 
     if config.content_halign.unwrap() == config::Align::Start
@@ -546,4 +547,27 @@ pub fn initialize_sort_scores(items: &mut Vec<MenuItem>) {
             regular_score += 1;
         }
     }
+}
+
+fn wrap_text(text: &str, line_length: usize) -> String {
+    let mut result = String::new();
+    let mut line = String::new();
+
+    for word in text.split_whitespace() {
+        if line.len() + word.len() + 1 > line_length {
+            if !line.is_empty() {
+                result.push_str(&line.trim_end());
+                result.push('\n');
+                line.clear();
+            }
+        }
+        line.push_str(word);
+        line.push(' ');
+    }
+
+    if !line.is_empty() {
+        result.push_str(&line.trim_end());
+    }
+
+    result
 }

@@ -16,6 +16,15 @@ layerrule = blur, worf
 ## Additional functionality compared to Wofi (planed)
 * Support passing 'hidden' parameters that are not visible in the launcher but will be returned to the application
 * Window switcher for hyprland
+* All arguments expect show are supported by config and args
+
+### New config / command line options
+* fuzzy-length: Defines how long a string must be to be considered for fuzzy match
+* row-box-orientation: Allows aligning values vertically to place the label below the icon
+
+### New Styling options
+* `label`: Allows styling the label
+* `row`: Allows styling to row, mainly used to disable hover effects
 
 ## Breaking changes to Wofi
 * Runtime behaviour is not guaranteed to be the same and won't ever be, this includes error messages and themes.
@@ -28,8 +37,6 @@ layerrule = blur, worf
 * stylesheet -> use style instead
 * color / colors -> GTK4 does not support color files
 
-## New options
-* --fuzzy-length: Defines how long a string must be be 
 
 
 ## Not supported

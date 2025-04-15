@@ -45,15 +45,21 @@
   padding: 1rem;
   margin: 1rem;
   border-radius: 0.5rem;
+  border-bottom: 5px solid rgba(32, 32, 32, 0.1);
+
 }
 #window #outer-box #scroll #inner-box #entry #img {
   width: 1rem;
   margin-right: 0.5rem;
 }
+
 #window #outer-box #scroll #inner-box #entry:selected {
   color: #fff;
   background-color: rgba(255, 255, 255, 0.1);
   outline: none;
+  border-bottom: 5px solid rgba(214, 174, 0, 1);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 #row:hover {
@@ -66,4 +72,9 @@
   background-color: rgba(255, 255, 255, 0.1);
   outline: inherit;
   outline-color: inherit;
+}
+
+#label {
+  margin-top: 1rem;
+  margin-bottom: 0;
 }
