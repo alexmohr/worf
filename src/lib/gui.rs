@@ -147,6 +147,16 @@ fn build_ui(
         inner_box.set_halign(Align::Fill);
     }
 
+    if let Some(valign) = config.valign {
+        inner_box.set_valign(valign.into());
+    } else {
+        if config.orientation.unwrap() == config::Orientation::Horizontal {
+            inner_box.set_valign(Align::Center);
+        } else {
+            inner_box.set_valign(Align::Start);
+        }
+    }
+
     inner_box.set_selection_mode(gtk4::SelectionMode::Browse);
     inner_box.set_max_children_per_line(config.columns.unwrap());
     inner_box.set_activate_on_single_click(true);
