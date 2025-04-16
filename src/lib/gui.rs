@@ -26,8 +26,8 @@ use log::{debug, error, info};
 use std::process::exit;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-type ArcMenuMap = Arc<Mutex<HashMap<FlowBoxChild, MenuItem>>>;
-type MenuItemSender = Sender<Result<MenuItem, anyhow::Error>>;
+type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
+type MenuItemSender<T> = Sender<Result<MenuItem<T>, anyhow::Error>>;
 
 impl Into<Orientation> for config::Orientation {
     fn into(self) -> Orientation {
@@ -49,17 +49,20 @@ impl Into<Align> for config::Align {
 }
 
 #[derive(Clone)]
-pub struct MenuItem {
+pub struct MenuItem<T> {
     pub label: String, // todo support empty label?
     pub icon_path: Option<String>,
     pub action: Option<String>,
-    pub sub_elements: Vec<MenuItem>,
+    pub sub_elements: Vec<MenuItem<T>>,
     pub working_dir: Option<String>,
     pub initial_sort_score: i64,
     pub search_sort_score: f64,
+
+    /// Allows to store arbitrary additional information
+    pub data: Option<T>,
 }
 
-pub fn show(config: Config, elements: Vec<MenuItem>) -> Result<MenuItem, anyhow::Error> {
+pub fn show<T>(config: Config, elements: Vec<MenuItem<T>>) -> Result<MenuItem<T>, anyhow::Error> where T: Clone + 'static {
     if let Some(ref css) = config.style {
         let provider = CssProvider::new();
         let css_file_path = File::for_path(css);
@@ -85,12 +88,12 @@ pub fn show(config: Config, elements: Vec<MenuItem>) -> Result<MenuItem, anyhow:
     selection
 }
 
-fn build_ui(
+fn build_ui<T>(
     config: &Config,
-    elements: &Vec<MenuItem>,
-    sender: Sender<Result<MenuItem, anyhow::Error>>,
+    elements: &Vec<MenuItem<T>>,
+    sender: Sender<Result<MenuItem<T>, anyhow::Error>>,
     app: &Application,
-) {
+) where T: Clone + 'static {
     // Create a toplevel undecorated window
     let window = ApplicationWindow::builder()
         .application(app)
@@ -102,15 +105,13 @@ fn build_ui(
 
     window.set_widget_name("window");
 
-    config.normal_window.map(|normal| {
-        if !normal {
-            // Initialize the window as a layer
-            window.init_layer_shell();
-            window.set_layer(gtk4_layer_shell::Layer::Overlay);
-            window.set_keyboard_mode(KeyboardMode::Exclusive);
-            window.set_namespace(Some("worf"));
-        }
-    });
+    if !config.normal_window {
+        // Initialize the window as a layer
+        window.init_layer_shell();
+        window.set_layer(gtk4_layer_shell::Layer::Overlay);
+        window.set_keyboard_mode(KeyboardMode::Exclusive);
+        window.set_namespace(Some("worf"));
+    }
 
     let outer_box = gtk4::Box::new(config.orientation.unwrap().into(), 0);
     outer_box.set_widget_name("outer-box");
@@ -159,7 +160,7 @@ fn build_ui(
     inner_box.set_max_children_per_line(config.columns.unwrap());
     inner_box.set_activate_on_single_click(true);
 
-    let mut list_items: ArcMenuMap = Arc::new(Mutex::new(HashMap::new()));
+    let mut list_items: ArcMenuMap<T> = Arc::new(Mutex::new(HashMap::new()));
     for entry in elements {
         list_items
             .lock()
@@ -221,13 +222,13 @@ fn build_ui(
     });
 }
 
-fn setup_key_event_handler(
+fn setup_key_event_handler<T: Clone + 'static>(
     window: &ApplicationWindow,
     entry_clone: SearchEntry,
     inner_box: FlowBox,
     app: Application,
-    sender: MenuItemSender,
-    list_items: Arc<Mutex<HashMap<FlowBoxChild, MenuItem>>>,
+    sender: MenuItemSender<T>,
+    list_items: Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>,
     config: Config,
 ) {
     let key_controller = EventControllerKey::new();
@@ -269,10 +270,10 @@ fn setup_key_event_handler(
     window.add_controller(key_controller);
 }
 
-fn sort_menu_items(
+fn sort_menu_items<T>(
     child1: &FlowBoxChild,
     child2: &FlowBoxChild,
-    items_lock: &Mutex<HashMap<FlowBoxChild, MenuItem>>,
+    items_lock: &Mutex<HashMap<FlowBoxChild, MenuItem<T>>>,
 ) -> Ordering {
     let lock = items_lock.lock().unwrap();
     let m1 = lock.get(child1);
@@ -281,13 +282,13 @@ fn sort_menu_items(
     match (m1, m2) {
         (Some(menu1), Some(menu2)) => {
             if menu1.search_sort_score != 0.0 || menu2.search_sort_score != 0.0 {
-                if menu1.search_sort_score > menu2.search_sort_score {
+                if menu1.search_sort_score < menu2.search_sort_score {
                     Ordering::Smaller
                 } else {
                     Ordering::Larger
                 }
             } else {
-                if menu1.initial_sort_score > menu2.initial_sort_score {
+                if menu1.initial_sort_score < menu2.initial_sort_score {
                     Ordering::Smaller
                 } else {
                     Ordering::Larger
@@ -300,12 +301,12 @@ fn sort_menu_items(
     }
 }
 
-fn handle_selected_item(
-    sender: &MenuItemSender,
+fn handle_selected_item<T>(
+    sender: &MenuItemSender<T>,
     app: &Application,
     inner_box: &FlowBox,
-    lock_arc: &ArcMenuMap,
-) -> Result<(), String> {
+    lock_arc: &ArcMenuMap<T>,
+) -> Result<(), String> where T: Clone {
     for s in inner_box.selected_children() {
         let list_items = lock_arc.lock().unwrap();
         let item = list_items.get(&s);
@@ -320,12 +321,12 @@ fn handle_selected_item(
     Err("selected item cannot be resolved".to_owned())
 }
 
-fn add_menu_item(
+fn add_menu_item<T: Clone + 'static>(
     inner_box: &FlowBox,
-    entry_element: &MenuItem,
+    entry_element: &MenuItem<T>,
     config: &Config,
-    sender: MenuItemSender,
-    lock_arc: ArcMenuMap,
+    sender: MenuItemSender<T>,
+    lock_arc: ArcMenuMap<T>,
     app: Application,
 ) -> FlowBoxChild {
     let parent: Widget = if !entry_element.sub_elements.is_empty() {
@@ -390,11 +391,11 @@ fn add_menu_item(
     child
 }
 
-fn create_menu_row(
-    menu_item: &MenuItem,
+fn create_menu_row<T: Clone + 'static>(
+    menu_item: &MenuItem<T>,
     config: &Config,
-    lock_arc: ArcMenuMap,
-    sender: MenuItemSender,
+    lock_arc: ArcMenuMap<T>,
+    sender: MenuItemSender<T>,
     app: Application,
     inner_box: FlowBox,
 ) -> Widget {
@@ -434,7 +435,13 @@ fn create_menu_row(
     }
 
     // todo make max length configurable
-    let label = Label::new(Some(&wrap_text(&menu_item.label, 15)));
+    let text = if config.text_wrap.is_some_and(|x| x == true) {
+        &wrap_text(&menu_item.label, config.text_wrap_length)
+    } else {
+        menu_item.label.as_str()
+    };
+
+    let label = Label::new(Some(text));
     label.set_hexpand(true);
     label.set_widget_name("label");
     label.set_wrap(true);
@@ -448,9 +455,9 @@ fn create_menu_row(
     row.upcast()
 }
 
-fn filter_widgets(
+fn filter_widgets<T>(
     query: &str,
-    items: &mut HashMap<FlowBoxChild, MenuItem>,
+    items: &mut HashMap<FlowBoxChild, MenuItem<T>>,
     config: &Config,
     inner_box: &FlowBox,
 ) {
@@ -537,9 +544,9 @@ fn percent_or_absolute(value: &String, base_value: i32) -> Option<i32> {
     }
 }
 
-pub fn initialize_sort_scores(items: &mut Vec<MenuItem>) {
+pub fn initialize_sort_scores<T>(items: &mut Vec<MenuItem<T>>) {
     let mut regular_score = items.len() as i64;
-    items.sort_by(|l, r| r.label.cmp(&l.label));
+    items.sort_by(|l, r| l.label.cmp(&r.label));
 
     for item in items.iter_mut() {
         if item.initial_sort_score == 0 {
@@ -549,12 +556,13 @@ pub fn initialize_sort_scores(items: &mut Vec<MenuItem>) {
     }
 }
 
-fn wrap_text(text: &str, line_length: usize) -> String {
+fn wrap_text(text: &str, line_length: Option<usize>) -> String {
     let mut result = String::new();
     let mut line = String::new();
+    let len = line_length.unwrap_or(text.len());
 
     for word in text.split_whitespace() {
-        if line.len() + word.len() + 1 > line_length {
+        if line.len() + word.len() + 1 > len {
             if !line.is_empty() {
                 result.push_str(&line.trim_end());
                 result.push('\n');

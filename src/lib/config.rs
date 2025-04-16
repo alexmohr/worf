@@ -1,13 +1,16 @@
-use crate::args::Args;
 use crate::lib::system;
-use anyhow::anyhow;
-use clap::ValueEnum;
+use anyhow::{anyhow, Context};
+use clap::builder::TypedValueParser;
+use clap::{Parser, ValueEnum};
 use gtk4::prelude::ToValue;
-use merge::Merge;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
+use std::collections::HashMap;
+use std::env::Args;
 use std::path::PathBuf;
+use std::str::FromStr;
+use std::{env, fs};
+use thiserror::Error;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]
 pub enum MatchMethod {
@@ -29,74 +32,180 @@ pub enum Align {
     Center,
 }
 
-#[derive(Debug, Deserialize, Serialize, Merge, Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Mode {
+    /// searches $PATH for executables and allows them to be run by selecting them.
+    Run,
+    /// searches $XDG_DATA_HOME/applications and $XDG_DATA_DIRS/applications f
+    /// or desktop files and allows them to be run by selecting them.
+    Drun,
+
+    /// reads from stdin and displays options which when selected will be output to stdout.
+    Dmenu,
+}
+
+#[derive(Debug, Error)]
+pub enum ArgsError {
+    #[error("input is not valid {0}")]
+    InvalidParameter(String),
+}
+
+impl FromStr for Mode {
+    type Err = ArgsError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "run" => Ok(Mode::Run),
+            "drun" => Ok(Mode::Drun),
+            "dmenu" => Ok(Mode::Dmenu),
+            _ => Err(ArgsError::InvalidParameter(
+                format!("{s} is not a valid argument show this, see help for details").to_owned(),
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Parser)]
+#[clap(about = "Worf is a wofi clone written in rust, it aims to be a drop-in replacement")]
 pub struct Config {
-    /// Defines the path to the stylesheet being used.
-    /// Defaults to XDG_CONFIG_DIR/worf/style.css
-    /// If XDG_CONFIG_DIR is not defined $HOME/.config will be used instead
+    /// Forks the menu so you can close the terminal
+    #[clap(short = 'f', long = "fork")]
+    pub fork: Option<bool>,
+
+    /// Selects a config file to use
+    #[clap(short = 'c', long = "conf")]
+    pub config: Option<String>,
+
+    /// Runs in dmenu mode
+    #[clap(short = 'd', long = "dmenu")]
+    pub dmenu: Option<bool>,
+
+    /// Prints the version and then exits
+    #[clap(short = 'v', long = "version")]
+    pub version: Option<bool>,
+
+    /// Defines the style sheet to be loaded.
+    /// Defaults to $XDG_CONF_DIR/worf/style.css
+    /// or $HOME/.config/worf/style.css if XDG_CONF_DIR is not set.
     #[serde(default = "default_style")]
+    #[clap(long = "style")]
     pub style: Option<String>,
-    pub show: Option<String>,
-    pub mode: Option<String>,
+
+    /// Defines the mode worf is running in
+    #[clap(long = "show")]
+    pub show: Option<Mode>,
+
+    /// Default width of the window, defaults to 50% of the screen
     #[serde(default = "default_width")]
+    #[clap(long = "width")]
     pub width: Option<String>,
+
+    /// Default height of the window, defaults to 40% of the screen
     #[serde(default = "default_height")]
+    #[clap(long = "height")]
     pub height: Option<String>,
+
+    #[clap(short = 'p', long = "prompt")]
     pub prompt: Option<String>,
+
+    #[clap(short = 'x', long = "xoffset")]
     pub xoffset: Option<i32>,
+
+    #[clap(long = "x")]
     pub x: Option<i32>,
+
+    #[clap(short = 'y', long = "yoffset")]
     pub yoffset: Option<i32>,
+
+    #[clap(long = "y")]
     pub y: Option<i32>,
+
+    /// If true a normal window instead of a layer shell will be used
     #[serde(default = "default_normal_window")]
-    pub normal_window: Option<bool>,
+    #[clap(short = 'n', long = "normal-window")]
+    pub normal_window: bool,
+
+    #[clap(short = 'I', long = "allow-images")]
     pub allow_images: Option<bool>,
+
+    #[clap(short = 'm', long = "allow-markup")]
     pub allow_markup: Option<bool>,
+
+    #[clap(short = 'k', long = "cache-file")]
     pub cache_file: Option<String>,
+
+    #[clap(short = 't', long = "term")]
     pub term: Option<String>,
+
     #[serde(default = "default_password_char")]
+    #[clap(short = 'P', long = "password")]
     pub password: Option<String>,
+
+    #[clap(short = 'e', long = "exec-search")]
     pub exec_search: Option<bool>,
+
+    #[clap(short = 'b', long = "hide-scroll")]
     pub hide_scroll: Option<bool>,
 
-    /// Defines how matching is done
     #[serde(default = "default_match_method")]
+    #[clap(short = 'M', long = "matching")]
     pub matching: Option<MatchMethod>,
+
+    #[clap(short = 'i', long = "insensitive")]
     pub insensitive: Option<bool>,
+
+    #[clap(short = 'q', long = "parse-search")]
     pub parse_search: Option<bool>,
+
+    #[clap(short = 'l', long = "location")]
     pub location: Option<String>,
+
+    #[clap(short = 'a', long = "no-actions")]
     pub no_actions: Option<bool>,
+
+    #[clap(short = 'L', long = "lines")]
     pub lines: Option<u32>,
-    /// Defines how many columns are shown per row
+
     #[serde(default = "default_columns")]
+    #[clap(short = 'w', long = "columns")]
     pub columns: Option<u32>,
+
+    #[clap(short = 'O', long = "sort-order")]
     pub sort_order: Option<String>,
+
+    #[clap(short = 'G', long = "gtk-dark")]
     pub gtk_dark: Option<bool>,
+
+    #[clap(short = 'Q', long = "search")]
     pub search: Option<String>,
+
+    #[clap(short = 'o', long = "monitor")]
     pub monitor: Option<String>,
+
+    #[clap(short = 'r', long = "pre-display-cmd")]
     pub pre_display_cmd: Option<String>,
-    /// Defines how the entries root container are ordered
-    /// Default is vertical
+
     #[serde(default = "default_orientation")]
+    #[clap(long = "orientation")]
     pub orientation: Option<Orientation>,
-    /// Specifies the horizontal align for the entire scrolled area,
-    /// it can be any of fill, start, end, or center, default is fill.
+
     #[serde(default = "default_halign")]
+    #[clap(long = "halign")]
     pub halign: Option<Align>,
-    //// Specifies the horizontal align for the individual entries,
-    // it can be any of fill, start, end, or center, default is fill.
+
     #[serde(default = "default_content_halign")]
+    #[clap(long = "content-halign")]
     pub content_halign: Option<Align>,
 
-    /// Specifies the vertical align for the entire scrolled area, it can be any of fill, start, e
-    /// nd, or center, the default is orientation dependent. If vertical then  it  defaults  to
-    /// start, if horizontal it defaults to center.
+    #[clap(long = "valign")]
     pub valign: Option<Align>,
 
     pub filter_rate: Option<u32>,
-    /// Specifies the image size when enabled.
-    /// Defaults to 32.
+
     #[serde(default = "default_image_size")]
+    #[clap(long = "image-size")]
     pub image_size: Option<i32>,
+
     pub key_up: Option<String>,
     pub key_down: Option<String>,
     pub key_left: Option<String>,
@@ -110,8 +219,10 @@ pub struct Config {
     pub key_expand: Option<String>,
     pub key_hide_search: Option<String>,
     pub key_copy: Option<String>,
-    #[serde(flatten)]
-    pub custom_keys: Option<std::collections::HashMap<String, String>>,
+
+    // todo re-add this
+    // #[serde(flatten)]
+    // pub key_custom: Option<HashMap<String, String>>,
     pub line_wrap: Option<String>,
     pub global_coords: Option<bool>,
     pub hide_search: Option<bool>,
@@ -121,25 +232,39 @@ pub struct Config {
     pub single_click: Option<bool>,
     pub pre_display_exec: Option<bool>,
 
-    // Exclusive options
-    /// Minimum score for the fuzzy finder to accept a match.
-    /// Must be a value between 0 and 1
-    /// Defaults to 0.1.
+    /// Minimum score for a fuzzy search to be shown
     #[serde(default = "default_fuzzy_min_score")]
+    #[clap(long = "fuzzy-min-score")]
     pub fuzzy_min_score: Option<f64>,
 
-    /// Defines how the content in the row box is aligned
-    /// Defaults to vertical
+    /// Orientation of items in the row box where items are displayed
     #[serde(default = "default_row_box_orientation")]
+    #[clap(long = "row-box-orientation")]
     pub row_bow_orientation: Option<Orientation>,
+
+    /// Set to to true to wrap text after a given amount of chars
+    #[serde(default = "default_text_wrap")]
+    #[clap(long = "text-wrap")]
+    pub text_wrap: Option<bool>,
+
+    /// Defines after how many chars a line is broken over.
+    /// Only cuts at spaces.
+    #[serde(default = "default_text_wrap_length")]
+    #[clap(long = "text-wrap-length")]
+    pub text_wrap_length: Option<usize>,
+
+
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
+            fork: None,
+            config: None,
+            dmenu: None,
+            version: None,
             style: default_style(),
             show: None,
-            mode: None,
             width: default_width(),
             height: default_height(),
             prompt: None,
@@ -147,7 +272,7 @@ impl Default for Config {
             x: None,
             yoffset: None,
             y: None,
-            normal_window: None,
+            normal_window: default_normal_window(),
             allow_images: None,
             allow_markup: None,
             cache_file: None,
@@ -186,7 +311,7 @@ impl Default for Config {
             key_expand: None,
             key_hide_search: None,
             key_copy: None,
-            custom_keys: None,
+            //key_custom: None,
             line_wrap: None,
             global_coords: None,
             hide_search: None,
@@ -197,6 +322,8 @@ impl Default for Config {
             pre_display_exec: None,
             fuzzy_min_score: default_fuzzy_min_score(),
             row_bow_orientation: default_row_box_orientation(),
+            text_wrap: default_text_wrap(),
+            text_wrap_length: default_text_wrap_length(),
         }
     }
 }
@@ -205,7 +332,7 @@ fn default_row_box_orientation() -> Option<Orientation> {
     Some(Orientation::Horizontal)
 }
 
-fn default_orientation() -> Option<Orientation> {
+pub(crate) fn default_orientation() -> Option<Orientation> {
     Some(Orientation::Vertical)
 }
 
@@ -221,8 +348,8 @@ fn default_columns() -> Option<u32> {
     Some(1)
 }
 
-fn default_normal_window() -> Option<bool> {
-    Some(false)
+fn default_normal_window() -> bool {
+    false
 }
 
 // TODO
@@ -303,7 +430,7 @@ fn default_normal_window() -> Option<bool> {
 // char* key_copy = (i == 0) ? key_default : config_get(config, "key_copy", key_default);
 
 fn default_style() -> Option<String> {
-    system::config_path(None)
+    style_path(None)
         .ok()
         .and_then(|pb| Some(pb.display().to_string()))
         .or_else(|| {
@@ -340,7 +467,89 @@ pub fn default_image_size() -> Option<i32> {
     Some(32)
 }
 
-pub fn merge_config_with_args(config: &mut Config, args: &Args) -> anyhow::Result<Config> {
+pub fn default_text_wrap_length() -> Option<usize> {
+    Some(15)
+}
+
+pub fn default_text_wrap() -> Option<bool> {
+    Some(false)
+}
+
+pub fn parse_args() -> Config {
+    Config::parse()
+}
+
+
+pub fn style_path(full_path: Option<String>) -> Result<PathBuf, anyhow::Error> {
+    let alternative_paths = path_alternatives(vec![dirs::config_dir()], PathBuf::from("worf").join("style.css"));
+    resolve_path(
+        full_path,
+        alternative_paths
+            .into_iter()
+            .collect(),
+    )
+}
+
+pub fn path_alternatives(base_paths: Vec<Option<PathBuf>>, sub_path: PathBuf) -> Vec<PathBuf> {
+    base_paths
+        .into_iter()
+        .filter_map(|s| s)
+        .map(|pb| pb.join(&sub_path))
+        .filter_map(|pb| pb.canonicalize().ok())
+        .filter(|c| c.exists())
+        .collect()
+}
+
+pub fn resolve_path(
+    full_path: Option<String>,
+    alternatives: Vec<PathBuf>,
+) -> Result<PathBuf, anyhow::Error> {
+    full_path
+        .map(PathBuf::from)
+        .and_then(|p| p.canonicalize().ok().filter(|c| c.exists()))
+        .or_else(|| {
+            alternatives
+                .into_iter()
+                .filter(|p| p.exists())
+                .find_map(|pb| pb.canonicalize().ok().filter(|c| c.exists()))
+        })
+        .ok_or_else(|| anyhow!("Could not find a valid config file."))
+}
+
+pub fn load_config(args_opt: Option<Config>) -> Result<Config, anyhow::Error> {
+    let home_dir = env::var("HOME")?;
+    let config_path = args_opt.as_ref().map(|c| {
+        c.config
+            .as_ref()
+            .and_then(|p| Some(PathBuf::from(p)))
+            .unwrap_or_else(|| {
+                env::var("XDG_CONF_HOME")
+                    .map_or(
+                        PathBuf::from(home_dir.clone()).join(".config"),
+                        |xdg_conf_home| PathBuf::from(&xdg_conf_home),
+                    )
+                    .join("worf")
+                    .join("config")
+            })
+    });
+
+    match config_path {
+        Some(path) => {
+            let toml_content = fs::read_to_string(path)?;
+            let mut config: Config = toml::from_str(&toml_content)?;
+
+            if let Some(args) = args_opt {
+                let merge_result = merge_config_with_args(&mut config, &args)?;
+                Ok(merge_result)
+            } else {
+                Ok(config)
+            }
+        }
+        None => Err(anyhow!("No config file found")),
+    }
+}
+
+pub fn merge_config_with_args(config: &mut Config, args: &Config) -> anyhow::Result<Config> {
     let args_json = serde_json::to_value(args)?;
     let mut config_json = serde_json::to_value(config)?;
 
