@@ -1,46 +1,43 @@
-use crate::lib::config;
-use crate::lib::config::{Config, MatchMethod};
-use anyhow::{Context, anyhow};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use anyhow::anyhow;
 use crossbeam::channel;
 use crossbeam::channel::Sender;
-use gdk4::gio::{File, Menu};
-use gdk4::glib::{GString, Propagation, Unichar};
-use gdk4::prelude::{Cast, DisplayExt, ListModelExtManual, MonitorExt};
-use gdk4::{pango, Display, Key};
+use gdk4::gio::File;
+use gdk4::glib::Propagation;
+use gdk4::prelude::{Cast, DisplayExt, MonitorExt};
+use gdk4::{Display, Key};
 use gtk4::prelude::{
-    ApplicationExt, ApplicationExtManual, BoxExt, ButtonExt, EditableExt, EntryExt, FileChooserExt,
-    FlowBoxChildExt, GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt,
-    WidgetExt,
+    ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
+    GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
 };
 use gtk4::{
-    Align, Entry, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
-    ListBox, ListBoxRow, Ordering, PolicyType, Revealer, ScrolledWindow, SearchEntry, Widget, gdk,
+    Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
+    ListBox, ListBoxRow, Ordering, PolicyType, ScrolledWindow, SearchEntry, Widget, gdk,
 };
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{KeyboardMode, LayerShell};
-use hyprland::ctl::output::create;
-use hyprland::ctl::plugin::list;
-use std::collections::HashMap;
+use log;
 
-use log::{debug, error, info};
-use std::process::exit;
-use std::sync::{Arc, Mutex, MutexGuard};
+use crate::config;
+use crate::config::{Config, MatchMethod};
 
 type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type MenuItemSender<T> = Sender<Result<MenuItem<T>, anyhow::Error>>;
 
-impl Into<Orientation> for config::Orientation {
-    fn into(self) -> Orientation {
-        match self {
+impl From<config::Orientation> for Orientation {
+    fn from(orientation: config::Orientation) -> Self {
+        match orientation {
             config::Orientation::Vertical => Orientation::Vertical,
             config::Orientation::Horizontal => Orientation::Horizontal,
         }
     }
 }
 
-impl Into<Align> for config::Align {
-    fn into(self) -> Align {
-        match self {
+impl From<config::Align> for Align {
+    fn from(align: config::Align) -> Self {
+        match align {
             config::Align::Fill => Align::Fill,
             config::Align::Start => Align::Start,
             config::Align::Center => Align::Center,
@@ -62,39 +59,46 @@ pub struct MenuItem<T> {
     pub data: Option<T>,
 }
 
-pub fn show<T>(config: Config, elements: Vec<MenuItem<T>>) -> Result<MenuItem<T>, anyhow::Error> where T: Clone + 'static {
+/// # Errors
+///
+/// Will return Err when the channel between the UI and this is broken
+pub fn show<T>(config: Config, elements: Vec<MenuItem<T>>) -> Result<MenuItem<T>, anyhow::Error>
+where
+    T: Clone + 'static,
+{
     if let Some(ref css) = config.style {
         let provider = CssProvider::new();
         let css_file_path = File::for_path(css);
         provider.load_from_file(&css_file_path);
-        let display = Display::default().expect("Could not connect to a display");
-        gtk4::style_context_add_provider_for_display(
-            &display,
-            &provider,
-            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
+        if let Some(display) = Display::default() {
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
     }
 
     let app = Application::builder().application_id("worf").build();
     let (sender, receiver) = channel::bounded(1);
 
     app.connect_activate(move |app| {
-        build_ui(&config, &elements, sender.clone(), app);
+        build_ui(&config, &elements, &sender, app);
     });
 
     let gtk_args: [&str; 0] = [];
     app.run_with_args(&gtk_args);
-    let selection = receiver.recv()?;
-    selection
+    receiver.recv()?
 }
 
 fn build_ui<T>(
     config: &Config,
     elements: &Vec<MenuItem<T>>,
-    sender: Sender<Result<MenuItem<T>, anyhow::Error>>,
+    sender: &Sender<Result<MenuItem<T>, anyhow::Error>>,
     app: &Application,
-) where T: Clone + 'static {
-    // Create a toplevel undecorated window
+) where
+    T: Clone + 'static,
+{
     let window = ApplicationWindow::builder()
         .application(app)
         .decorated(false)
@@ -130,8 +134,7 @@ fn build_ui<T>(
     scroll.set_hexpand(true);
     scroll.set_vexpand(true);
 
-    let hide_scroll = false; // todo
-    if hide_scroll {
+    if config.hide_scroll.is_some_and(|hs| hs) {
         scroll.set_policy(PolicyType::External, PolicyType::External);
     }
 
@@ -148,37 +151,28 @@ fn build_ui<T>(
 
     if let Some(valign) = config.valign {
         inner_box.set_valign(valign.into());
+    } else if config.orientation.unwrap() == config::Orientation::Horizontal {
+        inner_box.set_valign(Align::Center);
     } else {
-        if config.orientation.unwrap() == config::Orientation::Horizontal {
-            inner_box.set_valign(Align::Center);
-        } else {
-            inner_box.set_valign(Align::Start);
-        }
+        inner_box.set_valign(Align::Start);
     }
 
     inner_box.set_selection_mode(gtk4::SelectionMode::Browse);
     inner_box.set_max_children_per_line(config.columns.unwrap());
     inner_box.set_activate_on_single_click(true);
 
-    let mut list_items: ArcMenuMap<T> = Arc::new(Mutex::new(HashMap::new()));
+    let list_items: ArcMenuMap<T> = Arc::new(Mutex::new(HashMap::new()));
     for entry in elements {
         list_items
             .lock()
             .unwrap() // panic here ok? deadlock?
             .insert(
-                add_menu_item(
-                    &inner_box,
-                    &entry,
-                    &config,
-                    sender.clone(),
-                    list_items.clone(),
-                    app.clone(),
-                ),
+                add_menu_item(&inner_box, entry, config, sender, &list_items, app),
                 entry.clone(),
             );
     }
 
-    let items_clone = list_items.clone();
+    let items_clone = Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(&list_items);
     inner_box.set_sort_func(move |child1, child2| sort_menu_items(child1, child2, &items_clone));
 
     // Set focus after everything is realized
@@ -197,29 +191,28 @@ fn build_ui<T>(
         inner_box,
         app.clone(),
         sender.clone(),
-        list_items.clone(),
+        Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(&list_items),
         config.clone(),
     );
 
     window.show();
 
     let display = window.display();
-    window.surface().map(|surface| {
+    if let Some(surface) = window.surface() {
         // todo this does not work for multi monitor systems
         let monitor = display.monitor_at_surface(&surface);
         if let Some(monitor) = monitor {
             let geometry = monitor.geometry();
             config.width.as_ref().map(|width| {
-                percent_or_absolute(&width, geometry.width()).map(|w| window.set_width_request(w))
+                percent_or_absolute(width, geometry.width()).map(|w| window.set_width_request(w))
             });
             config.height.as_ref().map(|height| {
-                percent_or_absolute(&height, geometry.height())
-                    .map(|h| window.set_height_request(h))
+                percent_or_absolute(height, geometry.height()).map(|h| window.set_height_request(h))
             });
         } else {
             log::error!("failed to get monitor to init window size");
         }
-    });
+    }
 }
 
 fn setup_key_event_handler<T: Clone + 'static>(
@@ -287,12 +280,10 @@ fn sort_menu_items<T>(
                 } else {
                     Ordering::Larger
                 }
+            } else if menu1.initial_sort_score < menu2.initial_sort_score {
+                Ordering::Smaller
             } else {
-                if menu1.initial_sort_score < menu2.initial_sort_score {
-                    Ordering::Smaller
-                } else {
-                    Ordering::Larger
-                }
+                Ordering::Larger
             }
         }
         (Some(_), None) => Ordering::Larger,
@@ -306,8 +297,11 @@ fn handle_selected_item<T>(
     app: &Application,
     inner_box: &FlowBox,
     lock_arc: &ArcMenuMap<T>,
-) -> Result<(), String> where T: Clone {
-    for s in inner_box.selected_children() {
+) -> Result<(), String>
+where
+    T: Clone,
+{
+    if let Some(s) = inner_box.selected_children().into_iter().next() {
         let list_items = lock_arc.lock().unwrap();
         let item = list_items.get(&s);
         if let Some(item) = item {
@@ -325,19 +319,30 @@ fn add_menu_item<T: Clone + 'static>(
     inner_box: &FlowBox,
     entry_element: &MenuItem<T>,
     config: &Config,
-    sender: MenuItemSender<T>,
-    lock_arc: ArcMenuMap<T>,
-    app: Application,
+    sender: &MenuItemSender<T>,
+    lock_arc: &ArcMenuMap<T>,
+    app: &Application,
 ) -> FlowBoxChild {
-    let parent: Widget = if !entry_element.sub_elements.is_empty() {
+    let parent: Widget = if entry_element.sub_elements.is_empty() {
+        create_menu_row(
+            entry_element,
+            config,
+            Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(lock_arc),
+            sender.clone(),
+            app.clone(),
+            inner_box.clone(),
+        )
+        .upcast()
+    } else {
         let expander = Expander::new(None);
         expander.set_widget_name("expander-box");
         expander.set_hexpand(true);
 
+        // todo deduplicate this snippet
         let menu_row = create_menu_row(
             entry_element,
             config,
-            lock_arc.clone(),
+            Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(lock_arc),
             sender.clone(),
             app.clone(),
             inner_box.clone(),
@@ -352,7 +357,7 @@ fn add_menu_item<T: Clone + 'static>(
             let sub_row = create_menu_row(
                 sub_item,
                 config,
-                lock_arc.clone(),
+                Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(lock_arc),
                 sender.clone(),
                 app.clone(),
                 inner_box.clone(),
@@ -365,16 +370,6 @@ fn add_menu_item<T: Clone + 'static>(
 
         expander.set_child(Some(&list_box));
         expander.upcast()
-    } else {
-        create_menu_row(
-            entry_element,
-            config,
-            lock_arc.clone(),
-            sender.clone(),
-            app.clone(),
-            inner_box.clone(),
-        )
-        .upcast()
     };
 
     parent.set_halign(Align::Fill);
@@ -435,7 +430,7 @@ fn create_menu_row<T: Clone + 'static>(
     }
 
     // todo make max length configurable
-    let text = if config.text_wrap.is_some_and(|x| x == true) {
+    let text = if config.text_wrap.is_some_and(|x| x) {
         &wrap_text(&menu_item.label, config.text_wrap_length)
     } else {
         menu_item.label.as_str()
@@ -462,9 +457,10 @@ fn filter_widgets<T>(
     inner_box: &FlowBox,
 ) {
     if items.is_empty() {
-        items.iter().for_each(|(child, _)| {
+        for (child, _) in items.iter() {
             child.set_visible(true);
-        });
+        }
+
         if let Some(child) = inner_box.first_child() {
             child.grab_focus();
             let fb = child.downcast::<FlowBoxChild>();
@@ -476,9 +472,8 @@ fn filter_widgets<T>(
     }
 
     let query = query.to_owned().to_lowercase();
-    let mut highest_score = -1.0;
     let mut fb: Option<&FlowBoxChild> = None;
-    items.iter_mut().for_each(|(flowbox_child, mut menu_item)| {
+    for (flowbox_child, menu_item) in items.iter_mut() {
         let menu_item_search = format!(
             "{} {}",
             menu_item
@@ -519,12 +514,11 @@ fn filter_widgets<T>(
 
         menu_item.search_sort_score = search_sort_score;
         if visible {
-            highest_score = search_sort_score;
             fb = Some(flowbox_child);
         }
 
         flowbox_child.set_visible(visible);
-    });
+    }
 
     if let Some(top_item) = fb {
         inner_box.select_child(top_item);
@@ -532,9 +526,12 @@ fn filter_widgets<T>(
     }
 }
 
-fn percent_or_absolute(value: &String, base_value: i32) -> Option<i32> {
-    if value.contains("%") {
-        let value = value.replace("%", "").trim().to_string();
+// allowed because truncating is fine, we do no need the precision
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_precision_loss)]
+fn percent_or_absolute(value: &str, base_value: i32) -> Option<i32> {
+    if value.contains('%') {
+        let value = value.replace('%', "").trim().to_string();
         match value.parse::<i32>() {
             Ok(n) => Some(((n as f32 / 100.0) * base_value as f32) as i32),
             Err(_) => None,
@@ -544,7 +541,9 @@ fn percent_or_absolute(value: &String, base_value: i32) -> Option<i32> {
     }
 }
 
-pub fn initialize_sort_scores<T>(items: &mut Vec<MenuItem<T>>) {
+// highly unlikely that we are dealing with > i64 items
+#[allow(clippy::cast_possible_wrap)]
+pub fn initialize_sort_scores<T>(items: &mut [MenuItem<T>]) {
     let mut regular_score = items.len() as i64;
     items.sort_by(|l, r| l.label.cmp(&r.label));
 
@@ -562,19 +561,17 @@ fn wrap_text(text: &str, line_length: Option<usize>) -> String {
     let len = line_length.unwrap_or(text.len());
 
     for word in text.split_whitespace() {
-        if line.len() + word.len() + 1 > len {
-            if !line.is_empty() {
-                result.push_str(&line.trim_end());
-                result.push('\n');
-                line.clear();
-            }
+        if line.len() + word.len() + 1 > len && !line.is_empty() {
+            result.push_str(line.trim_end());
+            result.push('\n');
+            line.clear();
         }
         line.push_str(word);
         line.push(' ');
     }
 
     if !line.is_empty() {
-        result.push_str(&line.trim_end());
+        result.push_str(line.trim_end());
     }
 
     result

@@ -1,8 +1,9 @@
-use crate::lib::config::Config;
-use crate::lib::desktop::{default_icon, find_desktop_files, get_locale_variants};
-use crate::lib::gui;
-use crate::lib::gui::MenuItem;
-use crate::lookup_name_with_locale;
+use crate::config::Config;
+use crate::desktop::{
+    default_icon, find_desktop_files, get_locale_variants, lookup_name_with_locale,
+};
+use crate::gui;
+use crate::gui::MenuItem;
 use anyhow::{Context, anyhow};
 use freedesktop_file_parser::EntryType;
 use serde::{Deserialize, Serialize};
@@ -18,9 +19,12 @@ struct DRunCache {
     run_count: usize,
 }
 
-pub fn d_run(mut config: Config) -> anyhow::Result<()> {
+/// # Errors
+///
+/// Will return `Err` if it was not able to spawn the process
+pub fn d_run(config: &Config) -> anyhow::Result<()> {
     let locale_variants = get_locale_variants();
-    let default_icon = default_icon();
+    let default_icon = default_icon().unwrap_or_default();
 
     let cache_path = dirs::cache_dir().map(|x| x.join("worf-drun"));
     let mut d_run_cache = {
@@ -30,29 +34,26 @@ pub fn d_run(mut config: Config) -> anyhow::Result<()> {
             }
         }
 
-        load_cache_file(&cache_path).unwrap_or_default()
+        load_cache_file(cache_path.as_ref()).unwrap_or_default()
     };
 
     let mut entries: Vec<MenuItem<String>> = Vec::new();
-    for file in find_desktop_files().iter().filter(|f| {
-        f.entry.hidden.map_or(true, |hidden| !hidden)
-            && f.entry.no_display.map_or(true, |no_display| !no_display)
+    for file in find_desktop_files().ok().iter().flatten().filter(|f| {
+        f.entry.hidden.is_none_or(|hidden| !hidden)
+            && f.entry.no_display.is_none_or(|no_display| !no_display)
     }) {
         let (action, working_dir) = match &file.entry.entry_type {
             EntryType::Application(app) => (app.exec.clone(), app.path.clone()),
             _ => (None, None),
         };
 
-        let name = match lookup_name_with_locale(
+        let Some(name) = lookup_name_with_locale(
             &locale_variants,
             &file.entry.name.variants,
             &file.entry.name.default,
-        ) {
-            Some(name) => name,
-            None => {
-                log::debug!("Skipping desktop entry without name {file:?}");
-                continue;
-            }
+        ) else {
+            log::debug!("Skipping desktop entry without name {file:?}");
+            continue;
         };
 
         let icon = file
@@ -76,30 +77,31 @@ pub fn d_run(mut config: Config) -> anyhow::Result<()> {
         };
 
         file.actions.iter().for_each(|(_, action)| {
-            let action_name = lookup_name_with_locale(
+            if let Some(action_name) = lookup_name_with_locale(
                 &locale_variants,
                 &action.name.variants,
                 &action.name.default,
-            );
-            let action_icon = action
-                .icon
-                .as_ref()
-                .map(|s| s.content.clone())
-                .or(icon.as_ref().map(|s| s.clone()));
+            ) {
+                let action_icon = action
+                    .icon
+                    .as_ref()
+                    .map(|s| s.content.clone())
+                    .or(icon.clone());
 
-            log::debug!("sub, action_name={action_name:?}, action_icon={action_icon:?}");
+                log::debug!("sub, action_name={action_name:?}, action_icon={action_icon:?}");
 
-            let sub_entry = MenuItem {
-                label: action_name.unwrap().trim().to_owned(),
-                icon_path: action_icon,
-                action: action.exec.clone(),
-                sub_elements: Vec::default(),
-                working_dir: working_dir.clone(),
-                initial_sort_score: 0, // subitems are never sorted right now.
-                search_sort_score: 0.0,
-                data: None,
-            };
-            entry.sub_elements.push(sub_entry);
+                let sub_entry = MenuItem {
+                    label: action_name,
+                    icon_path: action_icon,
+                    action: action.exec.clone(),
+                    sub_elements: Vec::default(),
+                    working_dir: working_dir.clone(),
+                    initial_sort_score: 0, // subitems are never sorted right now.
+                    search_sort_score: 0.0,
+                    data: None,
+                };
+                entry.sub_elements.push(sub_entry);
+            }
         });
 
         entries.push(entry);
@@ -113,13 +115,13 @@ pub fn d_run(mut config: Config) -> anyhow::Result<()> {
         Ok(selected_item) => {
             if let Some(cache) = cache_path {
                 *d_run_cache.entry(selected_item.label).or_insert(0) += 1;
-                if let Err(e) = save_cache_file(&cache, d_run_cache) {
+                if let Err(e) = save_cache_file(&cache, &d_run_cache) {
                     log::warn!("cannot save drun cache {e:?}");
                 }
             }
 
             if let Some(action) = selected_item.action {
-                spawn_fork(&action, &selected_item.working_dir)?
+                spawn_fork(&action, selected_item.working_dir.as_ref())?;
             }
         }
         Err(e) => {
@@ -130,16 +132,15 @@ pub fn d_run(mut config: Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn save_cache_file(path: &PathBuf, data: HashMap<String, i64>) -> anyhow::Result<()> {
+fn save_cache_file(path: &PathBuf, data: &HashMap<String, i64>) -> anyhow::Result<()> {
     // Convert the HashMap to TOML string
     let toml_string = toml::ser::to_string(&data).map_err(|e| anyhow::anyhow!(e))?;
     fs::write(path, toml_string).map_err(|e| anyhow::anyhow!(e))
 }
 
-fn load_cache_file(cache_path: &Option<PathBuf>) -> anyhow::Result<HashMap<String, i64>> {
-    let path = match cache_path {
-        Some(p) => p,
-        None => return Err(anyhow!("Cache is missing")),
+fn load_cache_file(cache_path: Option<&PathBuf>) -> anyhow::Result<HashMap<String, i64>> {
+    let Some(path) = cache_path else {
+        return Err(anyhow!("Cache is missing"));
     };
 
     let toml_content = fs::read_to_string(path)?;
@@ -151,7 +152,7 @@ fn load_cache_file(cache_path: &Option<PathBuf>) -> anyhow::Result<HashMap<Strin
             if let toml::Value::Integer(i) = val {
                 result.insert(key, i);
             } else {
-                log::warn!("Skipping key '{}' because it's not an integer", key);
+                log::warn!("Skipping key '{key}' because it's not an integer");
             }
         }
     }
@@ -162,7 +163,7 @@ fn create_file_if_not_exists(path: &PathBuf) -> anyhow::Result<()> {
     let file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&path);
+        .open(path);
 
     match file {
         Ok(_) => Ok(()),
@@ -172,7 +173,7 @@ fn create_file_if_not_exists(path: &PathBuf) -> anyhow::Result<()> {
     }
 }
 
-fn spawn_fork(cmd: &str, working_dir: &Option<String>) -> anyhow::Result<()> {
+fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> anyhow::Result<()> {
     // todo probably remove arguments?
     // todo support working dir
     // todo fix actions
@@ -192,7 +193,7 @@ fn spawn_fork(cmd: &str, working_dir: &Option<String>) -> anyhow::Result<()> {
     let args: Vec<_> = parts
         .iter()
         .skip(1)
-        .filter(|arg| !arg.starts_with("%"))
+        .filter(|arg| !arg.starts_with('%'))
         .collect();
 
     unsafe {
