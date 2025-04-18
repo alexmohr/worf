@@ -1,15 +1,11 @@
-use crate::lib::system;
-use anyhow::{anyhow, Context};
-use clap::builder::TypedValueParser;
-use clap::{Parser, ValueEnum};
-use gtk4::prelude::ToValue;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::HashMap;
-use std::env::Args;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::{env, fs};
+
+use anyhow::anyhow;
+use clap::{Parser, ValueEnum};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]
@@ -34,10 +30,10 @@ pub enum Align {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mode {
-    /// searches $PATH for executables and allows them to be run by selecting them.
+    /// searches `$PATH` for executables and allows them to be run by selecting them.
     Run,
-    /// searches $XDG_DATA_HOME/applications and $XDG_DATA_DIRS/applications f
-    /// or desktop files and allows them to be run by selecting them.
+    /// searches `$XDG_DATA_HOME/applications` and `$XDG_DATA_DIRS/applications`
+    /// for desktop files and allows them to be run by selecting them.
     Drun,
 
     /// reads from stdin and displays options which when selected will be output to stdout.
@@ -85,8 +81,8 @@ pub struct Config {
     pub version: Option<bool>,
 
     /// Defines the style sheet to be loaded.
-    /// Defaults to $XDG_CONF_DIR/worf/style.css
-    /// or $HOME/.config/worf/style.css if XDG_CONF_DIR is not set.
+    /// Defaults to `$XDG_CONF_DIR/worf/style.css`
+    /// or `$HOME/.config/worf/style.css` if `$XDG_CONF_DIR` is not set.
     #[serde(default = "default_style")]
     #[clap(long = "style")]
     pub style: Option<String>,
@@ -252,8 +248,6 @@ pub struct Config {
     #[serde(default = "default_text_wrap_length")]
     #[clap(long = "text-wrap-length")]
     pub text_wrap_length: Option<usize>,
-
-
 }
 
 impl Default for Config {
@@ -327,28 +321,45 @@ impl Default for Config {
         }
     }
 }
-
-fn default_row_box_orientation() -> Option<Orientation> {
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_row_box_orientation() -> Option<Orientation> {
     Some(Orientation::Horizontal)
 }
 
-pub(crate) fn default_orientation() -> Option<Orientation> {
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_orientation() -> Option<Orientation> {
     Some(Orientation::Vertical)
 }
 
-fn default_halign() -> Option<Align> {
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_halign() -> Option<Align> {
     Some(Align::Fill)
 }
 
-fn default_content_halign() -> Option<Align> {
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_content_halign() -> Option<Align> {
     Some(Align::Fill)
 }
 
-fn default_columns() -> Option<u32> {
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_columns() -> Option<u32> {
     Some(1)
 }
 
-fn default_normal_window() -> bool {
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_normal_window() -> bool {
     false
 }
 
@@ -429,77 +440,112 @@ fn default_normal_window() -> bool {
 // key_default = "Ctrl-c";
 // char* key_copy = (i == 0) ? key_default : config_get(config, "key_copy", key_default);
 
-fn default_style() -> Option<String> {
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_style() -> Option<String> {
     style_path(None)
         .ok()
-        .and_then(|pb| Some(pb.display().to_string()))
+        .map(|pb| pb.display().to_string())
         .or_else(|| {
             log::error!("no stylesheet found, using system styles");
             None
         })
 }
 
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_height() -> Option<String> {
     Some("40%".to_owned())
 }
 
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_width() -> Option<String> {
     Some("50%".to_owned())
 }
 
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_password_char() -> Option<String> {
     Some("*".to_owned())
 }
 
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_fuzzy_min_length() -> Option<i32> {
     Some(10)
 }
 
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_fuzzy_min_score() -> Option<f64> {
     Some(0.1)
 }
 
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_match_method() -> Option<MatchMethod> {
     Some(MatchMethod::Contains)
 }
 
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_image_size() -> Option<i32> {
     Some(32)
 }
 
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_text_wrap_length() -> Option<usize> {
     Some(15)
 }
 
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_text_wrap() -> Option<bool> {
     Some(false)
 }
 
+#[must_use]
 pub fn parse_args() -> Config {
     Config::parse()
 }
 
-
+/// # Errors
+///
+/// Will return Err when it cannot resolve any path or no style is found
 pub fn style_path(full_path: Option<String>) -> Result<PathBuf, anyhow::Error> {
-    let alternative_paths = path_alternatives(vec![dirs::config_dir()], PathBuf::from("worf").join("style.css"));
-    resolve_path(
-        full_path,
-        alternative_paths
-            .into_iter()
-            .collect(),
-    )
+    let alternative_paths = path_alternatives(
+        vec![dirs::config_dir()],
+        &PathBuf::from("worf").join("style.css"),
+    );
+    resolve_path(full_path, alternative_paths.into_iter().collect())
 }
 
-pub fn path_alternatives(base_paths: Vec<Option<PathBuf>>, sub_path: PathBuf) -> Vec<PathBuf> {
+#[must_use]
+pub fn path_alternatives(base_paths: Vec<Option<PathBuf>>, sub_path: &PathBuf) -> Vec<PathBuf> {
     base_paths
         .into_iter()
-        .filter_map(|s| s)
-        .map(|pb| pb.join(&sub_path))
+        .flatten()
+        .map(|pb| pb.join(sub_path))
         .filter_map(|pb| pb.canonicalize().ok())
         .filter(|c| c.exists())
         .collect()
 }
 
+/// # Errors
+///
+/// Will return `Err` if it is not able to find any valid path
 pub fn resolve_path(
     full_path: Option<String>,
     alternatives: Vec<PathBuf>,
@@ -513,16 +559,21 @@ pub fn resolve_path(
                 .filter(|p| p.exists())
                 .find_map(|pb| pb.canonicalize().ok().filter(|c| c.exists()))
         })
-        .ok_or_else(|| anyhow!("Could not find a valid config file."))
+        .ok_or_else(|| anyhow!("Could not find a valid file."))
 }
 
+/// # Errors
+///
+/// Will return Err when it
+/// * cannot read the config file
+/// * cannot parse the config file
+/// * no config file exists
+/// * config file and args cannot be merged
 pub fn load_config(args_opt: Option<Config>) -> Result<Config, anyhow::Error> {
     let home_dir = env::var("HOME")?;
     let config_path = args_opt.as_ref().map(|c| {
-        c.config
-            .as_ref()
-            .and_then(|p| Some(PathBuf::from(p)))
-            .unwrap_or_else(|| {
+        c.config.as_ref().map_or_else(
+            || {
                 env::var("XDG_CONF_HOME")
                     .map_or(
                         PathBuf::from(home_dir.clone()).join(".config"),
@@ -530,7 +581,9 @@ pub fn load_config(args_opt: Option<Config>) -> Result<Config, anyhow::Error> {
                     )
                     .join("worf")
                     .join("config")
-            })
+            },
+            PathBuf::from,
+        )
     });
 
     match config_path {
@@ -549,6 +602,9 @@ pub fn load_config(args_opt: Option<Config>) -> Result<Config, anyhow::Error> {
     }
 }
 
+/// # Errors
+///
+/// Will return Err when it fails to merge the config with the arguments.
 pub fn merge_config_with_args(config: &mut Config, args: &Config) -> anyhow::Result<Config> {
     let args_json = serde_json::to_value(args)?;
     let mut config_json = serde_json::to_value(config)?;

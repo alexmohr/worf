@@ -1,8 +1,8 @@
+use anyhow::anyhow;
 use freedesktop_file_parser::DesktopFile;
 use gtk4::prelude::*;
 use gtk4::{IconLookupFlags, IconTheme, TextDirection};
 use home::home_dir;
-use ini::configparser::ini::Ini;
 use log::{debug, info, warn};
 use regex::Regex;
 use std::collections::HashMap;
@@ -14,13 +14,21 @@ pub struct IconResolver {
     cache: HashMap<String, String>,
 }
 
+impl Default for IconResolver {
+    #[must_use]
+    fn default() -> IconResolver {
+        Self::new()
+    }
+}
+
 impl IconResolver {
-    #![allow(clippy::single_call_fn)]
+    #[must_use]
     pub fn new() -> IconResolver {
         IconResolver {
             cache: HashMap::new(),
         }
     }
+
     pub fn icon_path(&mut self, icon_name: &str) -> String {
         if let Some(icon_path) = self.cache.get(icon_name) {
             info!("Fetching {icon_name} from cache");
@@ -28,47 +36,55 @@ impl IconResolver {
         }
 
         info!("Loading icon for {icon_name}");
-
         let icon = fetch_icon_from_theme(icon_name)
-            .or_else(|| fetch_icon_from_common_dirs(icon_name))
-            .or_else(|| fetch_icon_from_desktop_file(icon_name))
-            .unwrap_or_else(|| {
+            .or_else(|_| {
+                fetch_icon_from_common_dirs(icon_name).map_or_else(
+                    || Err(anyhow::anyhow!("Missing file")), // Return an error here
+                    Ok,
+                )
+            })
+            .or_else(|_| {
                 warn!("Missing icon for {icon_name}, using fallback");
                 default_icon()
             });
 
-        self.cache.insert(icon_name.to_owned(), icon.clone());
-        self.cache.get(icon_name).unwrap().to_owned()
+        self.cache
+            .entry(icon_name.to_owned())
+            .or_insert_with(|| icon.unwrap_or_default())
+            .to_owned()
     }
 }
 
-pub fn default_icon() -> String {
-    fetch_icon_from_theme("image-missing").unwrap()
+/// # Errors
+///
+/// Will return `Err` if no icon can be found
+pub fn default_icon() -> anyhow::Result<String> {
+    fetch_icon_from_theme("image-missing")
 }
 
-fn fetch_icon_from_desktop_file(icon_name: &str) -> Option<String> {
-    // find_desktop_files().into_iter().find_map(|desktop_file| {
-    //     desktop_file
-    //         .get("Desktop Entry")
-    //         .filter(|desktop_entry| {
-    //             desktop_entry
-    //                 .get("Exec")
-    //                 .and_then(|opt| opt.as_ref())
-    //                 .is_some_and(|exec| exec.to_lowercase().contains(icon_name))
-    //         })
-    //         .map(|desktop_entry| {
-    //             desktop_entry
-    //                 .get("Icon")
-    //                 .and_then(|opt| opt.as_ref())
-    //                 .map(ToOwned::to_owned)
-    //                 .unwrap_or_default()
-    //         })
-    // })
-    //todo
-    None
-}
+// fn fetch_icon_from_desktop_file(icon_name: &str) -> Option<String> {
+//     // find_desktop_files().into_iter().find_map(|desktop_file| {
+//     //     desktop_file
+//     //         .get("Desktop Entry")
+//     //         .filter(|desktop_entry| {
+//     //             desktop_entry
+//     //                 .get("Exec")
+//     //                 .and_then(|opt| opt.as_ref())
+//     //                 .is_some_and(|exec| exec.to_lowercase().contains(icon_name))
+//     //         })
+//     //         .map(|desktop_entry| {
+//     //             desktop_entry
+//     //                 .get("Icon")
+//     //                 .and_then(|opt| opt.as_ref())
+//     //                 .map(ToOwned::to_owned)
+//     //                 .unwrap_or_default()
+//     //         })
+//     // })
+//     //todo
+//     None
+// }
 
-fn fetch_icon_from_theme(icon_name: &str) -> Option<String> {
+fn fetch_icon_from_theme(icon_name: &str) -> anyhow::Result<String> {
     let display = gtk4::gdk::Display::default();
     if display.is_none() {
         log::error!("Failed to get display");
@@ -85,9 +101,14 @@ fn fetch_icon_from_theme(icon_name: &str) -> Option<String> {
         IconLookupFlags::empty(),
     );
 
-    icon.file()
+    match icon
+        .file()
         .and_then(|file| file.path())
         .and_then(|path| path.to_str().map(string::ToString::to_string))
+    {
+        None => Err(anyhow!("Cannot find file")),
+        Some(i) => Ok(i),
+    }
 }
 
 fn fetch_icon_from_common_dirs(icon_name: &str) -> Option<String> {
@@ -125,15 +146,17 @@ fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<Pa
             .filter(|entry| {
                 entry
                     .file_name()
-                    .and_then(|e| e.to_str()) // Handle the Option here.
-                    .map(|name| file_name.is_match(name))
-                    .unwrap_or(false) // Handle the case where the file name is not a valid string.
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|name| file_name.is_match(name))
             })
             .collect()
     })
 }
 
-pub(crate) fn find_desktop_files() -> Vec<DesktopFile> {
+/// # Errors
+///
+/// Will return Err when it cannot parse the internal regex
+pub fn find_desktop_files() -> anyhow::Result<Vec<DesktopFile>> {
     let mut paths = vec![
         PathBuf::from("/usr/share/applications"),
         PathBuf::from("/usr/local/share/applications"),
@@ -144,24 +167,33 @@ pub(crate) fn find_desktop_files() -> Vec<DesktopFile> {
         paths.push(home.join(".local/share/applications"));
     }
 
+    if let Ok(xdg_data_home) = env::var("XDG_DATA_HOME") {
+        paths.push(PathBuf::from(xdg_data_home).join(".applications"));
+    }
+
+    if let Ok(xdg_data_dir) = env::var("XDG_DATA_DIRS") {
+        paths.push(PathBuf::from(xdg_data_dir).join(".applications"));
+    }
+
+    let regex = &Regex::new("(?i).*\\.desktop$")?;
+
     let p: Vec<_> = paths
         .into_iter()
-        .filter(|icon_dir| icon_dir.exists())
-        .filter_map(|icon_dir| {
-            find_file_case_insensitive(&icon_dir, &Regex::new("(?i).*\\.desktop$").unwrap())
-        })
+        .filter(|desktop_dir| desktop_dir.exists())
+        .filter_map(|icon_dir| find_file_case_insensitive(&icon_dir, regex))
         .flat_map(|desktop_files| {
             desktop_files.into_iter().filter_map(|desktop_file| {
-                debug!("loading desktop file {:?}", desktop_file);
+                debug!("loading desktop file {desktop_file:?}");
                 fs::read_to_string(desktop_file)
                     .ok()
                     .and_then(|content| freedesktop_file_parser::parse(&content).ok())
             })
         })
         .collect();
-    p
+    Ok(p)
 }
 
+#[must_use]
 pub fn get_locale_variants() -> Vec<String> {
     let locale = env::var("LC_ALL")
         .or_else(|_| env::var("LC_MESSAGES"))
@@ -172,7 +204,7 @@ pub fn get_locale_variants() -> Vec<String> {
     let mut variants = vec![];
 
     if let Some((lang_part, region)) = lang.split_once('_') {
-        variants.push(format!("{}_{region}", lang_part)); // en_us
+        variants.push(format!("{lang_part}_{region}")); // en_us
         variants.push(lang_part.to_string()); // en
     } else {
         variants.push(lang.clone()); // e.g. "fr"
@@ -181,52 +213,17 @@ pub fn get_locale_variants() -> Vec<String> {
     variants
 }
 
-pub fn extract_desktop_fields(
-    category: &str,
-    //keys: Vec<String>,
-    desktop_map: &HashMap<String, HashMap<String, Option<String>>>,
-) -> HashMap<String, String> {
-    let mut result: HashMap<String, String> = HashMap::new();
-    let category_map = desktop_map.get(category);
-    if category_map.is_none() {
-        debug!("No desktop map for category {category}, map data: {desktop_map:?}");
-        return result;
-    }
-
-    let keys_needed = ["name", "exec", "icon"];
-    let locale_variants = get_locale_variants();
-
-    for (map_key, map_value) in category_map.unwrap() {
-        for key in keys_needed {
-            if result.contains_key(key) || map_value.is_none() {
-                continue;
-            }
-
-            let (k, v) = locale_variants
-                .iter()
-                .find(|locale| {
-                    let localized_key = format!("{}[{}]", key, locale);
-                    key == localized_key
-                })
-                .map(|_| (Some(key), map_value))
-                .unwrap_or_else(|| {
-                    if key == map_key {
-                        (Some(key), map_value)
-                    } else {
-                        (None, &None)
-                    }
-                });
-            if let Some(k) = k {
-                if let Some(v) = v {
-                    result.insert(k.to_owned(), v.clone());
-                }
-            }
-        }
-
-        if result.len() == keys_needed.len() {
-            break;
-        }
-    }
-
-    result
+// implicit hasher does not make sense here, it is only for desktop files
+#[allow(clippy::implicit_hasher)]
+#[must_use]
+pub fn lookup_name_with_locale(
+    locale_variants: &[String],
+    variants: &HashMap<String, String>,
+    fallback: &str,
+) -> Option<String> {
+    locale_variants
+        .iter()
+        .find_map(|local| variants.get(local))
+        .map(std::borrow::ToOwned::to_owned)
+        .or_else(|| Some(fallback.to_owned()))
 }

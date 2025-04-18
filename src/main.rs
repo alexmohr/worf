@@ -1,33 +1,7 @@
-#![warn(clippy::pedantic)]
-#![allow(clippy::implicit_return)]
+use std::env;
 
-// todo resolve paths like ~/
-
-use crate::lib::config::Config;
-use crate::lib::desktop::{default_icon, find_desktop_files, get_locale_variants};
-use crate::lib::{config, gui, mode};
-use crate::lib::gui::MenuItem;
-use anyhow::{Error, anyhow};
-use clap::Parser;
-use freedesktop_file_parser::{DesktopAction, EntryType};
-use gdk4::prelude::Cast;
-use gtk4::prelude::{
-    ApplicationExt, ApplicationExtManual, BoxExt, ButtonExt, EditableExt, EntryExt,
-    FlowBoxChildExt, GtkWindowExt, ListBoxRowExt, NativeExt, ObjectExt, SurfaceExt, WidgetExt,
-};
-use gtk4_layer_shell::LayerShell;
-use log::{debug, info, warn};
-use std::collections::HashMap;
-use std::ops::Deref;
-use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::Arc;
-use std::thread::sleep;
-use std::{env, fs, time};
-
-mod lib;
-
+use anyhow::anyhow;
+use worf_lib::{config, mode};
 
 fn main() -> anyhow::Result<()> {
     gtk4::init()?;
@@ -42,11 +16,15 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(show) = &config.show {
         match show {
-            config::Mode::Run => {}
-            config::Mode::Drun => {
-                mode::d_run(config)?;
+            config::Mode::Run => {
+                todo!("run not implemented")
             }
-            config::Mode::Dmenu => {}
+            config::Mode::Drun => {
+                mode::d_run(&config)?;
+            }
+            config::Mode::Dmenu => {
+                todo!("dmenu not implemented")
+            }
         }
 
         Ok(())
@@ -54,20 +32,6 @@ fn main() -> anyhow::Result<()> {
         Err(anyhow!("No mode provided"))
     }
 }
-
-fn lookup_name_with_locale(
-    locale_variants: &Vec<String>,
-    variants: &HashMap<String, String>,
-    fallback: &str,
-) -> Option<String> {
-    locale_variants
-        .iter()
-        .filter_map(|local| variants.get(local))
-        .next()
-        .map(|name| name.to_owned())
-        .or_else(|| Some(fallback.to_owned()))
-}
-
 
 //
 // fn main() -> anyhow::Result<()> {
