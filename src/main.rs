@@ -8,7 +8,7 @@ fn main() -> anyhow::Result<()> {
 
     env_logger::Builder::new()
         // todo change to error as default
-        .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_owned()))
+        .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
         .init();
 
     let args = config::parse_args();
