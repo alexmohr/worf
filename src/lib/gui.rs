@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::anyhow;
 use crossbeam::channel;
 use crossbeam::channel::Sender;
 use gdk4::gio::File;
-use gdk4::glib::Propagation;
+use gdk4::glib::{Propagation, timeout_add_local};
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt};
 use gdk4::{Display, Key};
+use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
     GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
@@ -21,7 +23,7 @@ use gtk4_layer_shell::{KeyboardMode, LayerShell};
 use log;
 
 use crate::config;
-use crate::config::{Config, MatchMethod};
+use crate::config::{Animation, Config, MatchMethod};
 
 type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type MenuItemSender<T> = Sender<Result<MenuItem<T>, anyhow::Error>>;
@@ -103,8 +105,8 @@ fn build_ui<T>(
         .application(app)
         .decorated(false)
         .resizable(false)
-        .default_width(20)
-        .default_height(20)
+        .default_width(0)
+        .default_height(0)
         .build();
 
     window.set_widget_name("window");
@@ -119,8 +121,6 @@ fn build_ui<T>(
 
     let outer_box = gtk4::Box::new(config.orientation.unwrap().into(), 0);
     outer_box.set_widget_name("outer-box");
-
-    window.set_child(Some(&outer_box));
 
     let entry = SearchEntry::new();
     entry.set_widget_name("input");
@@ -167,7 +167,7 @@ fn build_ui<T>(
             .lock()
             .unwrap() // panic here ok? deadlock?
             .insert(
-                add_menu_item(&inner_box, entry, config, sender, &list_items, app),
+                add_menu_item(&inner_box, entry, config, sender, &list_items, app, &window),
                 entry.clone(),
             );
     }
@@ -195,24 +195,9 @@ fn build_ui<T>(
         config.clone(),
     );
 
+    window.set_child(Widget::NONE);
     window.show();
-
-    let display = window.display();
-    if let Some(surface) = window.surface() {
-        // todo this does not work for multi monitor systems
-        let monitor = display.monitor_at_surface(&surface);
-        if let Some(monitor) = monitor {
-            let geometry = monitor.geometry();
-            config.width.as_ref().map(|width| {
-                percent_or_absolute(width, geometry.width()).map(|w| window.set_width_request(w))
-            });
-            config.height.as_ref().map(|height| {
-                percent_or_absolute(height, geometry.height()).map(|h| window.set_height_request(h))
-            });
-        } else {
-            log::error!("failed to get monitor to init window size");
-        }
-    }
+    animate_window_show(config.clone(), window.clone(), outer_box);
 }
 
 fn setup_key_event_handler<T: Clone + 'static>(
@@ -226,16 +211,24 @@ fn setup_key_event_handler<T: Clone + 'static>(
 ) {
     let key_controller = EventControllerKey::new();
 
+    let window_clone = window.clone();
     key_controller.connect_key_pressed(move |_, key_value, _, _| {
         match key_value {
             Key::Escape => {
                 if let Err(e) = sender.send(Err(anyhow!("No item selected"))) {
                     log::error!("failed to send message {e}");
                 }
-                app.quit();
+                close_gui(app.clone(), window_clone.clone(), &config);
             }
             Key::Return => {
-                if let Err(e) = handle_selected_item(&sender, &app, &inner_box, &list_items) {
+                if let Err(e) = handle_selected_item(
+                    &sender,
+                    app.clone(),
+                    window_clone.clone(),
+                    &config,
+                    &inner_box,
+                    &list_items,
+                ) {
                     log::error!("{e}");
                 }
             }
@@ -292,9 +285,235 @@ fn sort_menu_items<T>(
     }
 }
 
+fn animate_window_show(config: Config, window: ApplicationWindow, outer_box: gtk4::Box) {
+    let display = window.display();
+    if let Some(surface) = window.surface() {
+        // todo this does not work for multi monitor systems
+        let monitor = display.monitor_at_surface(&surface);
+        if let Some(monitor) = monitor {
+            let geometry = monitor.geometry();
+            let Some(target_width) = percent_or_absolute(&config.width.unwrap(), geometry.width())
+            else {
+                return;
+            };
+
+            let Some(target_height) =
+                percent_or_absolute(&config.height.unwrap(), geometry.height())
+            else {
+                return;
+            };
+
+            animate_window(
+                window.clone(),
+                config.show_animation.unwrap(),
+                config.show_animation_time.unwrap(),
+                target_height,
+                target_width,
+                move || {
+                    window.set_child(Some(&outer_box));
+                },
+            );
+        }
+    }
+}
+fn animate_window_close<Func>(config: &Config, window: ApplicationWindow, on_done_func: Func)
+where
+    Func: Fn() + 'static,
+{
+    // todo the target size might not work for higher dpi displays or bigger resolutions
+    window.set_child(Widget::NONE);
+
+    let (target_h, target_w) = {
+        if let Some(animation) = config.hide_animation {
+            let allocation = window.allocation();
+            match animation {
+                Animation::None | Animation::Expand => (10, 10),
+                Animation::ExpandVertical => (allocation.height(), 0),
+                Animation::ExpandHorizontal => (0, allocation.width()),
+            }
+        } else {
+            (0, 0)
+        }
+    };
+
+    animate_window(
+        window,
+        config.hide_animation.unwrap(),
+        config.hide_animation_time.unwrap(),
+        target_h,
+        target_w,
+        on_done_func,
+    );
+}
+
+// both warnings are disabled because
+// we can deal with truncation and precission loss
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_precision_loss)]
+fn animate_window<Func>(
+    window: ApplicationWindow,
+    animation_type: Animation,
+    animation_time: u64,
+    target_height: i32,
+    target_width: i32,
+    on_done_func: Func,
+) where
+    Func: Fn() + 'static,
+{
+    let allocation = window.allocation();
+
+    let animation_step_length = Duration::from_millis(10); // ~60 FPS
+    let animation_speed = Duration::from_millis(animation_time);
+
+    let animation_steps =
+        ((animation_speed.as_millis() / animation_step_length.as_millis()) as f32).max(1.0);
+
+    let width = allocation.width();
+    let height = allocation.height();
+
+    // Calculate signed steps (can be negative)
+    let mut width_step = ((target_width as f32 - width as f32) / animation_steps).round() as i32;
+    let mut height_step = ((target_height as f32 - height as f32) / animation_steps).round() as i32;
+
+    // Ensure we move at least 1 pixel per step in the correct direction
+    if width_step == 0 && target_width != width {
+        width_step = if target_width < width { -1 } else { 1 };
+    }
+    if height_step == 0 && target_height != height {
+        height_step = if target_height < height { -1 } else { 1 };
+    }
+
+    timeout_add_local(animation_step_length, move || {
+        let result = match animation_type {
+            Animation::None => animation_none(&window, target_width, target_height),
+            Animation::Expand => animation_expand(
+                &window,
+                target_width,
+                target_height,
+                width_step,
+                height_step,
+            ),
+            Animation::ExpandVertical => {
+                animation_expand_vertical(&window, target_width, target_height, width_step)
+            }
+            Animation::ExpandHorizontal => {
+                animation_expand_horizontal(&window, target_width, target_height, height_step)
+            }
+        };
+
+        window.queue_draw();
+
+        if result == ControlFlow::Break {
+            on_done_func();
+        }
+        result
+    });
+}
+
+fn animation_none(
+    window: &ApplicationWindow,
+    target_width: i32,
+    target_height: i32,
+) -> ControlFlow {
+    window.set_height_request(target_height);
+    window.set_width_request(target_width);
+    ControlFlow::Break
+}
+
+fn animation_expand(
+    window: &ApplicationWindow,
+    target_width: i32,
+    target_height: i32,
+    width_step: i32,
+    height_step: i32,
+) -> ControlFlow {
+    let allocation = window.allocation();
+    let mut done = true;
+    let height = allocation.height();
+    let width = allocation.width();
+
+    if resize_height_needed(window, target_height, height_step, height) {
+        window.set_height_request(height + height_step);
+        done = false;
+    }
+
+    if resize_width_needed(window, target_width, width_step, width) {
+        window.set_width_request(width + width_step);
+        done = false;
+    }
+
+    if done {
+        ControlFlow::Break
+    } else {
+        ControlFlow::Continue
+    }
+}
+
+fn animation_expand_horizontal(
+    window: &ApplicationWindow,
+    target_width: i32,
+    target_height: i32,
+    height_step: i32,
+) -> ControlFlow {
+    let allocation = window.allocation();
+    let height = allocation.height();
+    window.set_width_request(target_width);
+
+    if resize_height_needed(window, target_height, height_step, height) {
+        window.set_height_request(height + height_step);
+        ControlFlow::Continue
+    } else {
+        ControlFlow::Break
+    }
+}
+
+fn animation_expand_vertical(
+    window: &ApplicationWindow,
+    target_width: i32,
+    target_height: i32,
+    width_step: i32,
+) -> ControlFlow {
+    let allocation = window.allocation();
+    let width = allocation.width();
+    window.set_height_request(target_height);
+
+    if resize_width_needed(window, target_width, width_step, width) {
+        window.set_width_request(allocation.width() + width_step);
+        ControlFlow::Continue
+    } else {
+        ControlFlow::Break
+    }
+}
+
+fn resize_height_needed(
+    window: &ApplicationWindow,
+    target_height: i32,
+    height_step: i32,
+    current_height: i32,
+) -> bool {
+    (height_step > 0 && window.height() < target_height)
+        || (height_step < 0 && window.height() > target_height && current_height + height_step > 0)
+}
+
+fn resize_width_needed(
+    window: &ApplicationWindow,
+    target_width: i32,
+    width_step: i32,
+    current_width: i32,
+) -> bool {
+    (width_step > 0 && window.width() < target_width)
+        || (width_step < 0 && window.width() > target_width && current_width + width_step > 0)
+}
+
+fn close_gui(app: Application, window: ApplicationWindow, config: &Config) {
+    animate_window_close(config, window, move || app.quit());
+}
+
 fn handle_selected_item<T>(
     sender: &MenuItemSender<T>,
-    app: &Application,
+    app: Application,
+    window: ApplicationWindow,
+    config: &Config,
     inner_box: &FlowBox,
     lock_arc: &ArcMenuMap<T>,
 ) -> Result<(), String>
@@ -309,7 +528,7 @@ where
                 log::error!("failed to send message {e}");
             }
         }
-        app.quit();
+        close_gui(app, window, config);
         return Ok(());
     }
     Err("selected item cannot be resolved".to_owned())
@@ -322,6 +541,7 @@ fn add_menu_item<T: Clone + 'static>(
     sender: &MenuItemSender<T>,
     lock_arc: &ArcMenuMap<T>,
     app: &Application,
+    window: &ApplicationWindow,
 ) -> FlowBoxChild {
     let parent: Widget = if entry_element.sub_elements.is_empty() {
         create_menu_row(
@@ -330,6 +550,7 @@ fn add_menu_item<T: Clone + 'static>(
             Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(lock_arc),
             sender.clone(),
             app.clone(),
+            window.clone(),
             inner_box.clone(),
         )
         .upcast()
@@ -345,6 +566,7 @@ fn add_menu_item<T: Clone + 'static>(
             Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(lock_arc),
             sender.clone(),
             app.clone(),
+            window.clone(),
             inner_box.clone(),
         );
         expander.set_label_widget(Some(&menu_row));
@@ -360,6 +582,7 @@ fn add_menu_item<T: Clone + 'static>(
                 Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(lock_arc),
                 sender.clone(),
                 app.clone(),
+                window.clone(),
                 inner_box.clone(),
             );
             sub_row.set_hexpand(true);
@@ -392,6 +615,7 @@ fn create_menu_row<T: Clone + 'static>(
     lock_arc: ArcMenuMap<T>,
     sender: MenuItemSender<T>,
     app: Application,
+    window: ApplicationWindow,
     inner_box: FlowBox,
 ) -> Widget {
     let row = ListBoxRow::new();
@@ -401,9 +625,17 @@ fn create_menu_row<T: Clone + 'static>(
 
     let click = GestureClick::new();
     click.set_button(gdk::BUTTON_PRIMARY);
+    let config_clone = config.clone();
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
         if n_press == 2 {
-            if let Err(e) = handle_selected_item(&sender, &app, &inner_box, &lock_arc) {
+            if let Err(e) = handle_selected_item(
+                &sender,
+                app.clone(),
+                window.clone(),
+                &config_clone,
+                &inner_box,
+                &lock_arc,
+            ) {
                 log::error!("{e}");
             }
         }

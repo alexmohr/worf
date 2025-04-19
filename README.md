@@ -21,6 +21,8 @@ layerrule = blur, worf
 ### New config / command line options
 * fuzzy-length: Defines how long a string must be to be considered for fuzzy match
 * row-box-orientation: Allows aligning values vertically to place the label below the icon
+* text wrapping
+* configurable animations
 
 ### New Styling options
 * `label`: Allows styling the label

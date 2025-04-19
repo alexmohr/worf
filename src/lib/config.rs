@@ -28,6 +28,14 @@ pub enum Align {
     Center,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]
+pub enum Animation {
+    None,
+    Expand,
+    ExpandVertical,
+    ExpandHorizontal,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mode {
     /// searches `$PATH` for executables and allows them to be run by selecting them.
@@ -248,6 +256,30 @@ pub struct Config {
     #[serde(default = "default_text_wrap_length")]
     #[clap(long = "text-wrap-length")]
     pub text_wrap_length: Option<usize>,
+
+    /// Defines the animation when the window is show.
+    /// Defaults to Expand
+    #[serde(default = "default_show_animation")]
+    #[clap(long = "show-animation")]
+    pub show_animation: Option<Animation>,
+
+    /// Defines how long it takes for the show animation to finish
+    /// Defaults to 70ms
+    #[serde(default = "default_show_animation_time")]
+    #[clap(long = "show-animation-time")]
+    pub show_animation_time: Option<u64>,
+
+    /// Defines the animation when the window is hidden.
+    /// Defaults to Expand
+    #[serde(default = "default_hide_animation")]
+    #[clap(long = "hide-animation")]
+    pub hide_animation: Option<Animation>,
+
+    /// Defines how long it takes for the hide animation to finish
+    /// Defaults to 100ms
+    #[serde(default = "default_hide_animation_time")]
+    #[clap(long = "hide-animation-time")]
+    pub hide_animation_time: Option<u64>,
 }
 
 impl Default for Config {
@@ -318,9 +350,42 @@ impl Default for Config {
             row_bow_orientation: default_row_box_orientation(),
             text_wrap: default_text_wrap(),
             text_wrap_length: default_text_wrap_length(),
+            show_animation: default_show_animation(),
+            show_animation_time: default_show_animation_time(),
+            hide_animation: default_hide_animation(),
+            hide_animation_time: default_hide_animation_time(),
         }
     }
 }
+
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_show_animation_time() -> Option<u64> {
+    Some(70)
+}
+
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_show_animation() -> Option<Animation> {
+    Some(Animation::Expand)
+}
+
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_hide_animation_time() -> Option<u64> {
+    Some(100)
+}
+
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_hide_animation() -> Option<Animation> {
+    Some(Animation::Expand)
+}
+
 // allowed because option is needed for serde macro
 #[allow(clippy::unnecessary_wraps)]
 #[must_use]
