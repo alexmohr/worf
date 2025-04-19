@@ -26,16 +26,7 @@ pub fn d_run(config: &Config) -> anyhow::Result<()> {
     let locale_variants = get_locale_variants();
     let default_icon = default_icon().unwrap_or_default();
 
-    let cache_path = dirs::cache_dir().map(|x| x.join("worf-drun"));
-    let mut d_run_cache = {
-        if let Some(ref cache_path) = cache_path {
-            if let Err(e) = create_file_if_not_exists(cache_path) {
-                log::warn!("No drun cache file and cannot create: {e:?}");
-            }
-        }
-
-        load_cache_file(cache_path.as_ref()).unwrap_or_default()
-    };
+    let (cache_path, mut d_run_cache) = load_d_run_cache();
 
     let mut entries: Vec<MenuItem<String>> = Vec::new();
     for file in find_desktop_files().ok().iter().flatten().filter(|f| {
@@ -56,16 +47,20 @@ pub fn d_run(config: &Config) -> anyhow::Result<()> {
             _ => (None, None),
         };
 
-        let cmd_exists = action.as_ref().map(|a| {
-            a.split(' ')
-                .next()
-                .map(|cmd| cmd.replace("\"", ""))
-                .map(|cmd| {
-                PathBuf::from(&cmd).exists() || which::which(&cmd).is_ok()
-            })}).flatten().unwrap_or(false);
+        let cmd_exists = action
+            .as_ref()
+            .and_then(|a| {
+                a.split(' ')
+                    .next()
+                    .map(|cmd| cmd.replace('"', ""))
+                    .map(|cmd| PathBuf::from(&cmd).exists() || which::which(&cmd).is_ok())
+            })
+            .unwrap_or(false);
 
         if !cmd_exists {
-            log::warn!("Skipping desktop entry for {name:?} because action {action:?} does not exist");
+            log::warn!(
+                "Skipping desktop entry for {name:?} because action {action:?} does not exist"
+            );
             continue;
         };
 
@@ -145,6 +140,20 @@ pub fn d_run(config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn load_d_run_cache() -> (Option<PathBuf>, HashMap<String, i64>) {
+    let cache_path = dirs::cache_dir().map(|x| x.join("worf-drun"));
+    let d_run_cache = {
+        if let Some(ref cache_path) = cache_path {
+            if let Err(e) = create_file_if_not_exists(cache_path) {
+                log::warn!("No drun cache file and cannot create: {e:?}");
+            }
+        }
+
+        load_cache_file(cache_path.as_ref()).unwrap_or_default()
+    };
+    (cache_path, d_run_cache)
+}
+
 fn save_cache_file(path: &PathBuf, data: &HashMap<String, i64>) -> anyhow::Result<()> {
     // Convert the HashMap to TOML string
     let toml_string = toml::ser::to_string(&data).map_err(|e| anyhow::anyhow!(e))?;
@@ -199,7 +208,7 @@ fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> anyhow::Result<()> {
         env::set_current_dir(dir)?;
     }
 
-    let exec = parts[0].replace("\"", "");
+    let exec = parts[0].replace('"', "");
     let args: Vec<_> = parts
         .iter()
         .skip(1)
