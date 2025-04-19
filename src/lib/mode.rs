@@ -42,17 +42,30 @@ pub fn d_run(config: &Config) -> anyhow::Result<()> {
         f.entry.hidden.is_none_or(|hidden| !hidden)
             && f.entry.no_display.is_none_or(|no_display| !no_display)
     }) {
-        let (action, working_dir) = match &file.entry.entry_type {
-            EntryType::Application(app) => (app.exec.clone(), app.path.clone()),
-            _ => (None, None),
-        };
-
         let Some(name) = lookup_name_with_locale(
             &locale_variants,
             &file.entry.name.variants,
             &file.entry.name.default,
         ) else {
-            log::debug!("Skipping desktop entry without name {file:?}");
+            log::warn!("Skipping desktop entry without name {file:?}");
+            continue;
+        };
+
+        let (action, working_dir) = match &file.entry.entry_type {
+            EntryType::Application(app) => (app.exec.clone(), app.path.clone()),
+            _ => (None, None),
+        };
+
+        let cmd_exists = action.as_ref().map(|a| {
+            a.split(' ')
+                .next()
+                .map(|cmd| cmd.replace("\"", ""))
+                .map(|cmd| {
+                PathBuf::from(&cmd).exists() || which::which(&cmd).is_ok()
+            })}).flatten().unwrap_or(false);
+
+        if !cmd_exists {
+            log::warn!("Skipping desktop entry for {name:?} because action {action:?} does not exist");
             continue;
         };
 
@@ -174,11 +187,8 @@ fn create_file_if_not_exists(path: &PathBuf) -> anyhow::Result<()> {
 }
 
 fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> anyhow::Result<()> {
-    // todo probably remove arguments?
-    // todo support working dir
-    // todo fix actions
+    // todo fix actions ??
     // todo graphical disk map icon not working
-    // Unix-like systems (Linux, macOS)
 
     let parts = cmd.split(' ').collect::<Vec<_>>();
     if parts.is_empty() {
@@ -189,7 +199,7 @@ fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> anyhow::Result<()> {
         env::set_current_dir(dir)?;
     }
 
-    let exec = parts[0];
+    let exec = parts[0].replace("\"", "");
     let args: Vec<_> = parts
         .iter()
         .skip(1)

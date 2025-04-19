@@ -32,10 +32,12 @@ layerrule = blur, worf
   because worf is build on GTK4 instead of GTK3 there will be differences in the look and feel.
 * Configuration files are not 100% compatible, Worf is using toml files instead, for most part this only means strings have to be quoted
 * Color files are not supported
-* `mode` dropped, use show
-* `D` argument dropped. Arguments are the same as config in worf, no need to have have this flag.
 
-## Dropped configuration options
+## Dropped arguments
+* `mode`, use show
+* `D`, arguments are the same as config in worf, no need to have have this flag.
+
+### Dropped configuration options
 * stylesheet -> use style instead
 * color / colors -> GTK4 does not support color files
 
