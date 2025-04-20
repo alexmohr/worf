@@ -1,0 +1,8 @@
+image_size=64
+columns=6
+orientation="Vertical"
+row_bow_orientation="Vertical"
+content_halign="Center"
+height="110%"
+width="100%"
+valign="Start"

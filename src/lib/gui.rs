@@ -453,6 +453,8 @@ fn animation_expand(
     }
 
     if done {
+        window.set_height_request(target_height);
+        window.set_width_request(target_width);
         ControlFlow::Break
     } else {
         ControlFlow::Continue
@@ -473,6 +475,8 @@ fn animation_expand_horizontal(
         window.set_height_request(height + height_step);
         ControlFlow::Continue
     } else {
+        window.set_height_request(target_height);
+        window.set_width_request(target_width);
         ControlFlow::Break
     }
 }
@@ -491,6 +495,8 @@ fn animation_expand_vertical(
         window.set_width_request(allocation.width() + width_step);
         ControlFlow::Continue
     } else {
+        window.set_height_request(target_height);
+        window.set_width_request(target_width);
         ControlFlow::Break
     }
 }
