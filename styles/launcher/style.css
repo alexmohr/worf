@@ -5,7 +5,7 @@
 #window {
   all: unset;
   background-color: rgba(33, 33, 33, 0.8); /* Matches #212121BB */
-  border-radius: 0px;
+  border-radius: 0;
 }
 
 #window #outer-box {
@@ -31,14 +31,6 @@
   font-size: 1rem;
 }
 
-#window #outer-box #scroll {
-  /* The name of the box containing all of the entries */
-}
-#window #outer-box #scroll #inner-box {
-  /* The name of all entries */
-  /* The name of all boxes shown when expanding  */
-  /* entries with multiple actions */
-}
 #window #outer-box #scroll #inner-box #entry {
   color: #fff;
   background-color: rgba(32, 32, 32, 0.1);
@@ -49,7 +41,6 @@
 
 }
 #window #outer-box #scroll #inner-box #entry #img {
-  width: 1rem;
   margin-right: 0.5rem;
 }
 
@@ -63,15 +54,12 @@
 }
 
 #row:hover {
-  background-color:  rgba(255, 255, 255, 0);;
+  background-color:  rgba(255, 255, 255, 0);
   outline: inherit;
-  outline-color: inherit;
-
 }
 #window #outer-box #scroll #inner-box #entry:hover {
   background-color: rgba(255, 255, 255, 0.1);
   outline: inherit;
-  outline-color: inherit;
 }
 
 #label {
