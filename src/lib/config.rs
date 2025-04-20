@@ -658,7 +658,21 @@ pub fn load_config(args_opt: Option<Config>) -> Result<Config, anyhow::Error> {
             let mut config: Config = toml::from_str(&toml_content)?;
 
             if let Some(args) = args_opt {
-                let merge_result = merge_config_with_args(&mut config, &args)?;
+                let mut merge_result = merge_config_with_args(&mut config, &args)?;
+
+                if merge_result.prompt.is_none() {
+                    match &merge_result.show {
+                        None => {}
+                        Some(mode) => {
+                            match mode {
+                                Mode::Run => merge_result.prompt = Some("run".to_owned()),
+                                Mode::Drun => merge_result.prompt = Some("drun".to_owned()),
+                                Mode::Dmenu => merge_result.prompt = Some("dmenu".to_owned()),
+                            }
+                        }
+                    }
+                }
+
                 Ok(merge_result)
             } else {
                 Ok(config)

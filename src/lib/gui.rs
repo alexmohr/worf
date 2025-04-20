@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -182,7 +181,7 @@ fn build_ui<T>(
         fb.invalidate_sort();
 
         let mut item_lock = items_focus.lock().unwrap();
-        select_first_visible_child(item_lock.deref_mut(), fb)
+        select_first_visible_child(&mut *item_lock, fb);
     });
 
     let wrapper_box = gtk4::Box::new(Orientation::Vertical, 0);
@@ -766,7 +765,8 @@ fn select_first_visible_child<T>(
     inner_box: &FlowBox,
 ) {
     for i in 0..items.len() {
-        if let Some(child) = inner_box.child_at_index(i as i32) {
+        let i_32 = i.try_into().unwrap_or(i32::MAX);
+        if let Some(child) = inner_box.child_at_index(i_32) {
             if child.is_visible() {
                 inner_box.select_child(&child);
                 break;
