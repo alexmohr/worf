@@ -270,7 +270,8 @@ pub struct Config {
     pub show_animation_time: Option<u64>,
 
     /// Defines the animation when the window is hidden.
-    /// Defaults to Expand
+    /// Defaults to None, because it is a bit buggy with
+    /// gtk layer shell. works fine with normal window though
     #[serde(default = "default_hide_animation")]
     #[clap(long = "hide-animation")]
     pub hide_animation: Option<Animation>,
@@ -383,7 +384,7 @@ pub fn default_hide_animation_time() -> Option<u64> {
 #[allow(clippy::unnecessary_wraps)]
 #[must_use]
 pub fn default_hide_animation() -> Option<Animation> {
-    Some(Animation::Expand)
+    Some(Animation::None)
 }
 
 // allowed because option is needed for serde macro

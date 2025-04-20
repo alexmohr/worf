@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -172,13 +173,16 @@ fn build_ui<T>(
             );
     }
 
-    let items_clone = Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(&list_items);
-    inner_box.set_sort_func(move |child1, child2| sort_menu_items(child1, child2, &items_clone));
+    let items_sort = Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(&list_items);
+    inner_box.set_sort_func(move |child1, child2| sort_menu_items(child1, child2, &items_sort));
 
-    // Set focus after everything is realized
-    inner_box.connect_map(|fb| {
+    let items_focus = Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(&list_items);
+    inner_box.connect_map(move |fb| {
         fb.grab_focus();
         fb.invalidate_sort();
+
+        let mut item_lock = items_focus.lock().unwrap();
+        select_first_visible_child(item_lock.deref_mut(), fb)
     });
 
     let wrapper_box = gtk4::Box::new(Orientation::Vertical, 0);
@@ -264,6 +268,13 @@ fn sort_menu_items<T>(
     let lock = items_lock.lock().unwrap();
     let m1 = lock.get(child1);
     let m2 = lock.get(child2);
+
+    if !child1.is_visible() {
+        return Ordering::Smaller;
+    }
+    if !child2.is_visible() {
+        return Ordering::Larger;
+    }
 
     match (m1, m2) {
         (Some(menu1), Some(menu2)) => {
@@ -704,7 +715,6 @@ fn filter_widgets<T>(
     }
 
     let query = query.to_owned().to_lowercase();
-    let mut fb: Option<&FlowBoxChild> = None;
     for (flowbox_child, menu_item) in items.iter_mut() {
         let menu_item_search = format!(
             "{} {}",
@@ -745,16 +755,23 @@ fn filter_widgets<T>(
         };
 
         menu_item.search_sort_score = search_sort_score;
-        if visible {
-            fb = Some(flowbox_child);
-        }
-
         flowbox_child.set_visible(visible);
     }
 
-    if let Some(top_item) = fb {
-        inner_box.select_child(top_item);
-        top_item.grab_focus();
+    select_first_visible_child(items, inner_box);
+}
+
+fn select_first_visible_child<T>(
+    items: &mut HashMap<FlowBoxChild, MenuItem<T>>,
+    inner_box: &FlowBox,
+) {
+    for i in 0..items.len() {
+        if let Some(child) = inner_box.child_at_index(i as i32) {
+            if child.is_visible() {
+                inner_box.select_child(&child);
+                break;
+            }
+        }
     }
 }
 
