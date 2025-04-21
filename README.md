@@ -42,6 +42,7 @@ layerrule = blur, worf
 
 ## Dropped arguments
 * `mode`, use show
+* `dmenu`, use show
 * `D`, arguments are the same as config in worf, no need to have this flag.
 
 ### Dropped configuration options
