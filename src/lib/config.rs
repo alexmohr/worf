@@ -52,6 +52,13 @@ pub enum Animation {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum WrapMode {
+    None,
+    Word,
+    Inherit,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mode {
     /// searches `$PATH` for executables and allows them to be run by selecting them.
     Run,
@@ -90,7 +97,22 @@ impl FromStr for Mode {
             "math" => Ok(Mode::Math),
             "auto" => Ok(Mode::Auto),
             _ => Err(ArgsError::InvalidParameter(
-                format!("{s} is not a valid argument show this, see help for details").to_owned(),
+                format!("{s} is not a valid argument, see help for details").to_owned(),
+            )),
+        }
+    }
+}
+
+impl FromStr for WrapMode {
+    type Err = ArgsError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "none" => Ok(WrapMode::None),
+            "word" => Ok(WrapMode::Word),
+            "inherit" => Ok(WrapMode::Inherit),
+            _ => Err(ArgsError::InvalidParameter(
+                format!("{s} is not a valid argument, see help for details").to_owned(),
             )),
         }
     }
@@ -215,19 +237,23 @@ pub struct Config {
     #[clap(long = "orientation")]
     pub orientation: Option<Orientation>,
 
+    /// Horizontal alignment
     #[serde(default = "default_halign")]
     #[clap(long = "halign")]
     pub halign: Option<Align>,
 
+    /// Alignment of content
     #[serde(default = "default_content_halign")]
     #[clap(long = "content-halign")]
     pub content_halign: Option<Align>,
 
+    /// Vertical alignment
     #[clap(long = "valign")]
     pub valign: Option<Align>,
 
     pub filter_rate: Option<u32>,
 
+    /// Defines the image size in pixels
     #[serde(default = "default_image_size")]
     #[clap(long = "image-size")]
     pub image_size: Option<i32>,
@@ -249,7 +275,6 @@ pub struct Config {
     // todo re-add this
     // #[serde(flatten)]
     // pub key_custom: Option<HashMap<String, String>>,
-    pub line_wrap: Option<String>,
     pub global_coords: Option<bool>,
     pub hide_search: Option<bool>,
     pub dynamic_lines: Option<bool>,
@@ -268,17 +293,16 @@ pub struct Config {
     #[clap(long = "row-box-orientation")]
     pub row_bow_orientation: Option<Orientation>,
 
-    /// Set to to true to wrap text after a given amount of chars
-    #[serde(default = "default_text_wrap")]
-    #[clap(long = "text-wrap")]
-    pub text_wrap: Option<bool>,
-
-    /// Defines after how many chars a line is broken over.
-    /// Only cuts at spaces.
-    #[serde(default = "default_text_wrap_length")]
-    #[clap(long = "text-wrap-length")]
-    pub text_wrap_length: Option<usize>,
-
+    // /// Set to to true to wrap text after a given amount of chars
+    // #[serde(default = "default_text_wrap")]
+    // #[clap(long = "text-wrap")]
+    // pub text_wrap: Option<bool>,
+    //
+    // /// Defines after how many chars a line is broken over.
+    // /// Only cuts at spaces.
+    // #[serde(default = "default_text_wrap_length")]
+    // #[clap(long = "text-wrap-length")]
+    // pub text_wrap_length: Option<usize>,
     /// Defines the animation when the window is show.
     /// Defaults to Expand
     #[serde(default = "default_show_animation")]
@@ -303,6 +327,10 @@ pub struct Config {
     #[serde(default = "default_hide_animation_time")]
     #[clap(long = "hide-animation-time")]
     pub hide_animation_time: Option<u64>,
+
+    #[serde(default = "default_line_wrap")]
+    #[clap(long = "line-wrap")]
+    pub line_wrap: Option<WrapMode>,
 }
 
 impl Default for Config {
@@ -359,7 +387,7 @@ impl Default for Config {
             key_hide_search: None,
             key_copy: None,
             //key_custom: None,
-            line_wrap: None,
+            line_wrap: default_line_wrap(),
             global_coords: None,
             hide_search: None,
             dynamic_lines: None,
@@ -369,8 +397,6 @@ impl Default for Config {
             pre_display_exec: None,
             fuzzy_min_score: default_fuzzy_min_score(),
             row_bow_orientation: default_row_box_orientation(),
-            text_wrap: default_text_wrap(),
-            text_wrap_length: default_text_wrap_length(),
             show_animation: default_show_animation(),
             show_animation_time: default_show_animation_time(),
             hide_animation: default_hide_animation(),
@@ -447,6 +473,13 @@ pub fn default_columns() -> Option<u32> {
 #[must_use]
 pub fn default_normal_window() -> bool {
     false
+}
+
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
+pub fn default_line_wrap() -> Option<WrapMode> {
+    Some(WrapMode::Word)
 }
 
 // TODO
@@ -586,20 +619,6 @@ pub fn default_match_method() -> Option<MatchMethod> {
 #[must_use]
 pub fn default_image_size() -> Option<i32> {
     Some(32)
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_text_wrap_length() -> Option<usize> {
-    Some(15)
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_text_wrap() -> Option<bool> {
-    Some(false)
 }
 
 #[must_use]
