@@ -6,6 +6,37 @@ Worf is written in Rust on top of GTK4.
 It aims to be a drop in replacement for wofi in most part, so it is (almost) compatible with its 
 configuration and css files. See below for differences
 
+## Not finished 
+* [ ] dmenu
+* [ ] run
+* [ ] key support
+* [ ] full config support
+* [ ] ssh mode
+* [ ] web search mode
+* [ ] emoji finder
+* [ ] publish library
+
+
+## Showcases
+
+You will find all showcases in the styles folder with a corresponding subfolder.
+
+### Compact
+
+Please note that the car in the background is just my wallpaper at the time and this project is not endorsed or affiliated with my employer. 
+
+![](styles/compact/example.png)
+
+### Fullscreen / Launcher
+
+Only difference is that one is fullscreen the other is not
+
+![](styles/fullscreen/example.png)
+
+### Relaxed
+
+![](styles/relaxed/example.png)
+
 
 
 ## Setup
