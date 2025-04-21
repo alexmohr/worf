@@ -124,7 +124,7 @@ impl<T: Clone> DRunProvider<T> {
             entries.push(entry);
         }
 
-        gui::initialize_sort_scores(&mut entries);
+        gui::sort_menu_items_alphabetically_honor_initial_score(&mut entries);
 
         DRunProvider {
             items: entries,
@@ -134,7 +134,7 @@ impl<T: Clone> DRunProvider<T> {
     }
 }
 
-impl<T: std::clone::Clone> ItemProvider<T> for DRunProvider<T> {
+impl<T: Clone> ItemProvider<T> for DRunProvider<T> {
     fn get_elements(&mut self, _: Option<&str>) -> Vec<MenuItem<T>> {
         self.items.clone()
     }
@@ -144,50 +144,79 @@ impl<T: std::clone::Clone> ItemProvider<T> for DRunProvider<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-enum AutoRunType {
-    Math,
-    DRun,
-    File,
-    Ssh,
-    WebSearch,
-    Emoji,
-    Run,
-}
-
 #[derive(Clone)]
-struct AutoItemProvider {
-    drun_provider: DRunProvider<AutoRunType>,
-    last_result: Option<Vec<MenuItem<AutoRunType>>>,
+struct FileItemProvider<T: std::clone::Clone> {
+    last_result: Option<Vec<MenuItem<T>>>,
+    menu_item_data: T,
 }
 
-impl AutoItemProvider {
-    fn new() -> Self {
-        AutoItemProvider {
-            drun_provider: DRunProvider::new(AutoRunType::DRun),
-
+impl<T: Clone> FileItemProvider<T> {
+    fn new(menu_item_data: T) -> Self {
+        FileItemProvider {
             last_result: None,
+            menu_item_data,
         }
     }
 
-    fn auto_run_handle_files(&mut self, trimmed_search: &str) -> Vec<MenuItem<AutoRunType>> {
-        let folder_icon = "inode-directory";
+    fn resolve_icon_for_name(&self, path: PathBuf) -> String {
+        let result = tree_magic_mini::from_filepath(&path);
+        if let Some(result) = result {
+            if result.starts_with("image") {
+                "image-x-generic".to_owned()
+            } else if result.starts_with("inode") {
+                return result.replace("/", "-");
+            } else if result.starts_with("text") {
+                if result.contains("plain") {
+                    "text-x-generic".to_owned()
+                } else if result.contains("python") {
+                    "text-x-script".to_owned()
+                } else if result.contains("html") {
+                    return "text-html".to_owned();
+                } else {
+                    "text-x-generic".to_owned()
+                }
+            } else if result.starts_with("application") {
+                if result.contains("octet") {
+                    "application-x-executable".to_owned()
+                } else if result.contains("tar")
+                    || result.contains("lz")
+                    || result.contains("zip")
+                    || result.contains("7z")
+                    || result.contains("xz")
+                {
+                    "package-x-generic".to_owned()
+                } else {
+                    return "text-html".to_owned();
+                }
+            } else {
+                log::debug!("unsupported mime type {result}");
+                return "application-x-generic".to_owned();
+            }
+        } else {
+            "image-not-found".to_string()
+        }
+    }
+}
 
-        let path = config::expand_path(trimmed_search);
-        let mut items: Vec<MenuItem<AutoRunType>> = Vec::new();
+impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
+    fn get_elements(&mut self, search: Option<&str>) -> Vec<MenuItem<T>> {
+        let default_path = if let Some(home) = dirs::home_dir() {
+            home.display().to_string()
+        } else {
+            "/".to_string()
+        };
+
+        let mut trimmed_search = search.unwrap_or(&default_path).to_owned();
+        if !trimmed_search.starts_with("/") && !trimmed_search.starts_with("~") {
+            trimmed_search = format!("{default_path}/{trimmed_search}");
+        }
+
+        let path = expand_path(&trimmed_search);
+        let mut items: Vec<MenuItem<T>> = Vec::new();
 
         if !path.exists() {
             if let Some(last) = &self.last_result {
-                if !last.is_empty()
-                    && last.first().is_some_and(|l| {
-                        l.as_ref()
-                            .data
-                            .as_ref()
-                            .is_some_and(|t| t == &AutoRunType::File)
-                    })
-                {
-                    return last.clone();
-                }
+                return last.clone();
             }
 
             return vec![];
@@ -210,17 +239,13 @@ impl AutoItemProvider {
                     items.push({
                         MenuItem {
                             label: path_str.clone(),
-                            icon_path: if entry.path().is_dir() {
-                                Some(folder_icon.to_owned())
-                            } else {
-                                Some(resolve_icon_for_name(entry.path()))
-                            },
+                            icon_path: Some(self.resolve_icon_for_name(entry.path())),
                             action: Some(format!("xdg-open {path_str}")),
                             sub_elements: vec![],
                             working_dir: None,
                             initial_sort_score: 0,
                             search_sort_score: 0.0,
-                            data: Some(AutoRunType::File),
+                            data: Some(self.menu_item_data.clone()),
                         }
                     });
                 }
@@ -229,66 +254,53 @@ impl AutoItemProvider {
             items.push({
                 MenuItem {
                     label: trimmed_search.to_owned(),
-                    icon_path: Some(resolve_icon_for_name(PathBuf::from(trimmed_search))),
+                    icon_path: Some(self.resolve_icon_for_name(PathBuf::from(&trimmed_search))),
                     action: Some(format!("xdg-open {trimmed_search}")),
                     sub_elements: vec![],
                     working_dir: None,
                     initial_sort_score: 0,
                     search_sort_score: 0.0,
-                    data: Some(AutoRunType::File),
+                    data: Some(self.menu_item_data.clone()),
                 }
             });
         }
 
+        gui::sort_menu_items_alphabetically_honor_initial_score(&mut items);
+
         self.last_result = Some(items.clone());
         items
     }
+
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> Option<Vec<MenuItem<T>>> {
+        self.last_result.clone()
+    }
 }
 
-fn resolve_icon_for_name(path: PathBuf) -> String {
-    // todo use https://docs.rs/tree_magic_mini/latest/tree_magic_mini/ instead
-    if let Ok(metadata) = fs::symlink_metadata(&path) {
-        if metadata.file_type().is_symlink() {
-            return "inode-symlink".to_owned();
-        } else if metadata.is_dir() {
-            return "inode-directory".to_owned();
-        } else if metadata.permissions().mode() & 0o111 != 0 {
-            return "application-x-executable".to_owned();
+#[derive(Debug, Clone, PartialEq)]
+enum AutoRunType {
+    Math,
+    DRun,
+    File,
+    Ssh,
+    WebSearch,
+    Emoji,
+    Run,
+}
+
+#[derive(Clone)]
+struct AutoItemProvider {
+    drun_provider: DRunProvider<AutoRunType>,
+    file_provider: FileItemProvider<AutoRunType>,
+    last_result: Option<Vec<MenuItem<AutoRunType>>>,
+}
+
+impl AutoItemProvider {
+    fn new() -> Self {
+        AutoItemProvider {
+            drun_provider: DRunProvider::new(AutoRunType::DRun),
+            file_provider: FileItemProvider::new(AutoRunType::File),
+            last_result: None,
         }
-    }
-
-    let file_name = path
-        .file_name()
-        .and_then(|f| f.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-
-    let extension = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-
-    match extension.as_str() {
-        "sh" | "py" | "rb" | "pl" | "bash" => "text-x-script".to_owned(),
-        "c" | "cpp" | "rs" | "java" | "js" | "h" | "hpp" => "text-x-generic".to_owned(),
-        "txt" | "md" | "log" => "text-x-generic".to_owned(),
-        "html" | "htm" => "text-html".to_owned(),
-        "jpg" | "jpeg" | "png" | "gif" | "svg" | "webp" => "image-x-generic".to_owned(),
-        "mp3" | "wav" | "ogg" => "audio-x-generic".to_owned(),
-        "mp4" | "mkv" | "avi" => "video-x-generic".to_owned(),
-        "ttf" | "otf" | "woff" => "font-x-generic".to_owned(),
-        "zip" | "tar" | "gz" | "xz" | "7z" | "lz4" => "package-x-generic".to_owned(),
-        "deb" | "rpm" | "apk" => "x-package-repository".to_owned(),
-        "odt" => "x-office-document".to_owned(),
-        "ott" => "x-office-document-template".to_owned(),
-        "ods" => "x-office-spreadsheet".to_owned(),
-        "ots" => "x-office-spreadsheet-template".to_owned(),
-        "odp" => "x-office-presentation".to_owned(),
-        "otp" => "x-office-presentation-template".to_owned(),
-        "odg" => "x-office-drawing".to_owned(),
-        "vcf" => "x-office-addressbook".to_owned(),
-        _ => "application-x-generic".to_owned(),
     }
 }
 
@@ -320,7 +332,7 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
                 let item = MenuItem {
                     label: result,
                     icon_path: None,
-                    action: None,
+                    action: Some(trimmed_search.to_owned()),
                     sub_elements: vec![],
                     working_dir: None,
                     initial_sort_score: 0,
@@ -333,7 +345,7 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
                 || trimmed_search.starts_with("/")
                 || trimmed_search.starts_with("~")
             {
-                self.auto_run_handle_files(trimmed_search)
+                self.file_provider.get_elements(search_opt)
             } else {
                 return self.drun_provider.get_elements(search_opt);
             }
@@ -404,6 +416,28 @@ pub fn auto(config: &mut Config) -> anyhow::Result<()> {
                         todo!("not supported yet");
                     }
                 }
+            }
+        }
+        Err(_) => {
+            log::error!("No item selected");
+        }
+    }
+
+    Ok(())
+}
+
+pub fn file(config: &mut Config) -> Result<(), String> {
+    let provider = FileItemProvider::new("".to_owned());
+    if config.prompt.is_none() {
+        config.prompt = Some("file".to_owned());
+    }
+
+    // todo ues a arc instead of cloning the config
+    let selection_result = gui::show(config.clone(), provider);
+    match selection_result {
+        Ok(s) => {
+            if let Some(action) = s.action {
+                spawn_fork(&action, s.working_dir.as_ref()).map_err(|e| e.to_string())?;
             }
         }
         Err(_) => {

@@ -26,6 +26,9 @@ fn main() -> anyhow::Result<()> {
             Mode::Dmenu => {
                 todo!("dmenu not implemented")
             }
+            Mode::File => {
+                mode::file(&mut config).map_err(|e| anyhow!(e))?;
+            }
             Mode::Auto => {
                 mode::auto(&mut config)?;
             }

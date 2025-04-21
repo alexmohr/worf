@@ -1,8 +1,12 @@
-# Worf
+# Worf - Wayland Optimized Run Facilitator
 
-Worf is yet another dmenu style launcher, heavily inspired by wofi but written in Rust on top of GTK4. 
-It supports a lot of things the same way wofi does, so migrating to worf is easy, but things I did not 
-deemed necessary where dropped from worf. See breaking changes section for details.
+Worf is yet another style launcher, heavily inspired by wofi, rofi and walker.
+Worf is written in Rust on top of GTK4. 
+
+It aims to be a drop in replacement for wofi in most part, so it is (almost) compatible with its 
+configuration and css files. See below for differences
+
+
 
 ## Setup
 
@@ -37,7 +41,7 @@ layerrule = blur, worf
 
 ## Dropped arguments
 * `mode`, use show
-* `D`, arguments are the same as config in worf, no need to have have this flag.
+* `D`, arguments are the same as config in worf, no need to have this flag.
 
 ### Dropped configuration options
 * stylesheet -> use style instead

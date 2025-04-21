@@ -64,6 +64,9 @@ pub enum Mode {
 
     /// tries to determine automatically what to do
     Auto,
+
+    /// use worf as file browser
+    File,
 }
 
 #[derive(Debug, Error)]
@@ -80,6 +83,7 @@ impl FromStr for Mode {
             "run" => Ok(Mode::Run),
             "drun" => Ok(Mode::Drun),
             "dmenu" => Ok(Mode::Dmenu),
+            "file" => Ok(Mode::File),
             "auto" => Ok(Mode::Auto),
             _ => Err(ArgsError::InvalidParameter(
                 format!("{s} is not a valid argument show this, see help for details").to_owned(),
@@ -128,20 +132,15 @@ pub struct Config {
     #[clap(long = "height")]
     pub height: Option<String>,
 
+    /// Defines which prompt is used. Default is selected 'show'
     #[clap(short = 'p', long = "prompt")]
     pub prompt: Option<String>,
 
     #[clap(short = 'x', long = "xoffset")]
     pub xoffset: Option<i32>,
 
-    #[clap(long = "x")]
-    pub x: Option<i32>,
-
     #[clap(short = 'y', long = "yoffset")]
     pub yoffset: Option<i32>,
-
-    #[clap(long = "y")]
-    pub y: Option<i32>,
 
     /// If true a normal window instead of a layer shell will be used
     #[serde(default = "default_normal_window")]
@@ -315,9 +314,7 @@ impl Default for Config {
             height: default_height(),
             prompt: None,
             xoffset: None,
-            x: None,
             yoffset: None,
-            y: None,
             normal_window: default_normal_window(),
             allow_images: None,
             allow_markup: None,
