@@ -14,6 +14,7 @@ use regex::Regex;
 #[derive(Debug)]
 pub enum DesktopError {
     MissingIcon,
+    ParsingError(String),
 }
 
 /// # Errors
@@ -60,6 +61,10 @@ fn fetch_icon_from_theme(icon_name: &str) -> Result<String, DesktopError> {
     }
 }
 
+/// # Errors
+///
+/// Will return `Err`
+/// * if it was not able to find any icon
 pub fn fetch_icon_from_common_dirs(icon_name: &str) -> Result<String, DesktopError> {
     let mut paths = vec![
         PathBuf::from("/usr/local/share/icons"),
@@ -72,16 +77,22 @@ pub fn fetch_icon_from_common_dirs(icon_name: &str) -> Result<String, DesktopErr
     }
 
     let extensions = ["png", "jpg", "gif", "svg"].join("|"); // Create regex group for extensions
-    let formatted_name = Regex::new(&format!(r"(?i){icon_name}\.({extensions})$")).unwrap();
-
-    paths
-        .into_iter()
-        .filter(|dir| dir.exists())
-        .find_map(|dir| {
-            find_file_case_insensitive(dir.as_path(), &formatted_name)
-                .and_then(|files| files.first().map(|f| f.to_string_lossy().into_owned()))
-        })
-        .ok_or_else(|| DesktopError::MissingIcon)
+    let formatted_name = Regex::new(&format!(r"(?i){icon_name}\.({extensions})$"));
+    if let Ok(formatted_name) = formatted_name {
+        paths
+            .into_iter()
+            .filter(|dir| dir.exists())
+            .find_map(|dir| {
+                find_file_case_insensitive(dir.as_path(), &formatted_name)
+                    .and_then(|files| files.first().map(|f| f.to_string_lossy().into_owned()))
+            })
+            .ok_or(DesktopError::MissingIcon)
+    } else {
+        Err(DesktopError::ParsingError(
+            "Failed to get formatted icon, likely the internal regex did not parse properly"
+                .to_string(),
+        ))
+    }
 }
 
 fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<PathBuf>> {
@@ -102,9 +113,10 @@ fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<Pa
     })
 }
 
-/// # Errors
+/// # Panics
 ///
-/// Will return Err when it cannot parse the internal regex
+/// When it cannot parse the internal regex
+#[must_use]
 pub fn find_desktop_files() -> Vec<DesktopFile> {
     let mut paths = vec![
         PathBuf::from("/usr/share/applications"),

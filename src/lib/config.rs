@@ -17,8 +17,7 @@ pub enum ConfigurationError {
 impl fmt::Display for ConfigurationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ConfigurationError::Open(e) => write!(f, "{e}"),
-            ConfigurationError::Parse(e) => write!(f, "{e}"),
+            ConfigurationError::Open(e) | ConfigurationError::Parse(e) => write!(f, "{e}"),
         }
     }
 }
@@ -102,7 +101,7 @@ impl FromStr for Anchor {
             "left" => Ok(Anchor::Left),
             "bottom" => Ok(Anchor::Bottom),
             "right" => Ok(Anchor::Right),
-            other => Err(format!("Invalid anchor: {}", other)),
+            other => Err(format!("Invalid anchor: {other}")),
         }
     }
 }
@@ -705,7 +704,7 @@ pub fn resolve_path(
 /// * no config file exists
 /// * config file and args cannot be merged
 pub fn load_config(args_opt: Option<Config>) -> Result<Config, ConfigurationError> {
-    let config_path = conf_path(args_opt.as_ref().map(|c| c.config.clone()).flatten());
+    let config_path = conf_path(args_opt.as_ref().and_then(|c| c.config.clone()));
     match config_path {
         Ok(path) => {
             let toml_content =
@@ -740,20 +739,22 @@ pub fn load_config(args_opt: Option<Config>) -> Result<Config, ConfigurationErro
         Err(e) => Err(ConfigurationError::Open(format!("{e}"))),
     }
 }
+
+#[must_use]
 pub fn expand_path(input: &str) -> PathBuf {
     let mut path = input.to_string();
 
     // Expand ~ to home directory
-    if path.starts_with("~") {
+    if path.starts_with('~') {
         if let Some(home_dir) = dirs::home_dir() {
-            path = path.replacen("~", home_dir.to_str().unwrap_or(""), 1);
+            path = path.replacen('~', home_dir.to_str().unwrap_or(""), 1);
         }
     }
 
     // Expand $VAR style environment variables
     if path.contains('$') {
         for (key, value) in env::vars() {
-            let var_pattern = format!("${}", key);
+            let var_pattern = format!("${key}");
             if path.contains(&var_pattern) {
                 path = path.replace(&var_pattern, &value);
             }

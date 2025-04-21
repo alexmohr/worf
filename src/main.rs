@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
                 mode::file(&config).map_err(|e| anyhow!(e))?;
             }
             Mode::Math => {
-                mode::math(&config).map_err(|e| anyhow!(e))?;
+                mode::math(&config);
             }
             Mode::Auto => {
                 mode::auto(&config).map_err(|e| anyhow!(e))?;
