@@ -263,6 +263,7 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
 
         while let Some(b) = inner_box.child_at_index(0) {
             inner_box.remove(&b);
+            drop(b);
         }
 
         for entry in items {
@@ -274,7 +275,6 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
     }
     let lic = ArcMenuMap::clone(list_items);
     inner_box.set_sort_func(move |child2, child1| sort_menu_items_by_score(child1, child2, &lic));
-    inner_box.invalidate_sort();
 }
 
 #[allow(clippy::too_many_arguments)] // todo fix this
@@ -361,8 +361,9 @@ fn handle_key_press<T: Clone + 'static>(
         }
         Key::BackSpace => {
             let mut query = search_entry.text().to_string();
-            query.pop();
-
+            if !query.is_empty() {
+                query.pop();
+            }
             search_entry.set_text(&query);
             update_view_from_provider(&query);
         }
@@ -861,72 +862,72 @@ fn filter_widgets<T: Clone>(
 ) {
     {
         let mut items = item_arc.lock().unwrap();
-        if items.is_empty() {
-            for (child, _) in items.iter() {
-                child.set_visible(true);
+        if query.is_empty() {
+            for (flowbox_child, menu_item) in items.iter_mut() {
+                flowbox_child.set_visible(true);
+                menu_item.search_sort_score = -1.0;
             }
+        } else {
+            let query = query.to_owned().to_lowercase(); // todo match case senstive according to conf
+            for (flowbox_child, menu_item) in items.iter_mut() {
+                let menu_item_search = format!(
+                    "{} {}",
+                    menu_item
+                        .action
+                        .as_ref()
+                        .map(|a| a.to_lowercase())
+                        .unwrap_or_default(),
+                    &menu_item.label.to_lowercase()
+                );
 
-            if let Some(child) = inner_box.first_child() {
-                child.grab_focus();
-                let fb = child.downcast::<FlowBoxChild>();
-                if let Ok(fb) = fb {
-                    inner_box.select_child(&fb);
-                }
-            }
-            return;
-        }
+                let matching = if let Some(matching) = &config.matching {
+                    matching
+                } else {
+                    &config::default_match_method().unwrap()
+                };
 
-        let query = query.to_owned().to_lowercase();
-        for (flowbox_child, menu_item) in items.iter_mut() {
-            let menu_item_search = format!(
-                "{} {}",
-                menu_item
-                    .action
-                    .as_ref()
-                    .map(|a| a.to_lowercase())
-                    .unwrap_or_default(),
-                &menu_item.label.to_lowercase()
-            );
+                let (search_sort_score, visible) = match matching {
+                    MatchMethod::Fuzzy => {
+                        let mut score = strsim::jaro_winkler(&query, &menu_item_search);
+                        if score == 0.0 {
+                            score = -1.0;
+                        }
 
-            let matching = if let Some(matching) = &config.matching {
-                matching
-            } else {
-                &config::default_match_method().unwrap()
-            };
-
-            let (search_sort_score, visible) = match matching {
-                MatchMethod::Fuzzy => {
-                    let score = strsim::normalized_levenshtein(&query, &menu_item_search);
-                    (
-                        score,
-                        score
-                            > config
-                                .fuzzy_min_score
-                                .unwrap_or(config::default_fuzzy_min_score().unwrap_or(0.0)) && score > 0.0,
-                    )
-                }
-                MatchMethod::Contains => {
-                    if menu_item_search.contains(&query) {
-                        (1.0, true)
-                    } else {
-                        (0.0, false)
+                        (
+                            score,
+                            score
+                                > config
+                                    .fuzzy_min_score
+                                    .unwrap_or(config::default_fuzzy_min_score().unwrap_or(0.0))
+                                && score > 0.0,
+                        )
                     }
-                }
-                MatchMethod::MultiContains => {
-                    let score = query
-                        .split(' ')
-                        .filter(|i| menu_item_search.contains(i))
-                        .map(|_| 1.0)
-                        .sum();
-                    (score, score > 0.0)
-                }
-            };
+                    MatchMethod::Contains => {
+                        if menu_item_search.contains(&query) {
+                            (1.0, true)
+                        } else {
+                            (0.0, false)
+                        }
+                    }
+                    MatchMethod::MultiContains => {
+                        let score = query
+                            .split(' ')
+                            .filter(|i| menu_item_search.contains(i))
+                            .map(|_| 1.0)
+                            .sum();
+                        (score, score > 0.0)
+                    }
+                };
 
+                log::debug!(
+                    "menu item {}, search score {}",
+                    menu_item_search,
+                    search_sort_score
+                );
 
-            log::debug!("menu item {}, search score {}", menu_item_search, search_sort_score);
-
-            menu_item.search_sort_score = search_sort_score;
-            flowbox_child.set_visible(visible);
+                menu_item.search_sort_score = search_sort_score;
+                flowbox_child.set_visible(visible);
+            }
         }
     }
 
