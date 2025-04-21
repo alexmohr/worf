@@ -7,6 +7,7 @@ Option 3"
 
 # Pipe options to wofi and capture the selection
 selection=$(echo "$options" | cargo run -- --show dmenu)
+#selection=$(echo "$options" | wofi --show dmenu)
 
 # Do something with the selection
 echo "You selected: $selection"

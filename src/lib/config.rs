@@ -622,7 +622,7 @@ pub fn default_fuzzy_min_length() -> Option<i32> {
 #[allow(clippy::unnecessary_wraps)]
 #[must_use]
 pub fn default_fuzzy_min_score() -> Option<f64> {
-    Some(0.1)
+    Some(0.0)
 }
 
 // allowed because option is needed for serde macro

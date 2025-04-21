@@ -3,18 +3,19 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::{env, fmt, fs, io};
 
-use anyhow::Context;
-use freedesktop_file_parser::EntryType;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
 use crate::config::{Config, expand_path};
 use crate::desktop::{
-    default_icon, find_desktop_files, get_locale_variants, lookup_name_with_locale,
+    DesktopError, default_icon, find_desktop_files, get_locale_variants, lookup_name_with_locale,
 };
 use crate::gui;
 use crate::gui::{ItemProvider, MenuItem};
+use anyhow::Context;
+use freedesktop_file_parser::EntryType;
+use gtk4::AccessibleRole::Menu;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::io::Read;
 
 #[derive(Debug)]
 pub enum ModeError {
@@ -22,6 +23,8 @@ pub enum ModeError {
     MissingAction,
     RunError(String),
     MissingCache,
+    StdInReadFail,
+    InvalidSelection,
 }
 
 impl fmt::Display for ModeError {
@@ -31,6 +34,8 @@ impl fmt::Display for ModeError {
             ModeError::MissingAction => write!(f, "MissingAction"),
             ModeError::RunError(s) => write!(f, "RunError, {s}"),
             ModeError::MissingCache => write!(f, "MissingCache"),
+            ModeError::StdInReadFail => write!(f, "StdInReadFail"),
+            &ModeError::InvalidSelection => write!(f, "InvalidSelection"),
         }
     }
 }
@@ -306,7 +311,7 @@ struct MathProvider<T: Clone> {
     menu_item_data: T,
 }
 
-impl<T: std::clone::Clone> MathProvider<T> {
+impl<T: Clone> MathProvider<T> {
     fn new(menu_item_data: T) -> Self {
         Self { menu_item_data }
     }
@@ -351,6 +356,47 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
     }
 
     fn get_sub_elements(&mut self, _: &MenuItem<T>) -> Option<Vec<MenuItem<T>>> {
+        None
+    }
+}
+
+#[derive(Clone)]
+struct DMenuProvider {
+    items: Vec<MenuItem<String>>,
+}
+
+impl DMenuProvider {
+    fn new() -> Result<DMenuProvider, ModeError> {
+        let mut input = String::new();
+        io::stdin()
+            .read_to_string(&mut input)
+            .map_err(|e| ModeError::StdInReadFail)?;
+
+        let items: Vec<MenuItem<String>> = input
+            .lines()
+            .map(String::from)
+            .map(|s| MenuItem {
+                label: s,
+                icon_path: None,
+                action: None,
+                sub_elements: vec![],
+                working_dir: None,
+                initial_sort_score: 0,
+                search_sort_score: 0.0,
+                data: None,
+            })
+            .collect();
+
+        Ok(Self { items })
+    }
+}
+
+impl ItemProvider<String> for DMenuProvider {
+    fn get_elements(&mut self, _: Option<&str>) -> Vec<MenuItem<String>> {
+        self.items.clone()
+    }
+
+    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> Option<Vec<MenuItem<String>>> {
         None
     }
 }
@@ -509,8 +555,17 @@ pub fn math(config: &Config) {
 /// # Errors
 ///
 /// todo
-pub fn dmenu(_: &Config) -> Result<(), ModeError> {
-    Ok(())
+pub fn dmenu(config: &Config) -> Result<(), ModeError> {
+    let provider = DMenuProvider::new()?;
+
+    let selection_result = gui::show(config.clone(), provider);
+    match selection_result {
+        Ok(s) => {
+            println!("{}", s.label);
+            Ok(())
+        }
+        Err(_) => Err(ModeError::InvalidSelection),
+    }
 }
 
 fn update_drun_cache_and_run<T: Clone>(
