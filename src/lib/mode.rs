@@ -24,7 +24,7 @@ struct DRunCache {
 }
 
 #[derive(Clone)]
-struct DRunProvider<T: std::clone::Clone> {
+struct DRunProvider<T: Clone> {
     items: Vec<MenuItem<T>>,
     cache_path: Option<PathBuf>,
     cache: HashMap<String, i64>,
@@ -145,7 +145,7 @@ impl<T: Clone> ItemProvider<T> for DRunProvider<T> {
 }
 
 #[derive(Clone)]
-struct FileItemProvider<T: std::clone::Clone> {
+struct FileItemProvider<T: Clone> {
     last_result: Option<Vec<MenuItem<T>>>,
     menu_item_data: T,
 }
@@ -276,22 +276,78 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
     }
 }
 
+#[derive(Clone)]
+struct MathProvider<T: Clone> {
+    menu_item_data: T,
+}
+
+impl<T: std::clone::Clone> MathProvider<T> {
+    fn new(menu_item_data: T) -> Self {
+       Self {
+           menu_item_data,
+       }
+    }
+
+    fn contains_math_functions_or_starts_with_number(input: &str) -> bool {
+        // Regex for function names (word boundaries to match whole words)
+        let math_functions = r"\b(sqrt|abs|exp|ln|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|floor|ceil|round|signum|min|max|pi|e)\b";
+
+        // Regex for strings that start with a number (including decimals)
+        let starts_with_number = r"^\s*[+-]?(\d+(\.\d*)?|\.\d+)";
+
+        let math_regex = Regex::new(math_functions).unwrap();
+        let number_regex = Regex::new(starts_with_number).unwrap();
+
+        math_regex.is_match(input) || number_regex.is_match(input)
+    }
+}
+
+impl<T: Clone> ItemProvider<T> for MathProvider<T> {
+    fn get_elements(&mut self, search: Option<&str>) -> Vec<MenuItem<T>> {
+        if let Some(search_text) = search {
+            let result = match meval::eval_str(search_text) {
+                Ok(result) => result.to_string(),
+                Err(e) => format!("failed to calculate {e:?}"),
+            };
+
+            let item = MenuItem {
+                label: result,
+                icon_path: None,
+                action: search.map(|s| s.to_string()),
+                sub_elements: vec![],
+                working_dir: None,
+                initial_sort_score: 0,
+                search_sort_score: 0.0,
+                data: Some(self.menu_item_data.clone()),
+            };
+
+            vec![item]
+        } else {
+            vec![]
+        }
+    }
+
+    fn get_sub_elements(&mut self, item: &MenuItem<T>) -> Option<Vec<MenuItem<T>>> {
+        None
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum AutoRunType {
     Math,
     DRun,
     File,
-    Ssh,
-    WebSearch,
-    Emoji,
-    Run,
+    // Ssh,
+    // WebSearch,
+    // Emoji,
+    // Run,
 }
 
 #[derive(Clone)]
 struct AutoItemProvider {
     drun_provider: DRunProvider<AutoRunType>,
     file_provider: FileItemProvider<AutoRunType>,
-    last_result: Option<Vec<MenuItem<AutoRunType>>>,
+    math_provider: MathProvider<AutoRunType>,
 }
 
 impl AutoItemProvider {
@@ -299,22 +355,9 @@ impl AutoItemProvider {
         AutoItemProvider {
             drun_provider: DRunProvider::new(AutoRunType::DRun),
             file_provider: FileItemProvider::new(AutoRunType::File),
-            last_result: None,
+            math_provider: MathProvider::new(AutoRunType::Math),
         }
     }
-}
-
-fn contains_math_functions_or_starts_with_number(input: &str) -> bool {
-    // Regex for function names (word boundaries to match whole words)
-    let math_functions = r"\b(sqrt|abs|exp|ln|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|floor|ceil|round|signum|min|max|pi|e)\b";
-
-    // Regex for strings that start with a number (including decimals)
-    let starts_with_number = r"^\s*[+-]?(\d+(\.\d*)?|\.\d+)";
-
-    let math_regex = Regex::new(math_functions).unwrap();
-    let number_regex = Regex::new(starts_with_number).unwrap();
-
-    math_regex.is_match(input) || number_regex.is_match(input)
 }
 
 impl ItemProvider<AutoRunType> for AutoItemProvider {
@@ -323,31 +366,15 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
             let trimmed_search = search.trim();
             if trimmed_search.is_empty() {
                 self.drun_provider.get_elements(search_opt)
-            } else if contains_math_functions_or_starts_with_number(trimmed_search) {
-                let result = match meval::eval_str(trimmed_search) {
-                    Ok(result) => result.to_string(),
-                    Err(e) => format!("failed to calculate {e:?}"),
-                };
-
-                let item = MenuItem {
-                    label: result,
-                    icon_path: None,
-                    action: Some(trimmed_search.to_owned()),
-                    sub_elements: vec![],
-                    working_dir: None,
-                    initial_sort_score: 0,
-                    search_sort_score: 0.0,
-                    data: Some(AutoRunType::Math),
-                };
-
-                return vec![item];
+            } else if MathProvider::<AutoRunType>::contains_math_functions_or_starts_with_number(trimmed_search) {
+                self.math_provider.get_elements(search_opt)
             } else if trimmed_search.starts_with("$")
                 || trimmed_search.starts_with("/")
                 || trimmed_search.starts_with("~")
             {
                 self.file_provider.get_elements(search_opt)
             } else {
-                return self.drun_provider.get_elements(search_opt);
+                self.drun_provider.get_elements(search_opt)
             }
         } else {
             self.drun_provider.get_elements(search_opt)
@@ -439,6 +466,25 @@ pub fn file(config: &mut Config) -> Result<(), String> {
             if let Some(action) = s.action {
                 spawn_fork(&action, s.working_dir.as_ref()).map_err(|e| e.to_string())?;
             }
+        }
+        Err(_) => {
+            log::error!("No item selected");
+        }
+    }
+
+    Ok(())
+}
+
+pub fn math(config: &mut Config) -> Result<(), String> {
+    let provider = MathProvider::new("".to_owned());
+    if config.prompt.is_none() {
+        config.prompt = Some("math".to_owned());
+    }
+
+    // todo ues a arc instead of cloning the config
+    let selection_result = gui::show(config.clone(), provider);
+    match selection_result {
+        Ok(_) => {
         }
         Err(_) => {
             log::error!("No item selected");
