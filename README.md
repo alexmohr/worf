@@ -38,6 +38,7 @@ layerrule = blur, worf
   because worf is build on GTK4 instead of GTK3 there will be differences in the look and feel.
 * Configuration files are not 100% compatible, Worf is using toml files instead, for most part this only means strings have to be quoted
 * Color files are not supported
+* `line_wrap` is now called `line-wrap`
 
 ## Dropped arguments
 * `mode`, use show

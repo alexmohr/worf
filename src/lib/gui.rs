@@ -15,16 +15,13 @@ use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
     GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
 };
-use gtk4::{
-    Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
-    ListBox, ListBoxRow, Ordering, PolicyType, ScrolledWindow, SearchEntry, Widget, gdk,
-};
+use gtk4::{Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, Ordering, PolicyType, ScrolledWindow, SearchEntry, Widget, gdk, NaturalWrapMode};
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 
 use crate::config;
-use crate::config::{Animation, Config, MatchMethod};
+use crate::config::{Animation, Config, MatchMethod, WrapMode};
 
 type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T>>>;
@@ -40,6 +37,16 @@ impl From<config::Orientation> for Orientation {
         match orientation {
             config::Orientation::Vertical => Orientation::Vertical,
             config::Orientation::Horizontal => Orientation::Horizontal,
+        }
+    }
+}
+
+impl From<&WrapMode> for NaturalWrapMode {
+    fn from(value: &WrapMode) -> Self {
+        match value {
+            WrapMode::None => {NaturalWrapMode::None},
+            WrapMode::Word => {NaturalWrapMode::Word},
+            WrapMode::Inherit => {NaturalWrapMode::Inherit},
         }
     }
 }
@@ -808,14 +815,14 @@ fn create_menu_row<T: Clone + 'static>(
         row_box.append(&image);
     }
 
-    // todo make max length configurable
-    let text = if config.text_wrap.is_some_and(|x| x) {
-        &wrap_text(&menu_item.label, config.text_wrap_length)
+    let label = Label::new(Some(menu_item.label.as_str()));
+    let wrap_mode : NaturalWrapMode = if let Some(config_wrap) = &config.line_wrap {
+        config_wrap.into()
     } else {
-        menu_item.label.as_str()
+        NaturalWrapMode::Word
     };
 
-    let label = Label::new(Some(text));
+    label.set_natural_wrap_mode(wrap_mode);
     label.set_hexpand(true);
     label.set_widget_name("label");
     label.set_wrap(true);
@@ -954,26 +961,4 @@ pub fn sort_menu_items_alphabetically_honor_initial_score<T: std::clone::Clone>(
             regular_score += 1;
         }
     }
-}
-
-fn wrap_text(text: &str, line_length: Option<usize>) -> String {
-    let mut result = String::new();
-    let mut line = String::new();
-    let len = line_length.unwrap_or(text.len());
-
-    for word in text.split_whitespace() {
-        if line.len() + word.len() + 1 > len && !line.is_empty() {
-            result.push_str(line.trim_end());
-            result.push('\n');
-            line.clear();
-        }
-        line.push_str(word);
-        line.push(' ');
-    }
-
-    if !line.is_empty() {
-        result.push_str(line.trim_end());
-    }
-
-    result
 }
