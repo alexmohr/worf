@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::{env, fmt, fs};
 
-use anyhow::{Error, anyhow};
+use anyhow::anyhow;
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,6 +21,14 @@ impl fmt::Display for ConfigurationError {
             ConfigurationError::Parse(e) => write!(f, "{e}"),
         }
     }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
+pub enum Anchor {
+    Top,
+    Left,
+    Bottom,
+    Right,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]
@@ -83,6 +91,20 @@ pub enum Mode {
 pub enum ArgsError {
     #[error("input is not valid {0}")]
     InvalidParameter(String),
+}
+
+impl FromStr for Anchor {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim() {
+            "top" => Ok(Anchor::Top),
+            "left" => Ok(Anchor::Left),
+            "bottom" => Ok(Anchor::Bottom),
+            "right" => Ok(Anchor::Right),
+            other => Err(format!("Invalid anchor: {}", other)),
+        }
+    }
 }
 
 impl FromStr for Mode {
@@ -201,8 +223,11 @@ pub struct Config {
     #[clap(short = 'q', long = "parse-search")]
     pub parse_search: Option<bool>,
 
-    #[clap(short = 'l', long = "location")]
-    pub location: Option<String>,
+    /// set where the window is displayed.
+    /// can be used to anchor a window to an edge by
+    /// setting top,left for example
+    #[clap(short = 'l', long = "location", value_delimiter = ',', value_parser = clap::builder::ValueParser::new(Anchor::from_str))]
+    pub location: Option<Vec<Anchor>>,
 
     #[clap(short = 'a', long = "no-actions")]
     pub no_actions: Option<bool>,
@@ -508,7 +533,6 @@ pub fn default_line_wrap() -> Option<WrapMode> {
 // max_lines = lines;
 // columns = strtol(config_get(config, "columns", "1"), NULL, 10);
 // sort_order = config_get_mnemonic(config, "sort_order", "default", 2, "default", "alphabetical");
-// line_wrap = config_get_mnemonic(config, "line_wrap", "off", 4, "off", "word", "char", "word_char") - 1;
 // bool global_coords = strcmp(config_get(config, "global_coords", "false"), "true") == 0;
 // hide_search = strcmp(config_get(config, "hide_search", "false"), "true") == 0;
 // char* search = map_get(config, "search");
@@ -700,9 +724,9 @@ pub fn load_config(args_opt: Option<Config>) -> Result<Config, ConfigurationErro
                             Mode::Run => merge_result.prompt = Some("run".to_owned()),
                             Mode::Drun => merge_result.prompt = Some("drun".to_owned()),
                             Mode::Dmenu => merge_result.prompt = Some("dmenu".to_owned()),
-                            Mode::Math =>  merge_result.prompt = Some("math".to_owned()),
-                            Mode::File =>  merge_result.prompt = Some("file".to_owned()),
-                            Mode::Auto =>  merge_result.prompt = Some("auto".to_owned()),
+                            Mode::Math => merge_result.prompt = Some("math".to_owned()),
+                            Mode::File => merge_result.prompt = Some("file".to_owned()),
+                            Mode::Auto => merge_result.prompt = Some("auto".to_owned()),
                         },
                     }
                 }

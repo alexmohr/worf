@@ -1,70 +1,26 @@
-use anyhow::anyhow;
+use std::collections::HashMap;
+use std::path::Path;
+use std::path::PathBuf;
+use std::{env, fs, string};
+
 use freedesktop_file_parser::DesktopFile;
 use gdk4::Display;
 use gtk4::prelude::*;
 use gtk4::{IconLookupFlags, IconTheme, TextDirection};
 use home::home_dir;
-use log::{debug, info, warn};
+use log;
 use regex::Regex;
-use std::collections::HashMap;
-use std::path::Path;
-use std::path::PathBuf;
-use std::{env, fs, string};
 
 #[derive(Debug)]
 pub enum DesktopError {
     MissingIcon,
 }
 
-//
-// #[derive(Clone)]
-// pub struct IconResolver {
-//     cache: HashMap<String, String>,
-// }
-//
-// impl Default for IconResolver {
-//     #[must_use]
-//     fn default() -> IconResolver {
-//         Self::new()
-//     }
-// }
-//
-// impl IconResolver {
-//     #[must_use]
-//     pub fn new() -> IconResolver {
-//         IconResolver {
-//             cache: HashMap::new(),
-//         }
-//     }
-//
-//     pub fn icon_path_no_cache(&self, icon_name: &str) -> Result<String, DesktopError> {
-//         let icon = fetch_icon_from_theme(icon_name)
-//             .or_else(|_|
-//                 fetch_icon_from_common_dirs(icon_name)
-//                     .or_else(|_| default_icon()));
-//
-//         icon
-//     }
-//
-//     pub fn icon_path(&mut self, icon_name: &str) -> String {
-//         if let Some(icon_path) = self.cache.get(icon_name) {
-//             return icon_path.to_owned();
-//         }
-//
-//         let icon = self.icon_path_no_cache(icon_name);
-//
-//         self.cache
-//             .entry(icon_name.to_owned())
-//             .or_insert_with(|| icon.unwrap_or_default())
-//             .to_owned()
-//     }
-// }
-
 /// # Errors
 ///
 /// Will return `Err` if no icon can be found
 pub fn default_icon() -> Result<String, DesktopError> {
-    fetch_icon_from_theme("image-missing").map_err(|e| DesktopError::MissingIcon)
+    fetch_icon_from_theme("image-missing").map_err(|_| DesktopError::MissingIcon)
 }
 
 fn fetch_icon_from_theme(icon_name: &str) -> Result<String, DesktopError> {
@@ -177,7 +133,7 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
         .filter_map(|icon_dir| find_file_case_insensitive(&icon_dir, regex))
         .flat_map(|desktop_files| {
             desktop_files.into_iter().filter_map(|desktop_file| {
-                debug!("loading desktop file {desktop_file:?}");
+                log::debug!("loading desktop file {desktop_file:?}");
                 fs::read_to_string(desktop_file)
                     .ok()
                     .and_then(|content| freedesktop_file_parser::parse(&content).ok())

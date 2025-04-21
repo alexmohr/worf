@@ -13,7 +13,7 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let args = config::parse_args();
-    let mut config = config::load_config(Some(args)).map_err(|e| anyhow!(e))?;
+    let config = config::load_config(Some(args)).map_err(|e| anyhow!(e))?;
 
     if let Some(show) = &config.show {
         match show {
@@ -21,10 +21,10 @@ fn main() -> anyhow::Result<()> {
                 todo!("run not implemented")
             }
             Mode::Drun => {
-                mode::d_run(&config)?;
+                mode::d_run(&config).map_err(|e| anyhow!(e))?;
             }
             Mode::Dmenu => {
-                todo!("dmenu not implemented")
+                mode::dmenu(&config).map_err(|e| anyhow!(e))?;
             }
             Mode::File => {
                 mode::file(&config).map_err(|e| anyhow!(e))?;
@@ -33,7 +33,7 @@ fn main() -> anyhow::Result<()> {
                 mode::math(&config).map_err(|e| anyhow!(e))?;
             }
             Mode::Auto => {
-                mode::auto(&config)?;
+                mode::auto(&config).map_err(|e| anyhow!(e))?;
             }
         }
 

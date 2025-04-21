@@ -1,21 +1,39 @@
+use std::os::unix::prelude::CommandExt;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::{env, fmt, fs, io};
+
+use anyhow::Context;
+use freedesktop_file_parser::EntryType;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
 use crate::config::{Config, expand_path};
 use crate::desktop::{
     default_icon, find_desktop_files, get_locale_variants, lookup_name_with_locale,
 };
+use crate::gui;
 use crate::gui::{ItemProvider, MenuItem};
-use crate::{config, desktop, gui};
-use anyhow::{Context, Error, anyhow};
-use freedesktop_file_parser::EntryType;
-use gtk4::Image;
-use libc::option;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::os::unix::fs::PermissionsExt;
-use std::os::unix::prelude::CommandExt;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::{env, fs, io};
+
+#[derive(Debug)]
+pub enum ModeError {
+    UpdateCacheError(String),
+    MissingAction,
+    RunError(String),
+    MissingCache,
+}
+
+impl fmt::Display for ModeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ModeError::UpdateCacheError(s) => write!(f, "UpdateCacheError {s}"),
+            ModeError::MissingAction => write!(f, "MissingAction"),
+            ModeError::RunError(s) => write!(f, "RunError, {s}"),
+            ModeError::MissingCache => write!(f, "MissingCache"),
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct DRunCache {
@@ -139,7 +157,7 @@ impl<T: Clone> ItemProvider<T> for DRunProvider<T> {
         self.items.clone()
     }
 
-    fn get_sub_elements(&mut self, item: &MenuItem<T>) -> Option<Vec<MenuItem<T>>> {
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> Option<Vec<MenuItem<T>>> {
         None
     }
 }
@@ -283,9 +301,7 @@ struct MathProvider<T: Clone> {
 
 impl<T: std::clone::Clone> MathProvider<T> {
     fn new(menu_item_data: T) -> Self {
-       Self {
-           menu_item_data,
-       }
+        Self { menu_item_data }
     }
 
     fn contains_math_functions_or_starts_with_number(input: &str) -> bool {
@@ -327,7 +343,7 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
         }
     }
 
-    fn get_sub_elements(&mut self, item: &MenuItem<T>) -> Option<Vec<MenuItem<T>>> {
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> Option<Vec<MenuItem<T>>> {
         None
     }
 }
@@ -366,7 +382,9 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
             let trimmed_search = search.trim();
             if trimmed_search.is_empty() {
                 self.drun_provider.get_elements(search_opt)
-            } else if MathProvider::<AutoRunType>::contains_math_functions_or_starts_with_number(trimmed_search) {
+            } else if MathProvider::<AutoRunType>::contains_math_functions_or_starts_with_number(
+                trimmed_search,
+            ) {
                 self.math_provider.get_elements(search_opt)
             } else if trimmed_search.starts_with("$")
                 || trimmed_search.starts_with("/")
@@ -392,7 +410,7 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
 /// # Errors
 ///
 /// Will return `Err` if it was not able to spawn the process
-pub fn d_run(config: &Config) -> anyhow::Result<()> {
+pub fn d_run(config: &Config) -> Result<(), ModeError> {
     let provider = DRunProvider::new("".to_owned());
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
@@ -400,9 +418,7 @@ pub fn d_run(config: &Config) -> anyhow::Result<()> {
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider);
     match selection_result {
-        Ok(s) => {
-            update_drun_cache_and_run(cache_path, &mut cache, s)?;
-        }
+        Ok(s) => update_drun_cache_and_run(cache_path, &mut cache, s)?,
         Err(_) => {
             log::error!("No item selected");
         }
@@ -411,7 +427,7 @@ pub fn d_run(config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn auto(config: &Config) -> anyhow::Result<()> {
+pub fn auto(config: &Config) -> Result<(), ModeError> {
     let provider = AutoItemProvider::new();
     let cache_path = provider.drun_provider.cache_path.clone();
     let mut cache = provider.drun_provider.cache.clone();
@@ -429,11 +445,8 @@ pub fn auto(config: &Config) -> anyhow::Result<()> {
                     }
                     AutoRunType::File => {
                         if let Some(action) = selection_result.action {
-                            spawn_fork(&action, selection_result.working_dir.as_ref())?
+                            spawn_fork(&action, selection_result.working_dir.as_ref())?;
                         }
-                    }
-                    _ => {
-                        todo!("not supported yet");
                     }
                 }
             }
@@ -446,7 +459,7 @@ pub fn auto(config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn file(config: &Config) -> Result<(), String> {
+pub fn file(config: &Config) -> Result<(), ModeError> {
     let provider = FileItemProvider::new("".to_owned());
 
     // todo ues a arc instead of cloning the config
@@ -454,7 +467,7 @@ pub fn file(config: &Config) -> Result<(), String> {
     match selection_result {
         Ok(s) => {
             if let Some(action) = s.action {
-                spawn_fork(&action, s.working_dir.as_ref()).map_err(|e| e.to_string())?;
+                spawn_fork(&action, s.working_dir.as_ref())?;
             }
         }
         Err(_) => {
@@ -465,14 +478,13 @@ pub fn file(config: &Config) -> Result<(), String> {
     Ok(())
 }
 
-pub fn math(config: &Config) -> Result<(), String> {
+pub fn math(config: &Config) -> Result<(), ModeError> {
     let provider = MathProvider::new("".to_owned());
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider);
     match selection_result {
-        Ok(_) => {
-        }
+        Ok(_) => {}
         Err(_) => {
             log::error!("No item selected");
         }
@@ -481,11 +493,15 @@ pub fn math(config: &Config) -> Result<(), String> {
     Ok(())
 }
 
+pub fn dmenu(_: &Config) -> Result<(), ModeError> {
+    Ok(())
+}
+
 fn update_drun_cache_and_run<T: Clone>(
     cache_path: Option<PathBuf>,
     cache: &mut HashMap<String, i64>,
     selection_result: MenuItem<T>,
-) -> Result<(), Error> {
+) -> Result<(), ModeError> {
     if let Some(cache_path) = cache_path {
         *cache.entry(selection_result.label).or_insert(0) += 1;
         if let Err(e) = save_cache_file(&cache_path, &cache) {
@@ -496,7 +512,7 @@ fn update_drun_cache_and_run<T: Clone>(
     if let Some(action) = selection_result.action {
         spawn_fork(&action, selection_result.working_dir.as_ref())
     } else {
-        Err(anyhow::anyhow!("cannot find drun action"))
+        Err(ModeError::MissingAction)
     }
 }
 
@@ -520,12 +536,13 @@ fn save_cache_file(path: &PathBuf, data: &HashMap<String, i64>) -> anyhow::Resul
     fs::write(path, toml_string).map_err(|e| anyhow::anyhow!(e))
 }
 
-fn load_cache_file(cache_path: Option<&PathBuf>) -> anyhow::Result<HashMap<String, i64>> {
+fn load_cache_file(cache_path: Option<&PathBuf>) -> Result<HashMap<String, i64>, ModeError> {
     let Some(path) = cache_path else {
-        return Err(anyhow!("Cache is missing"));
+        return Err(ModeError::MissingCache);
     };
 
-    let toml_content = fs::read_to_string(path)?;
+    let toml_content =
+        fs::read_to_string(path).map_err(|e| ModeError::UpdateCacheError(format!("{e}")))?;
     let parsed: toml::Value = toml_content.parse().expect("Failed to parse TOML");
 
     let mut result: HashMap<String, i64> = HashMap::new();
@@ -555,17 +572,18 @@ fn create_file_if_not_exists(path: &PathBuf) -> anyhow::Result<()> {
     }
 }
 
-fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> anyhow::Result<()> {
+fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), ModeError> {
     // todo fix actions ??
     // todo graphical disk map icon not working
 
     let parts = cmd.split(' ').collect::<Vec<_>>();
     if parts.is_empty() {
-        return Err(anyhow!("empty command passed"));
+        return Err(ModeError::MissingAction);
     }
 
     if let Some(dir) = working_dir {
-        env::set_current_dir(dir)?;
+        env::set_current_dir(dir)
+            .map_err(|e| ModeError::RunError(format!("cannot set workdir {e}")))?
     }
 
     let exec = parts[0].replace('"', "");

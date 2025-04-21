@@ -17,7 +17,7 @@ Allow blur for Worf
 layerrule = blur, worf
 ```
 
-## Additional functionality compared to Wofi (planed)
+## Additional functionality compared to Wofi
 * Support passing 'hidden' parameters that are not visible in the launcher but will be returned to the application
 * Window switcher for hyprland
 * All arguments expect show are supported by config and args
@@ -32,6 +32,12 @@ layerrule = blur, worf
 * `label`: Allows styling the label
 * `row`: Allows styling to row, mainly used to disable hover effects
 
+## Library
+
+The launcher and UI can be used to build any launcher, as the ui, config and run logic is available as a separate crate.
+This library is not available publicly yet as the interface is not stable enough.
+
+
 ## Breaking changes to Wofi
 * Runtime behaviour is not guaranteed to be the same and won't ever be, this includes error messages and themes.
 * Themes in general are mostly compatible. Worf is using the same entity ids, 
@@ -39,6 +45,7 @@ layerrule = blur, worf
 * Configuration files are not 100% compatible, Worf is using toml files instead, for most part this only means strings have to be quoted
 * Color files are not supported
 * `line_wrap` is now called `line-wrap`
+* Wofi has a C-API, that is not and won't be supported.
 
 ## Dropped arguments
 * `mode`, use show
@@ -48,8 +55,3 @@ layerrule = blur, worf
 ### Dropped configuration options
 * stylesheet -> use style instead
 * color / colors -> GTK4 does not support color files
-
-
-
-## Not supported
-* Wofi has a C-API, that is not and won't be supported.
