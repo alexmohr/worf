@@ -135,7 +135,7 @@ fn build_ui<T, P>(
     }
 
     /// todo make this configurable
-    window.set_anchor(Edge::Top, true);
+    //window.set_anchor(Edge::Top, true);
 
     let outer_box = gtk4::Box::new(config.orientation.unwrap().into(), 0);
     outer_box.set_widget_name("outer-box");
@@ -944,7 +944,7 @@ fn percent_or_absolute(value: Option<&String>, base_value: i32) -> Option<i32> {
 
 // highly unlikely that we are dealing with > i64 items
 #[allow(clippy::cast_possible_wrap)]
-pub fn initialize_sort_scores<T: std::clone::Clone>(items: &mut [MenuItem<T>]) {
+pub fn sort_menu_items_alphabetically_honor_initial_score<T: std::clone::Clone>(items: &mut [MenuItem<T>]) {
     let mut regular_score = items.len() as i64;
     items.sort_by(|l, r| l.label.cmp(&r.label));
 
