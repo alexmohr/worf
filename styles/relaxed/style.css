@@ -4,20 +4,23 @@
 
 #window {
   all: unset;
-  background-color: rgba(33, 33, 33, 0.76); /* Matches #212121BB */
+  background-color: rgba(33, 33, 33, 0.8); /* Matches #212121BB */
   border-radius: 0;
-  padding-top: 3rem;
 }
 
 #window #outer-box {
+  /* The name of the search bar */
+  /* The name of the scrolled window containing all of the entries */
+  border: 2px solid rgba(63, 81, 181, 1);
+  border-radius: 6px;
 }
 
 #window #outer-box #input {
   background-color: rgba(32, 32, 32, 0.6);
   color: #f2f2f2;
   border-bottom: 2px solid rgba(214, 174, 0, 1);
+  padding: 0.8rem 1rem;
   font-size: 1rem;
-  margin: 1rem 50rem 2rem;
 }
 
 #window #outer-box #input:focus, #window #outer-box #input:focus-visible, #window #outer-box #input:active {
@@ -26,11 +29,6 @@
   color: #f2f2f2;
   border-bottom: 2px solid rgba(214, 174, 2, 1);
   font-size: 1rem;
-}
-
-#window #outer-box #scroll #inner-box {
-  padding: 0 25rem;
-
 }
 
 #window #outer-box #scroll #inner-box #entry {

@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use freedesktop_file_parser::DesktopFile;
+use gdk4::Display;
 use gtk4::prelude::*;
 use gtk4::{IconLookupFlags, IconTheme, TextDirection};
 use home::home_dir;
@@ -10,88 +11,71 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::{env, fs, string};
 
-pub struct IconResolver {
-    cache: HashMap<String, String>,
+#[derive(Debug)]
+pub enum DesktopError {
+    MissingIcon,
 }
 
-impl Default for IconResolver {
-    #[must_use]
-    fn default() -> IconResolver {
-        Self::new()
-    }
-}
-
-impl IconResolver {
-    #[must_use]
-    pub fn new() -> IconResolver {
-        IconResolver {
-            cache: HashMap::new(),
-        }
-    }
-
-    pub fn icon_path(&mut self, icon_name: &str) -> String {
-        if let Some(icon_path) = self.cache.get(icon_name) {
-            info!("Fetching {icon_name} from cache");
-            return icon_path.to_owned();
-        }
-
-        info!("Loading icon for {icon_name}");
-        let icon = fetch_icon_from_theme(icon_name)
-            .or_else(|_| {
-                fetch_icon_from_common_dirs(icon_name).map_or_else(
-                    || Err(anyhow::anyhow!("Missing file")), // Return an error here
-                    Ok,
-                )
-            })
-            .or_else(|_| {
-                warn!("Missing icon for {icon_name}, using fallback");
-                default_icon()
-            });
-
-        self.cache
-            .entry(icon_name.to_owned())
-            .or_insert_with(|| icon.unwrap_or_default())
-            .to_owned()
-    }
-}
+//
+// #[derive(Clone)]
+// pub struct IconResolver {
+//     cache: HashMap<String, String>,
+// }
+//
+// impl Default for IconResolver {
+//     #[must_use]
+//     fn default() -> IconResolver {
+//         Self::new()
+//     }
+// }
+//
+// impl IconResolver {
+//     #[must_use]
+//     pub fn new() -> IconResolver {
+//         IconResolver {
+//             cache: HashMap::new(),
+//         }
+//     }
+//
+//     pub fn icon_path_no_cache(&self, icon_name: &str) -> Result<String, DesktopError> {
+//         let icon = fetch_icon_from_theme(icon_name)
+//             .or_else(|_|
+//                 fetch_icon_from_common_dirs(icon_name)
+//                     .or_else(|_| default_icon()));
+//
+//         icon
+//     }
+//
+//     pub fn icon_path(&mut self, icon_name: &str) -> String {
+//         if let Some(icon_path) = self.cache.get(icon_name) {
+//             return icon_path.to_owned();
+//         }
+//
+//         let icon = self.icon_path_no_cache(icon_name);
+//
+//         self.cache
+//             .entry(icon_name.to_owned())
+//             .or_insert_with(|| icon.unwrap_or_default())
+//             .to_owned()
+//     }
+// }
 
 /// # Errors
 ///
 /// Will return `Err` if no icon can be found
-pub fn default_icon() -> anyhow::Result<String> {
-    fetch_icon_from_theme("image-missing")
+pub fn default_icon() -> Result<String, DesktopError> {
+    fetch_icon_from_theme("image-missing").map_err(|e| DesktopError::MissingIcon)
 }
 
-// fn fetch_icon_from_desktop_file(icon_name: &str) -> Option<String> {
-//     // find_desktop_files().into_iter().find_map(|desktop_file| {
-//     //     desktop_file
-//     //         .get("Desktop Entry")
-//     //         .filter(|desktop_entry| {
-//     //             desktop_entry
-//     //                 .get("Exec")
-//     //                 .and_then(|opt| opt.as_ref())
-//     //                 .is_some_and(|exec| exec.to_lowercase().contains(icon_name))
-//     //         })
-//     //         .map(|desktop_entry| {
-//     //             desktop_entry
-//     //                 .get("Icon")
-//     //                 .and_then(|opt| opt.as_ref())
-//     //                 .map(ToOwned::to_owned)
-//     //                 .unwrap_or_default()
-//     //         })
-//     // })
-//     //todo
-//     None
-// }
-
-fn fetch_icon_from_theme(icon_name: &str) -> anyhow::Result<String> {
+fn fetch_icon_from_theme(icon_name: &str) -> Result<String, DesktopError> {
     let display = gtk4::gdk::Display::default();
     if display.is_none() {
         log::error!("Failed to get display");
     }
 
-    let display = display.unwrap();
+    let display = Display::default().expect("Failed to get default display");
     let theme = IconTheme::for_display(&display);
+
     let icon = theme.lookup_icon(
         icon_name,
         &[],
@@ -106,17 +90,25 @@ fn fetch_icon_from_theme(icon_name: &str) -> anyhow::Result<String> {
         .and_then(|file| file.path())
         .and_then(|path| path.to_str().map(string::ToString::to_string))
     {
-        None => Err(anyhow!("Cannot find file")),
+        None => {
+            let path = PathBuf::from("/usr/share/icons")
+                .join(theme.theme_name())
+                .join(format!("{icon_name}.svg"));
+            if path.exists() {
+                Ok(path.display().to_string())
+            } else {
+                Err(DesktopError::MissingIcon)
+            }
+        }
         Some(i) => Ok(i),
     }
 }
 
-fn fetch_icon_from_common_dirs(icon_name: &str) -> Option<String> {
+pub fn fetch_icon_from_common_dirs(icon_name: &str) -> Result<String, DesktopError> {
     let mut paths = vec![
         PathBuf::from("/usr/local/share/icons"),
         PathBuf::from("/usr/share/icons"),
         PathBuf::from("/usr/share/pixmaps"),
-        // /usr/share/icons contains the theme icons, handled via separate function
     ];
 
     if let Some(home) = home_dir() {
@@ -133,6 +125,7 @@ fn fetch_icon_from_common_dirs(icon_name: &str) -> Option<String> {
             find_file_case_insensitive(dir.as_path(), &formatted_name)
                 .and_then(|files| files.first().map(|f| f.to_string_lossy().into_owned()))
         })
+        .ok_or_else(|| DesktopError::MissingIcon)
 }
 
 fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<PathBuf>> {
@@ -156,7 +149,7 @@ fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<Pa
 /// # Errors
 ///
 /// Will return Err when it cannot parse the internal regex
-pub fn find_desktop_files() -> anyhow::Result<Vec<DesktopFile>> {
+pub fn find_desktop_files() -> Vec<DesktopFile> {
     let mut paths = vec![
         PathBuf::from("/usr/share/applications"),
         PathBuf::from("/usr/local/share/applications"),
@@ -168,6 +161,7 @@ pub fn find_desktop_files() -> anyhow::Result<Vec<DesktopFile>> {
     }
 
     if let Ok(xdg_data_home) = env::var("XDG_DATA_HOME") {
+        // todo use dirs:: instead
         paths.push(PathBuf::from(xdg_data_home).join(".applications"));
     }
 
@@ -175,7 +169,7 @@ pub fn find_desktop_files() -> anyhow::Result<Vec<DesktopFile>> {
         paths.push(PathBuf::from(xdg_data_dir).join(".applications"));
     }
 
-    let regex = &Regex::new("(?i).*\\.desktop$")?;
+    let regex = &Regex::new("(?i).*\\.desktop$").unwrap();
 
     let p: Vec<_> = paths
         .into_iter()
@@ -190,7 +184,7 @@ pub fn find_desktop_files() -> anyhow::Result<Vec<DesktopFile>> {
             })
         })
         .collect();
-    Ok(p)
+    p
 }
 
 #[must_use]
