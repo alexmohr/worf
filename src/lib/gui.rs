@@ -902,7 +902,7 @@ fn filter_widgets<T: Clone>(
                         score
                             > config
                                 .fuzzy_min_score
-                                .unwrap_or(config::default_fuzzy_min_score().unwrap_or(0.0)),
+                                .unwrap_or(config::default_fuzzy_min_score().unwrap_or(0.0)) && score > 0.0,
                     )
                 }
                 MatchMethod::Contains => {
@@ -921,6 +921,9 @@ fn filter_widgets<T: Clone>(
                     (score, score > 0.0)
                 }
             };
+
+
+            log::debug!("menu item {}, search score {}", menu_item_search, search_sort_score);
 
             menu_item.search_sort_score = search_sort_score;
             flowbox_child.set_visible(visible);
