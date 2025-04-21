@@ -21,19 +21,19 @@ fn main() -> anyhow::Result<()> {
                 todo!("run not implemented")
             }
             Mode::Drun => {
-                mode::d_run(&mut config)?;
+                mode::d_run(&config)?;
             }
             Mode::Dmenu => {
                 todo!("dmenu not implemented")
             }
             Mode::File => {
-                mode::file(&mut config).map_err(|e| anyhow!(e))?;
+                mode::file(&config).map_err(|e| anyhow!(e))?;
             }
             Mode::Math => {
-                mode::math(&mut config).map_err(|e| anyhow!(e))?;
+                mode::math(&config).map_err(|e| anyhow!(e))?;
             }
             Mode::Auto => {
-                mode::auto(&mut config)?;
+                mode::auto(&config)?;
             }
         }
 

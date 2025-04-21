@@ -129,10 +129,6 @@ pub struct Config {
     #[clap(short = 'c', long = "conf")]
     pub config: Option<String>,
 
-    /// Runs in dmenu mode
-    #[clap(short = 'd', long = "dmenu")]
-    pub dmenu: Option<bool>,
-
     /// Prints the version and then exits
     #[clap(short = 'v', long = "version")]
     pub version: Option<bool>,
@@ -338,7 +334,6 @@ impl Default for Config {
         Config {
             fork: None,
             config: None,
-            dmenu: None,
             version: None,
             style: default_style(),
             show: None,
@@ -705,7 +700,9 @@ pub fn load_config(args_opt: Option<Config>) -> Result<Config, ConfigurationErro
                             Mode::Run => merge_result.prompt = Some("run".to_owned()),
                             Mode::Drun => merge_result.prompt = Some("drun".to_owned()),
                             Mode::Dmenu => merge_result.prompt = Some("dmenu".to_owned()),
-                            _ => {}
+                            Mode::Math =>  merge_result.prompt = Some("math".to_owned()),
+                            Mode::File =>  merge_result.prompt = Some("file".to_owned()),
+                            Mode::Auto =>  merge_result.prompt = Some("auto".to_owned()),
                         },
                     }
                 }

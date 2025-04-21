@@ -392,13 +392,10 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
 /// # Errors
 ///
 /// Will return `Err` if it was not able to spawn the process
-pub fn d_run(config: &mut Config) -> anyhow::Result<()> {
+pub fn d_run(config: &Config) -> anyhow::Result<()> {
     let provider = DRunProvider::new("".to_owned());
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
-    if config.prompt.is_none() {
-        config.prompt = Some("drun".to_owned());
-    }
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider);
@@ -414,14 +411,10 @@ pub fn d_run(config: &mut Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn auto(config: &mut Config) -> anyhow::Result<()> {
+pub fn auto(config: &Config) -> anyhow::Result<()> {
     let provider = AutoItemProvider::new();
     let cache_path = provider.drun_provider.cache_path.clone();
     let mut cache = provider.drun_provider.cache.clone();
-
-    if config.prompt.is_none() {
-        config.prompt = Some("auto".to_owned());
-    }
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider);
@@ -453,11 +446,8 @@ pub fn auto(config: &mut Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn file(config: &mut Config) -> Result<(), String> {
+pub fn file(config: &Config) -> Result<(), String> {
     let provider = FileItemProvider::new("".to_owned());
-    if config.prompt.is_none() {
-        config.prompt = Some("file".to_owned());
-    }
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider);
@@ -475,11 +465,8 @@ pub fn file(config: &mut Config) -> Result<(), String> {
     Ok(())
 }
 
-pub fn math(config: &mut Config) -> Result<(), String> {
+pub fn math(config: &Config) -> Result<(), String> {
     let provider = MathProvider::new("".to_owned());
-    if config.prompt.is_none() {
-        config.prompt = Some("math".to_owned());
-    }
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider);
