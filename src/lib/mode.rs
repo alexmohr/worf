@@ -1,5 +1,5 @@
 use std::os::unix::prelude::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::{env, fmt, fs, io};
 
@@ -89,7 +89,7 @@ impl<T: Clone> DRunProvider<T> {
                     "Skipping desktop entry for {name:?} because action {action:?} does not exist"
                 );
                 continue;
-            };
+            }
 
             let icon = file
                 .entry
@@ -176,13 +176,13 @@ impl<T: Clone> FileItemProvider<T> {
         }
     }
 
-    fn resolve_icon_for_name(&self, path: PathBuf) -> String {
-        let result = tree_magic_mini::from_filepath(&path);
+    fn resolve_icon_for_name(path: &Path) -> String {
+        let result = tree_magic_mini::from_filepath(path);
         if let Some(result) = result {
             if result.starts_with("image") {
                 "image-x-generic".to_owned()
             } else if result.starts_with("inode") {
-                return result.replace("/", "-");
+                return result.replace('/', "-");
             } else if result.starts_with("text") {
                 if result.contains("plain") {
                     "text-x-generic".to_owned()
@@ -225,7 +225,7 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
         };
 
         let mut trimmed_search = search.unwrap_or(&default_path).to_owned();
-        if !trimmed_search.starts_with("/") && !trimmed_search.starts_with("~") {
+        if !trimmed_search.starts_with('/') && !trimmed_search.starts_with('~') {
             trimmed_search = format!("{default_path}/{trimmed_search}");
         }
 
@@ -241,38 +241,45 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
         }
 
         if path.is_dir() {
-            for entry in path.read_dir().unwrap() {
-                if let Ok(entry) = entry {
-                    let mut path_str = entry.path().to_str().unwrap_or("").to_string();
-                    if trimmed_search.starts_with("~") {
-                        if let Some(home_dir) = dirs::home_dir() {
-                            path_str = path_str.replace(home_dir.to_str().unwrap_or(""), "~");
+            if let Ok(entries) = path.read_dir() {
+                for entry in entries.flatten() {
+                    if let Some(mut path_str) =
+                        entry.path().to_str().map(std::string::ToString::to_string)
+                    {
+                        if trimmed_search.starts_with('~') {
+                            if let Some(home_dir) = dirs::home_dir() {
+                                if let Some(home_str) = home_dir.to_str() {
+                                    path_str = path_str.replace(home_str, "~");
+                                }
+                            }
                         }
-                    }
 
-                    if entry.path().is_dir() {
-                        path_str += "/";
-                    }
+                        if entry.path().is_dir() {
+                            path_str.push('/');
+                        }
 
-                    items.push({
-                        MenuItem {
+                        items.push(MenuItem {
                             label: path_str.clone(),
-                            icon_path: Some(self.resolve_icon_for_name(entry.path())),
+                            icon_path: Some(FileItemProvider::<T>::resolve_icon_for_name(
+                                &entry.path(),
+                            )),
                             action: Some(format!("xdg-open {path_str}")),
                             sub_elements: vec![],
                             working_dir: None,
                             initial_sort_score: 0,
                             search_sort_score: 0.0,
                             data: Some(self.menu_item_data.clone()),
-                        }
-                    });
+                        });
+                    }
                 }
             }
         } else {
             items.push({
                 MenuItem {
-                    label: trimmed_search.to_owned(),
-                    icon_path: Some(self.resolve_icon_for_name(PathBuf::from(&trimmed_search))),
+                    label: trimmed_search.clone(),
+                    icon_path: Some(FileItemProvider::<T>::resolve_icon_for_name(
+                        &PathBuf::from(&trimmed_search),
+                    )),
                     action: Some(format!("xdg-open {trimmed_search}")),
                     sub_elements: vec![],
                     working_dir: None,
@@ -329,7 +336,7 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
             let item = MenuItem {
                 label: result,
                 icon_path: None,
-                action: search.map(|s| s.to_string()),
+                action: search.map(String::from),
                 sub_elements: vec![],
                 working_dir: None,
                 initial_sort_score: 0,
@@ -361,17 +368,17 @@ enum AutoRunType {
 
 #[derive(Clone)]
 struct AutoItemProvider {
-    drun_provider: DRunProvider<AutoRunType>,
-    file_provider: FileItemProvider<AutoRunType>,
-    math_provider: MathProvider<AutoRunType>,
+    drun: DRunProvider<AutoRunType>,
+    file: FileItemProvider<AutoRunType>,
+    math: MathProvider<AutoRunType>,
 }
 
 impl AutoItemProvider {
     fn new() -> Self {
         AutoItemProvider {
-            drun_provider: DRunProvider::new(AutoRunType::DRun),
-            file_provider: FileItemProvider::new(AutoRunType::File),
-            math_provider: MathProvider::new(AutoRunType::Math),
+            drun: DRunProvider::new(AutoRunType::DRun),
+            file: FileItemProvider::new(AutoRunType::File),
+            math: MathProvider::new(AutoRunType::Math),
         }
     }
 }
@@ -381,21 +388,21 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
         if let Some(search) = search_opt {
             let trimmed_search = search.trim();
             if trimmed_search.is_empty() {
-                self.drun_provider.get_elements(search_opt)
+                self.drun.get_elements(search_opt)
             } else if MathProvider::<AutoRunType>::contains_math_functions_or_starts_with_number(
                 trimmed_search,
             ) {
-                self.math_provider.get_elements(search_opt)
-            } else if trimmed_search.starts_with("$")
-                || trimmed_search.starts_with("/")
-                || trimmed_search.starts_with("~")
+                self.math.get_elements(search_opt)
+            } else if trimmed_search.starts_with('$')
+                || trimmed_search.starts_with('/')
+                || trimmed_search.starts_with('~')
             {
-                self.file_provider.get_elements(search_opt)
+                self.file.get_elements(search_opt)
             } else {
-                self.drun_provider.get_elements(search_opt)
+                self.drun.get_elements(search_opt)
             }
         } else {
-            self.drun_provider.get_elements(search_opt)
+            self.drun.get_elements(search_opt)
         }
     }
 
@@ -411,7 +418,7 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
 ///
 /// Will return `Err` if it was not able to spawn the process
 pub fn d_run(config: &Config) -> Result<(), ModeError> {
-    let provider = DRunProvider::new("".to_owned());
+    let provider = DRunProvider::new(String::new());
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 
@@ -427,10 +434,14 @@ pub fn d_run(config: &Config) -> Result<(), ModeError> {
     Ok(())
 }
 
+/// # Errors
+///
+/// Will return `Err`
+/// * if it was not able to spawn the process
 pub fn auto(config: &Config) -> Result<(), ModeError> {
     let provider = AutoItemProvider::new();
-    let cache_path = provider.drun_provider.cache_path.clone();
-    let mut cache = provider.drun_provider.cache.clone();
+    let cache_path = provider.drun.cache_path.clone();
+    let mut cache = provider.drun.cache.clone();
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider);
@@ -459,8 +470,12 @@ pub fn auto(config: &Config) -> Result<(), ModeError> {
     Ok(())
 }
 
+/// # Errors
+///
+/// Will return `Err`
+/// * if it was not able to spawn the process
 pub fn file(config: &Config) -> Result<(), ModeError> {
-    let provider = FileItemProvider::new("".to_owned());
+    let provider = FileItemProvider::new(String::new());
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider);
@@ -478,8 +493,8 @@ pub fn file(config: &Config) -> Result<(), ModeError> {
     Ok(())
 }
 
-pub fn math(config: &Config) -> Result<(), ModeError> {
-    let provider = MathProvider::new("".to_owned());
+pub fn math(config: &Config) {
+    let provider = MathProvider::new(String::new);
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider);
@@ -489,10 +504,11 @@ pub fn math(config: &Config) -> Result<(), ModeError> {
             log::error!("No item selected");
         }
     }
-
-    Ok(())
 }
 
+/// # Errors
+///
+/// todo
 pub fn dmenu(_: &Config) -> Result<(), ModeError> {
     Ok(())
 }
@@ -504,7 +520,7 @@ fn update_drun_cache_and_run<T: Clone>(
 ) -> Result<(), ModeError> {
     if let Some(cache_path) = cache_path {
         *cache.entry(selection_result.label).or_insert(0) += 1;
-        if let Err(e) = save_cache_file(&cache_path, &cache) {
+        if let Err(e) = save_cache_file(&cache_path, cache) {
             log::warn!("cannot save drun cache {e:?}");
         }
     }
@@ -583,7 +599,7 @@ fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), ModeError> 
 
     if let Some(dir) = working_dir {
         env::set_current_dir(dir)
-            .map_err(|e| ModeError::RunError(format!("cannot set workdir {e}")))?
+            .map_err(|e| ModeError::RunError(format!("cannot set workdir {e}")))?;
     }
 
     let exec = parts[0].replace('"', "");

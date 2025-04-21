@@ -155,11 +155,11 @@ fn build_ui<T, P>(
         window.set_namespace(Some("worf"));
     }
 
-    config.location.as_ref().map(|location| {
+    if let Some(location) = config.location.as_ref() {
         for anchor in location {
             window.set_anchor(anchor.into(), true);
         }
-    });
+    }
 
     let outer_box = gtk4::Box::new(config.orientation.unwrap().into(), 0);
     outer_box.set_widget_name("outer-box");
@@ -210,16 +210,15 @@ fn build_ui<T, P>(
         &item_provider.lock().unwrap().get_elements(None),
         &list_items,
         &inner_box,
-        &config,
-        &sender,
-        &app,
+        config,
+        sender,
+        app,
         &window,
     );
 
     let items_sort = ArcMenuMap::clone(&list_items);
-    inner_box.set_sort_func(move |child1, child2| {
-        sort_menu_items_by_score(child1, child2, items_sort.clone())
-    });
+    inner_box
+        .set_sort_func(move |child1, child2| sort_menu_items_by_score(child1, child2, &items_sort));
 
     let items_focus = ArcMenuMap::clone(&list_items);
     inner_box.connect_map(move |fb| {
@@ -235,7 +234,7 @@ fn build_ui<T, P>(
 
     setup_key_event_handler(
         &window,
-        entry.clone(),
+        &entry,
         inner_box,
         app.clone(),
         sender.clone(),
@@ -246,7 +245,7 @@ fn build_ui<T, P>(
 
     window.set_child(Widget::NONE);
     window.show();
-    animate_window_show(config.clone(), window.clone(), outer_box);
+    animate_window_show(config, window.clone(), outer_box);
 }
 
 fn build_ui_from_menu_items<T: Clone + 'static>(
@@ -262,30 +261,26 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
         let mut arc_lock = list_items.lock().unwrap();
         inner_box.unset_sort_func();
 
-        loop {
-            if let Some(b) = inner_box.child_at_index(0) {
-                inner_box.remove(&b);
-            } else {
-                break;
-            }
+        while let Some(b) = inner_box.child_at_index(0) {
+            inner_box.remove(&b);
         }
 
         for entry in items {
             arc_lock.insert(
-                add_menu_item(&inner_box, entry, config, sender, &list_items, app, window),
+                add_menu_item(inner_box, entry, config, sender, list_items, app, window),
                 (*entry).clone(),
             );
         }
     }
-    let lic = list_items.clone();
-    inner_box
-        .set_sort_func(move |child2, child1| sort_menu_items_by_score(child1, child2, lic.clone()));
+    let lic = ArcMenuMap::clone(list_items);
+    inner_box.set_sort_func(move |child2, child1| sort_menu_items_by_score(child1, child2, &lic));
     inner_box.invalidate_sort();
 }
 
+#[allow(clippy::too_many_arguments)] // todo fix this
 fn setup_key_event_handler<T: Clone + 'static>(
     window: &ApplicationWindow,
-    entry: SearchEntry,
+    entry: &SearchEntry,
     inner_box: FlowBox,
     app: Application,
     sender: MenuItemSender<T>,
@@ -307,13 +302,14 @@ fn setup_key_event_handler<T: Clone + 'static>(
             &config,
             &item_provider,
             &window_clone,
-            &key_value,
+            key_value,
         )
     });
 
     window.add_controller(key_controller);
 }
 
+#[allow(clippy::too_many_arguments)] // todo refactor this?
 fn handle_key_press<T: Clone + 'static>(
     search_entry: &SearchEntry,
     inner_box: &FlowBox,
@@ -323,54 +319,54 @@ fn handle_key_press<T: Clone + 'static>(
     config: &Config,
     item_provider: &ArcProvider<T>,
     window_clone: &ApplicationWindow,
-    keyboard_key: &Key,
+    keyboard_key: Key,
 ) -> Propagation {
     let update_view = |query: &String, items: Vec<MenuItem<T>>| {
         build_ui_from_menu_items(
             &items,
-            &list_items,
-            &inner_box,
-            &config,
-            &sender,
-            &app,
-            &window_clone,
+            list_items,
+            inner_box,
+            config,
+            sender,
+            app,
+            window_clone,
         );
-        filter_widgets(query, list_items, &config, &inner_box);
-        select_first_visible_child(&list_items, &inner_box);
+        filter_widgets(query, list_items, config, inner_box);
+        select_first_visible_child(list_items, inner_box);
     };
 
     let update_view_from_provider = |query: &String| {
-        let filtered_list = item_provider.lock().unwrap().get_elements(Some(&query));
-        update_view(query, filtered_list)
+        let filtered_list = item_provider.lock().unwrap().get_elements(Some(query));
+        update_view(query, filtered_list);
     };
 
     match keyboard_key {
-        &Key::Escape => {
+        Key::Escape => {
             if let Err(e) = sender.send(Err(anyhow!("No item selected"))) {
                 log::error!("failed to send message {e}");
             }
-            close_gui(app.clone(), window_clone.clone(), &config);
+            close_gui(app.clone(), window_clone.clone(), config);
         }
-        &Key::Return => {
+        Key::Return => {
             if let Err(e) = handle_selected_item(
-                &sender,
+                sender,
                 app.clone(),
                 window_clone.clone(),
-                &config,
-                &inner_box,
-                &list_items,
+                config,
+                inner_box,
+                list_items,
             ) {
                 log::error!("{e}");
             }
         }
-        &Key::BackSpace => {
+        Key::BackSpace => {
             let mut query = search_entry.text().to_string();
             query.pop();
 
             search_entry.set_text(&query);
             update_view_from_provider(&query);
         }
-        &Key::Tab => {
+        Key::Tab => {
             if let Some(fb) = inner_box.selected_children().first() {
                 if let Some(child) = fb.child() {
                     let expander = child.downcast::<Expander>().ok();
@@ -381,7 +377,7 @@ fn handle_key_press<T: Clone + 'static>(
                         let menu_item = lock.get(fb);
                         if let Some(menu_item) = menu_item {
                             if let Some(new_items) =
-                                item_provider.lock().unwrap().get_sub_elements(&menu_item)
+                                item_provider.lock().unwrap().get_sub_elements(menu_item)
                             {
                                 let query = menu_item.label.clone();
                                 drop(lock);
@@ -411,7 +407,7 @@ fn handle_key_press<T: Clone + 'static>(
 fn sort_menu_items_by_score<T: std::clone::Clone>(
     child1: &FlowBoxChild,
     child2: &FlowBoxChild,
-    items_lock: ArcMenuMap<T>,
+    items_lock: &ArcMenuMap<T>,
 ) -> Ordering {
     let lock = items_lock.lock().unwrap();
     let m1 = lock.get(child1);
@@ -444,7 +440,7 @@ fn sort_menu_items_by_score<T: std::clone::Clone>(
     }
 }
 
-fn animate_window_show(config: Config, window: ApplicationWindow, outer_box: gtk4::Box) {
+fn animate_window_show(config: &Config, window: ApplicationWindow, outer_box: gtk4::Box) {
     let display = window.display();
     if let Some(surface) = window.surface() {
         // todo this does not work for multi monitor systems
