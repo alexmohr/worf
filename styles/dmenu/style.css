@@ -1,56 +1,52 @@
 * {
   font-family: DejaVu;
+  margin: 0;
+  padding: 0;
 }
 
 #window {
   all: unset;
-  background-color: rgba(33, 33, 33, 0.76); /* Matches #212121BB */
-  border-radius: 0;
-  padding-top: 3rem;
+  background-color: rgba(33, 33, 33, 1);
+  margin-left: 10px;
+  margin-right: 10px;
+  border-radius: 6px;
 }
 
 #window #outer-box {
+  /* The name of the search bar */
+  /* The name of the scrolled window containing all of the entries */
+  border: none;
 }
 
 #window #outer-box #input {
   background-color: rgba(32, 32, 32, 0.6);
   color: #f2f2f2;
   border-bottom: 2px solid rgba(214, 174, 0, 1);
+  padding: 0.8rem 1rem;
   font-size: 1rem;
-  margin: 1rem 50rem 2rem;
 }
 
 #window #outer-box #input:focus, #window #outer-box #input:focus-visible, #window #outer-box #input:active {
   all: unset;
   background-color: rgba(32, 32, 32, 0.6);
-  color: #f2f2f2;
-  border-bottom: 2px solid rgba(214, 174, 2, 1);
   font-size: 1rem;
-}
-
-#window #outer-box #scroll #inner-box {
-  padding: 0 25rem;
-
 }
 
 #window #outer-box #scroll #inner-box #entry {
   color: #fff;
   background-color: rgba(32, 32, 32, 0.1);
-  padding: 1rem;
-  margin: 1rem;
   border-radius: 0.5rem;
   border-bottom: 5px solid rgba(32, 32, 32, 0.1);
 
 }
 #window #outer-box #scroll #inner-box #entry #img {
-  margin-right: 0.5rem;
+
 }
 
 #window #outer-box #scroll #inner-box #entry:selected {
   color: #fff;
   background-color: rgba(255, 255, 255, 0.1);
   outline: none;
-  border-bottom: 5px solid rgba(214, 174, 0, 1);
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }

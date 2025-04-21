@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -19,14 +20,20 @@ use gtk4::{
     ListBox, ListBoxRow, Ordering, PolicyType, ScrolledWindow, SearchEntry, Widget, gdk,
 };
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
-use gtk4_layer_shell::{KeyboardMode, LayerShell};
+use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 
 use crate::config;
 use crate::config::{Animation, Config, MatchMethod};
 
 type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
+type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T>>>;
 type MenuItemSender<T> = Sender<Result<MenuItem<T>, anyhow::Error>>;
+
+pub trait ItemProvider<T: std::clone::Clone> {
+    fn get_elements(&mut self, search: Option<&str>) -> Vec<MenuItem<T>>;
+    fn get_sub_elements(&mut self, item: &MenuItem<T>) -> Option<Vec<MenuItem<T>>>;
+}
 
 impl From<config::Orientation> for Orientation {
     fn from(orientation: config::Orientation) -> Self {
@@ -47,8 +54,8 @@ impl From<config::Align> for Align {
     }
 }
 
-#[derive(Clone)]
-pub struct MenuItem<T> {
+#[derive(Clone, PartialEq)]
+pub struct MenuItem<T: Clone> {
     pub label: String, // todo support empty label?
     pub icon_path: Option<String>,
     pub action: Option<String>,
@@ -61,12 +68,19 @@ pub struct MenuItem<T> {
     pub data: Option<T>,
 }
 
+impl<T: Clone> AsRef<MenuItem<T>> for MenuItem<T> {
+    fn as_ref(&self) -> &MenuItem<T> {
+        self
+    }
+}
+
 /// # Errors
 ///
 /// Will return Err when the channel between the UI and this is broken
-pub fn show<T>(config: Config, elements: Vec<MenuItem<T>>) -> Result<MenuItem<T>, anyhow::Error>
+pub fn show<T, P>(config: Config, item_provider: P) -> Result<MenuItem<T>, anyhow::Error>
 where
     T: Clone + 'static,
+    P: ItemProvider<T> + 'static + Clone,
 {
     if let Some(ref css) = config.style {
         let provider = CssProvider::new();
@@ -85,7 +99,7 @@ where
     let (sender, receiver) = channel::bounded(1);
 
     app.connect_activate(move |app| {
-        build_ui(&config, &elements, &sender, app);
+        build_ui(&config, item_provider.clone(), &sender, app);
     });
 
     let gtk_args: [&str; 0] = [];
@@ -93,13 +107,14 @@ where
     receiver.recv()?
 }
 
-fn build_ui<T>(
+fn build_ui<T, P>(
     config: &Config,
-    elements: &Vec<MenuItem<T>>,
+    item_provider: P,
     sender: &Sender<Result<MenuItem<T>, anyhow::Error>>,
     app: &Application,
 ) where
     T: Clone + 'static,
+    P: ItemProvider<T> + 'static,
 {
     let window = ApplicationWindow::builder()
         .application(app)
@@ -119,6 +134,9 @@ fn build_ui<T>(
         window.set_namespace(Some("worf"));
     }
 
+    /// todo make this configurable
+    window.set_anchor(Edge::Top, true);
+
     let outer_box = gtk4::Box::new(config.orientation.unwrap().into(), 0);
     outer_box.set_widget_name("outer-box");
 
@@ -126,7 +144,7 @@ fn build_ui<T>(
     entry.set_widget_name("input");
     entry.set_css_classes(&["input"]);
     entry.set_placeholder_text(config.prompt.as_deref());
-    entry.set_sensitive(false);
+    entry.set_can_focus(false);
     outer_box.append(&entry);
 
     let scroll = ScrolledWindow::new();
@@ -145,6 +163,7 @@ fn build_ui<T>(
     inner_box.set_css_classes(&["inner-box"]);
     inner_box.set_hexpand(true);
     inner_box.set_vexpand(false);
+
     if let Some(halign) = config.halign {
         inner_box.set_halign(halign.into());
     }
@@ -161,27 +180,29 @@ fn build_ui<T>(
     inner_box.set_max_children_per_line(config.columns.unwrap());
     inner_box.set_activate_on_single_click(true);
 
+    let item_provider = Arc::new(Mutex::new(item_provider));
     let list_items: ArcMenuMap<T> = Arc::new(Mutex::new(HashMap::new()));
-    for entry in elements {
-        list_items
-            .lock()
-            .unwrap() // panic here ok? deadlock?
-            .insert(
-                add_menu_item(&inner_box, entry, config, sender, &list_items, app, &window),
-                entry.clone(),
-            );
-    }
+    build_ui_from_menu_items(
+        &item_provider.lock().unwrap().get_elements(None),
+        &list_items,
+        &inner_box,
+        &config,
+        &sender,
+        &app,
+        &window,
+    );
 
-    let items_sort = Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(&list_items);
-    inner_box.set_sort_func(move |child1, child2| sort_menu_items(child1, child2, &items_sort));
+    let items_sort = ArcMenuMap::clone(&list_items);
+    inner_box.set_sort_func(move |child1, child2| {
+        sort_menu_items_by_score(child1, child2, items_sort.clone())
+    });
 
-    let items_focus = Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(&list_items);
+    let items_focus = ArcMenuMap::clone(&list_items);
     inner_box.connect_map(move |fb| {
         fb.grab_focus();
         fb.invalidate_sort();
 
-        let mut item_lock = items_focus.lock().unwrap();
-        select_first_visible_child(&mut *item_lock, fb);
+        select_first_visible_child(&items_focus, fb);
     });
 
     let wrapper_box = gtk4::Box::new(Orientation::Vertical, 0);
@@ -194,8 +215,9 @@ fn build_ui<T>(
         inner_box,
         app.clone(),
         sender.clone(),
-        Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(&list_items),
+        ArcMenuMap::clone(&list_items),
         config.clone(),
+        item_provider,
     );
 
     window.set_child(Widget::NONE);
@@ -203,66 +225,169 @@ fn build_ui<T>(
     animate_window_show(config.clone(), window.clone(), outer_box);
 }
 
+fn build_ui_from_menu_items<T: Clone + 'static>(
+    items: &Vec<MenuItem<T>>,
+    list_items: &ArcMenuMap<T>,
+    inner_box: &FlowBox,
+    config: &Config,
+    sender: &MenuItemSender<T>,
+    app: &Application,
+    window: &ApplicationWindow,
+) {
+    {
+        let mut arc_lock = list_items.lock().unwrap();
+        inner_box.unset_sort_func();
+
+        loop {
+            if let Some(b) = inner_box.child_at_index(0) {
+                inner_box.remove(&b);
+            } else {
+                break;
+            }
+        }
+
+        for entry in items {
+            arc_lock.insert(
+                add_menu_item(&inner_box, entry, config, sender, &list_items, app, window),
+                (*entry).clone(),
+            );
+        }
+    }
+    let lic = list_items.clone();
+    inner_box
+        .set_sort_func(move |child2, child1| sort_menu_items_by_score(child1, child2, lic.clone()));
+    inner_box.invalidate_sort();
+}
+
 fn setup_key_event_handler<T: Clone + 'static>(
     window: &ApplicationWindow,
-    entry_clone: SearchEntry,
+    entry: SearchEntry,
     inner_box: FlowBox,
     app: Application,
     sender: MenuItemSender<T>,
     list_items: Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>,
     config: Config,
+    item_provider: ArcProvider<T>,
 ) {
     let key_controller = EventControllerKey::new();
 
     let window_clone = window.clone();
+    let entry_clone = entry.clone();
     key_controller.connect_key_pressed(move |_, key_value, _, _| {
-        match key_value {
-            Key::Escape => {
-                if let Err(e) = sender.send(Err(anyhow!("No item selected"))) {
-                    log::error!("failed to send message {e}");
-                }
-                close_gui(app.clone(), window_clone.clone(), &config);
-            }
-            Key::Return => {
-                if let Err(e) = handle_selected_item(
-                    &sender,
-                    app.clone(),
-                    window_clone.clone(),
-                    &config,
-                    &inner_box,
-                    &list_items,
-                ) {
-                    log::error!("{e}");
-                }
-            }
-            Key::BackSpace => {
-                let mut items = list_items.lock().unwrap();
-                let mut query = entry_clone.text().to_string();
-                query.pop();
-
-                entry_clone.set_text(&query);
-                filter_widgets(&query, &mut items, &config, &inner_box);
-            }
-            _ => {
-                let mut items = list_items.lock().unwrap();
-                if let Some(c) = key_value.to_unicode() {
-                    let current = entry_clone.text().to_string();
-                    let query = format!("{current}{c}");
-                    entry_clone.set_text(&query);
-                    filter_widgets(&query, &mut items, &config, &inner_box);
-                }
-            }
-        }
-
-        Propagation::Proceed
+        handle_key_press(
+            &entry_clone,
+            &inner_box,
+            &app,
+            &sender,
+            &list_items,
+            &config,
+            &item_provider,
+            &window_clone,
+            &key_value,
+        )
     });
+
     window.add_controller(key_controller);
 }
 
-fn sort_menu_items<T>(
+fn handle_key_press<T: Clone + 'static>(
+    search_entry: &SearchEntry,
+    inner_box: &FlowBox,
+    app: &Application,
+    sender: &MenuItemSender<T>,
+    list_items: &ArcMenuMap<T>,
+    config: &Config,
+    item_provider: &ArcProvider<T>,
+    window_clone: &ApplicationWindow,
+    keyboard_key: &Key,
+) -> Propagation {
+    let update_view = |query: &String, items: Vec<MenuItem<T>>| {
+        build_ui_from_menu_items(
+            &items,
+            &list_items,
+            &inner_box,
+            &config,
+            &sender,
+            &app,
+            &window_clone,
+        );
+        filter_widgets(query, list_items, &config, &inner_box);
+        select_first_visible_child(&list_items, &inner_box);
+    };
+
+    let update_view_from_provider = |query: &String| {
+        let filtered_list = item_provider.lock().unwrap().get_elements(Some(&query));
+        update_view(query, filtered_list)
+    };
+
+    match keyboard_key {
+        &Key::Escape => {
+            if let Err(e) = sender.send(Err(anyhow!("No item selected"))) {
+                log::error!("failed to send message {e}");
+            }
+            close_gui(app.clone(), window_clone.clone(), &config);
+        }
+        &Key::Return => {
+            if let Err(e) = handle_selected_item(
+                &sender,
+                app.clone(),
+                window_clone.clone(),
+                &config,
+                &inner_box,
+                &list_items,
+            ) {
+                log::error!("{e}");
+            }
+        }
+        &Key::BackSpace => {
+            let mut query = search_entry.text().to_string();
+            query.pop();
+
+            search_entry.set_text(&query);
+            update_view_from_provider(&query);
+        }
+        &Key::Tab => {
+            if let Some(fb) = inner_box.selected_children().first() {
+                if let Some(child) = fb.child() {
+                    let expander = child.downcast::<Expander>().ok();
+                    if let Some(expander) = expander {
+                        expander.set_expanded(true);
+                    } else {
+                        let lock = list_items.lock().unwrap();
+                        let menu_item = lock.get(fb);
+                        if let Some(menu_item) = menu_item {
+                            if let Some(new_items) =
+                                item_provider.lock().unwrap().get_sub_elements(&menu_item)
+                            {
+                                let query = menu_item.label.clone();
+                                drop(lock);
+
+                                search_entry.set_text(&query);
+                                update_view(&query, new_items);
+                            }
+                        }
+                    }
+                }
+            }
+            return Propagation::Stop;
+        }
+        _ => {
+            if let Some(c) = keyboard_key.to_unicode() {
+                let current = search_entry.text().to_string();
+                let query = format!("{current}{c}");
+                search_entry.set_text(&query);
+                update_view_from_provider(&query);
+            }
+        }
+    }
+
+    Propagation::Proceed
+}
+
+fn sort_menu_items_by_score<T: std::clone::Clone>(
     child1: &FlowBoxChild,
     child2: &FlowBoxChild,
-    items_lock: &Mutex<HashMap<FlowBoxChild, MenuItem<T>>>,
+    items_lock: ArcMenuMap<T>,
 ) -> Ordering {
     let lock = items_lock.lock().unwrap();
     let m1 = lock.get(child1);
@@ -302,21 +427,21 @@ fn animate_window_show(config: Config, window: ApplicationWindow, outer_box: gtk
         let monitor = display.monitor_at_surface(&surface);
         if let Some(monitor) = monitor {
             let geometry = monitor.geometry();
-            let Some(target_width) = percent_or_absolute(&config.width.unwrap(), geometry.width())
+            let Some(target_width) = percent_or_absolute(config.width.as_ref(), geometry.width())
             else {
                 return;
             };
 
             let Some(target_height) =
-                percent_or_absolute(&config.height.unwrap(), geometry.height())
+                percent_or_absolute(config.height.as_ref(), geometry.height())
             else {
                 return;
             };
 
             animate_window(
                 window.clone(),
-                config.show_animation.unwrap(),
-                config.show_animation_time.unwrap(),
+                config.show_animation.unwrap_or(Animation::None),
+                config.show_animation_time.unwrap_or(0),
                 target_height,
                 target_width,
                 move || {
@@ -348,8 +473,8 @@ where
 
     animate_window(
         window,
-        config.hide_animation.unwrap(),
-        config.hide_animation_time.unwrap(),
+        config.hide_animation.unwrap_or(Animation::None),
+        config.hide_animation_time.unwrap_or(0),
         target_h,
         target_w,
         on_done_func,
@@ -563,7 +688,7 @@ fn add_menu_item<T: Clone + 'static>(
         create_menu_row(
             entry_element,
             config,
-            Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(lock_arc),
+            ArcMenuMap::clone(lock_arc),
             sender.clone(),
             app.clone(),
             window.clone(),
@@ -579,7 +704,7 @@ fn add_menu_item<T: Clone + 'static>(
         let menu_row = create_menu_row(
             entry_element,
             config,
-            Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(lock_arc),
+            ArcMenuMap::clone(lock_arc),
             sender.clone(),
             app.clone(),
             window.clone(),
@@ -595,7 +720,7 @@ fn add_menu_item<T: Clone + 'static>(
             let sub_row = create_menu_row(
                 sub_item,
                 config,
-                Arc::<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>::clone(lock_arc),
+                ArcMenuMap::clone(lock_arc),
                 sender.clone(),
                 app.clone(),
                 window.clone(),
@@ -659,7 +784,13 @@ fn create_menu_row<T: Clone + 'static>(
 
     row.add_controller(click);
 
-    let row_box = gtk4::Box::new(config.row_bow_orientation.unwrap().into(), 0);
+    let row_box = gtk4::Box::new(
+        config
+            .row_bow_orientation
+            .unwrap_or(config::Orientation::Horizontal)
+            .into(),
+        0,
+    );
     row_box.set_hexpand(true);
     row_box.set_vexpand(false);
     row_box.set_halign(Align::Fill);
@@ -690,86 +821,97 @@ fn create_menu_row<T: Clone + 'static>(
     label.set_wrap(true);
     row_box.append(&label);
 
-    if config.content_halign.unwrap() == config::Align::Start
-        || config.content_halign.unwrap() == config::Align::Fill
+    if config
+        .content_halign
+        .is_some_and(|c| c == config::Align::Start)
+        || config
+            .content_halign
+            .is_some_and(|c| c == config::Align::Fill)
     {
         label.set_xalign(0.0);
     }
     row.upcast()
 }
 
-fn filter_widgets<T>(
+fn filter_widgets<T: Clone>(
     query: &str,
-    items: &mut HashMap<FlowBoxChild, MenuItem<T>>,
+    item_arc: &ArcMenuMap<T>,
     config: &Config,
     inner_box: &FlowBox,
 ) {
-    if items.is_empty() {
-        for (child, _) in items.iter() {
-            child.set_visible(true);
-        }
-
-        if let Some(child) = inner_box.first_child() {
-            child.grab_focus();
-            let fb = child.downcast::<FlowBoxChild>();
-            if let Ok(fb) = fb {
-                inner_box.select_child(&fb);
+    {
+        let mut items = item_arc.lock().unwrap();
+        if items.is_empty() {
+            for (child, _) in items.iter() {
+                child.set_visible(true);
             }
-        }
-        return;
-    }
 
-    let query = query.to_owned().to_lowercase();
-    for (flowbox_child, menu_item) in items.iter_mut() {
-        let menu_item_search = format!(
-            "{} {}",
-            menu_item
-                .action
-                .as_ref()
-                .map(|a| a.to_lowercase())
-                .unwrap_or_default(),
-            &menu_item.label.to_lowercase()
-        );
-
-        let matching = if let Some(matching) = &config.matching {
-            matching
-        } else {
-            &config::default_match_method().unwrap()
-        };
-
-        let (search_sort_score, visible) = match matching {
-            MatchMethod::Fuzzy => {
-                let score = strsim::normalized_levenshtein(&query, &menu_item_search);
-                (score, score > config.fuzzy_min_score.unwrap())
-            }
-            MatchMethod::Contains => {
-                if menu_item_search.contains(&query) {
-                    (1.0, true)
-                } else {
-                    (0.0, false)
+            if let Some(child) = inner_box.first_child() {
+                child.grab_focus();
+                let fb = child.downcast::<FlowBoxChild>();
+                if let Ok(fb) = fb {
+                    inner_box.select_child(&fb);
                 }
             }
-            MatchMethod::MultiContains => {
-                let score = query
-                    .split(' ')
-                    .filter(|i| menu_item_search.contains(i))
-                    .map(|_| 1.0)
-                    .sum();
-                (score, score > 0.0)
-            }
-        };
+            return;
+        }
 
-        menu_item.search_sort_score = search_sort_score;
-        flowbox_child.set_visible(visible);
+        let query = query.to_owned().to_lowercase();
+        for (flowbox_child, menu_item) in items.iter_mut() {
+            let menu_item_search = format!(
+                "{} {}",
+                menu_item
+                    .action
+                    .as_ref()
+                    .map(|a| a.to_lowercase())
+                    .unwrap_or_default(),
+                &menu_item.label.to_lowercase()
+            );
+
+            let matching = if let Some(matching) = &config.matching {
+                matching
+            } else {
+                &config::default_match_method().unwrap()
+            };
+
+            let (search_sort_score, visible) = match matching {
+                MatchMethod::Fuzzy => {
+                    let score = strsim::normalized_levenshtein(&query, &menu_item_search);
+                    (
+                        score,
+                        score
+                            > config
+                                .fuzzy_min_score
+                                .unwrap_or(config::default_fuzzy_min_score().unwrap_or(0.0)),
+                    )
+                }
+                MatchMethod::Contains => {
+                    if menu_item_search.contains(&query) {
+                        (1.0, true)
+                    } else {
+                        (0.0, false)
+                    }
+                }
+                MatchMethod::MultiContains => {
+                    let score = query
+                        .split(' ')
+                        .filter(|i| menu_item_search.contains(i))
+                        .map(|_| 1.0)
+                        .sum();
+                    (score, score > 0.0)
+                }
+            };
+
+            menu_item.search_sort_score = search_sort_score;
+            flowbox_child.set_visible(visible);
+        }
     }
 
-    select_first_visible_child(items, inner_box);
+    inner_box.invalidate_sort();
 }
 
-fn select_first_visible_child<T>(
-    items: &mut HashMap<FlowBoxChild, MenuItem<T>>,
-    inner_box: &FlowBox,
-) {
+fn select_first_visible_child<T: Clone>(lock: &ArcMenuMap<T>, inner_box: &FlowBox) {
+    let items = lock.lock().unwrap();
     for i in 0..items.len() {
         let i_32 = i.try_into().unwrap_or(i32::MAX);
         if let Some(child) = inner_box.child_at_index(i_32) {
@@ -784,21 +926,25 @@ fn select_first_visible_child<T>(
 // allowed because truncating is fine, we do no need the precision
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_precision_loss)]
-fn percent_or_absolute(value: &str, base_value: i32) -> Option<i32> {
-    if value.contains('%') {
-        let value = value.replace('%', "").trim().to_string();
-        match value.parse::<i32>() {
-            Ok(n) => Some(((n as f32 / 100.0) * base_value as f32) as i32),
-            Err(_) => None,
+fn percent_or_absolute(value: Option<&String>, base_value: i32) -> Option<i32> {
+    if let Some(value) = value {
+        if value.contains('%') {
+            let value = value.replace('%', "").trim().to_string();
+            match value.parse::<i32>() {
+                Ok(n) => Some(((n as f32 / 100.0) * base_value as f32) as i32),
+                Err(_) => None,
+            }
+        } else {
+            value.parse::<i32>().ok()
         }
     } else {
-        value.parse::<i32>().ok()
+        None
     }
 }
 
 // highly unlikely that we are dealing with > i64 items
 #[allow(clippy::cast_possible_wrap)]
-pub fn initialize_sort_scores<T>(items: &mut [MenuItem<T>]) {
+pub fn initialize_sort_scores<T: std::clone::Clone>(items: &mut [MenuItem<T>]) {
     let mut regular_score = items.len() as i64;
     items.sort_by(|l, r| l.label.cmp(&r.label));
 

@@ -1,6 +1,7 @@
 use std::env;
 
 use anyhow::anyhow;
+use worf_lib::config::Mode;
 use worf_lib::{config, mode};
 
 fn main() -> anyhow::Result<()> {
@@ -12,18 +13,21 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let args = config::parse_args();
-    let config = config::load_config(Some(args))?;
+    let mut config = config::load_config(Some(args)).map_err(|e| anyhow!(e))?;
 
     if let Some(show) = &config.show {
         match show {
-            config::Mode::Run => {
+            Mode::Run => {
                 todo!("run not implemented")
             }
-            config::Mode::Drun => {
-                mode::d_run(&config)?;
+            Mode::Drun => {
+                mode::d_run(&mut config)?;
             }
-            config::Mode::Dmenu => {
+            Mode::Dmenu => {
                 todo!("dmenu not implemented")
+            }
+            Mode::Auto => {
+                mode::auto(&mut config)?;
             }
         }
 

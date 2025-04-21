@@ -1,12 +1,27 @@
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::{env, fs};
+use std::{env, fmt, fs};
 
-use anyhow::anyhow;
+use anyhow::{Error, anyhow};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
+
+#[derive(Debug)]
+pub enum ConfigurationError {
+    Open(String),
+    Parse(String),
+}
+
+impl fmt::Display for ConfigurationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ConfigurationError::Open(e) => write!(f, "{e}"),
+            ConfigurationError::Parse(e) => write!(f, "{e}"),
+        }
+    }
+}
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]
 pub enum MatchMethod {
@@ -46,6 +61,9 @@ pub enum Mode {
 
     /// reads from stdin and displays options which when selected will be output to stdout.
     Dmenu,
+
+    /// tries to determine automatically what to do
+    Auto,
 }
 
 #[derive(Debug, Error)]
@@ -62,6 +80,7 @@ impl FromStr for Mode {
             "run" => Ok(Mode::Run),
             "drun" => Ok(Mode::Drun),
             "dmenu" => Ok(Mode::Dmenu),
+            "auto" => Ok(Mode::Auto),
             _ => Err(ArgsError::InvalidParameter(
                 format!("{s} is not a valid argument show this, see help for details").to_owned(),
             )),
@@ -598,6 +617,17 @@ pub fn style_path(full_path: Option<String>) -> Result<PathBuf, anyhow::Error> {
     resolve_path(full_path, alternative_paths.into_iter().collect())
 }
 
+/// # Errors
+///
+/// Will return Err when it cannot resolve any path or no style is found
+pub fn conf_path(full_path: Option<String>) -> Result<PathBuf, anyhow::Error> {
+    let alternative_paths = path_alternatives(
+        vec![dirs::config_dir()],
+        &PathBuf::from("worf").join("config"),
+    );
+    resolve_path(full_path, alternative_paths.into_iter().collect())
+}
+
 #[must_use]
 pub fn path_alternatives(base_paths: Vec<Option<PathBuf>>, sub_path: &PathBuf) -> Vec<PathBuf> {
     base_paths
@@ -635,41 +665,28 @@ pub fn resolve_path(
 /// * cannot parse the config file
 /// * no config file exists
 /// * config file and args cannot be merged
-pub fn load_config(args_opt: Option<Config>) -> Result<Config, anyhow::Error> {
-    let home_dir = env::var("HOME")?;
-    let config_path = args_opt.as_ref().map(|c| {
-        c.config.as_ref().map_or_else(
-            || {
-                env::var("XDG_CONF_HOME")
-                    .map_or(
-                        PathBuf::from(home_dir.clone()).join(".config"),
-                        |xdg_conf_home| PathBuf::from(&xdg_conf_home),
-                    )
-                    .join("worf")
-                    .join("config")
-            },
-            PathBuf::from,
-        )
-    });
-
+pub fn load_config(args_opt: Option<Config>) -> Result<Config, ConfigurationError> {
+    let config_path = conf_path(args_opt.as_ref().map(|c| c.config.clone()).flatten());
     match config_path {
-        Some(path) => {
-            let toml_content = fs::read_to_string(path)?;
-            let mut config: Config = toml::from_str(&toml_content)?;
+        Ok(path) => {
+            let toml_content =
+                fs::read_to_string(path).map_err(|e| ConfigurationError::Open(format!("{e}")))?;
+            let mut config: Config = toml::from_str(&toml_content)
+                .map_err(|e| ConfigurationError::Parse(format!("{e}")))?;
 
             if let Some(args) = args_opt {
-                let mut merge_result = merge_config_with_args(&mut config, &args)?;
+                let mut merge_result = merge_config_with_args(&mut config, &args)
+                    .map_err(|e| ConfigurationError::Parse(format!("{e}")))?;
 
                 if merge_result.prompt.is_none() {
                     match &merge_result.show {
                         None => {}
-                        Some(mode) => {
-                            match mode {
-                                Mode::Run => merge_result.prompt = Some("run".to_owned()),
-                                Mode::Drun => merge_result.prompt = Some("drun".to_owned()),
-                                Mode::Dmenu => merge_result.prompt = Some("dmenu".to_owned()),
-                            }
-                        }
+                        Some(mode) => match mode {
+                            Mode::Run => merge_result.prompt = Some("run".to_owned()),
+                            Mode::Drun => merge_result.prompt = Some("drun".to_owned()),
+                            Mode::Dmenu => merge_result.prompt = Some("dmenu".to_owned()),
+                            _ => {}
+                        },
                     }
                 }
 
@@ -678,8 +695,31 @@ pub fn load_config(args_opt: Option<Config>) -> Result<Config, anyhow::Error> {
                 Ok(config)
             }
         }
-        None => Err(anyhow!("No config file found")),
+
+        Err(e) => Err(ConfigurationError::Open(format!("{e}"))),
     }
+}
+pub fn expand_path(input: &str) -> PathBuf {
+    let mut path = input.to_string();
+
+    // Expand ~ to home directory
+    if path.starts_with("~") {
+        if let Some(home_dir) = dirs::home_dir() {
+            path = path.replacen("~", home_dir.to_str().unwrap_or(""), 1);
+        }
+    }
+
+    // Expand $VAR style environment variables
+    if path.contains('$') {
+        for (key, value) in env::vars() {
+            let var_pattern = format!("${}", key);
+            if path.contains(&var_pattern) {
+                path = path.replace(&var_pattern, &value);
+            }
+        }
+    }
+
+    PathBuf::from(path)
 }
 
 /// # Errors
