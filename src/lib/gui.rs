@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -15,13 +14,17 @@ use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
     GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
 };
-use gtk4::{Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, Ordering, PolicyType, ScrolledWindow, SearchEntry, Widget, gdk, NaturalWrapMode};
+use gtk4::{
+    Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
+    ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry,
+    Widget, gdk,
+};
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 
 use crate::config;
-use crate::config::{Animation, Config, MatchMethod, WrapMode};
+use crate::config::{Anchor, Animation, Config, MatchMethod, WrapMode};
 
 type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T>>>;
@@ -30,6 +33,17 @@ type MenuItemSender<T> = Sender<Result<MenuItem<T>, anyhow::Error>>;
 pub trait ItemProvider<T: std::clone::Clone> {
     fn get_elements(&mut self, search: Option<&str>) -> Vec<MenuItem<T>>;
     fn get_sub_elements(&mut self, item: &MenuItem<T>) -> Option<Vec<MenuItem<T>>>;
+}
+
+impl From<&Anchor> for Edge {
+    fn from(value: &Anchor) -> Self {
+        match value {
+            Anchor::Top => Edge::Top,
+            Anchor::Left => Edge::Left,
+            Anchor::Bottom => Edge::Bottom,
+            Anchor::Right => Edge::Right,
+        }
+    }
 }
 
 impl From<config::Orientation> for Orientation {
@@ -44,9 +58,9 @@ impl From<config::Orientation> for Orientation {
 impl From<&WrapMode> for NaturalWrapMode {
     fn from(value: &WrapMode) -> Self {
         match value {
-            WrapMode::None => {NaturalWrapMode::None},
-            WrapMode::Word => {NaturalWrapMode::Word},
-            WrapMode::Inherit => {NaturalWrapMode::Inherit},
+            WrapMode::None => NaturalWrapMode::None,
+            WrapMode::Word => NaturalWrapMode::Word,
+            WrapMode::Inherit => NaturalWrapMode::Inherit,
         }
     }
 }
@@ -141,8 +155,11 @@ fn build_ui<T, P>(
         window.set_namespace(Some("worf"));
     }
 
-    /// todo make this configurable
-    //window.set_anchor(Edge::Top, true);
+    config.location.as_ref().map(|location| {
+        for anchor in location {
+            window.set_anchor(anchor.into(), true);
+        }
+    });
 
     let outer_box = gtk4::Box::new(config.orientation.unwrap().into(), 0);
     outer_box.set_widget_name("outer-box");
@@ -816,7 +833,7 @@ fn create_menu_row<T: Clone + 'static>(
     }
 
     let label = Label::new(Some(menu_item.label.as_str()));
-    let wrap_mode : NaturalWrapMode = if let Some(config_wrap) = &config.line_wrap {
+    let wrap_mode: NaturalWrapMode = if let Some(config_wrap) = &config.line_wrap {
         config_wrap.into()
     } else {
         NaturalWrapMode::Word
@@ -951,7 +968,9 @@ fn percent_or_absolute(value: Option<&String>, base_value: i32) -> Option<i32> {
 
 // highly unlikely that we are dealing with > i64 items
 #[allow(clippy::cast_possible_wrap)]
-pub fn sort_menu_items_alphabetically_honor_initial_score<T: std::clone::Clone>(items: &mut [MenuItem<T>]) {
+pub fn sort_menu_items_alphabetically_honor_initial_score<T: std::clone::Clone>(
+    items: &mut [MenuItem<T>],
+) {
     let mut regular_score = items.len() as i64;
     items.sort_by(|l, r| l.label.cmp(&r.label));
 
