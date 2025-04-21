@@ -67,6 +67,9 @@ pub enum Mode {
 
     /// use worf as file browser
     File,
+
+    /// Use is as calculator
+    Math,
 }
 
 #[derive(Debug, Error)]
@@ -84,6 +87,7 @@ impl FromStr for Mode {
             "drun" => Ok(Mode::Drun),
             "dmenu" => Ok(Mode::Dmenu),
             "file" => Ok(Mode::File),
+            "math" => Ok(Mode::Math),
             "auto" => Ok(Mode::Auto),
             _ => Err(ArgsError::InvalidParameter(
                 format!("{s} is not a valid argument show this, see help for details").to_owned(),
