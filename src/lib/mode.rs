@@ -1,21 +1,21 @@
+use std::collections::HashMap;
+use std::io::Read;
 use std::os::unix::prelude::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::{env, fmt, fs, io};
+use std::time::Instant;
+use anyhow::Context;
+use freedesktop_file_parser::EntryType;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, expand_path};
 use crate::desktop::{
-    DesktopError, default_icon, find_desktop_files, get_locale_variants, lookup_name_with_locale,
+    default_icon, find_desktop_files, get_locale_variants, lookup_name_with_locale,
 };
 use crate::gui;
 use crate::gui::{ItemProvider, MenuItem};
-use anyhow::Context;
-use freedesktop_file_parser::EntryType;
-use gtk4::AccessibleRole::Menu;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::io::Read;
 
 #[derive(Debug)]
 pub enum ModeError {
@@ -60,6 +60,7 @@ impl<T: Clone> DRunProvider<T> {
 
         let (cache_path, d_run_cache) = load_d_run_cache();
 
+        let start = Instant::now();
         let mut entries: Vec<MenuItem<T>> = Vec::new();
         for file in find_desktop_files().iter().filter(|f| {
             f.entry.hidden.is_none_or(|hidden| !hidden)
@@ -146,6 +147,8 @@ impl<T: Clone> DRunProvider<T> {
 
             entries.push(entry);
         }
+
+        log::info!("parsing desktop files took {}ms", start.elapsed().as_millis());
 
         gui::sort_menu_items_alphabetically_honor_initial_score(&mut entries);
 
@@ -370,7 +373,7 @@ impl DMenuProvider {
         let mut input = String::new();
         io::stdin()
             .read_to_string(&mut input)
-            .map_err(|e| ModeError::StdInReadFail)?;
+            .map_err(|_| ModeError::StdInReadFail)?;
 
         let items: Vec<MenuItem<String>> = input
             .lines()

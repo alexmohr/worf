@@ -145,7 +145,6 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
         .filter_map(|icon_dir| find_file_case_insensitive(&icon_dir, regex))
         .flat_map(|desktop_files| {
             desktop_files.into_iter().filter_map(|desktop_file| {
-                log::debug!("loading desktop file {desktop_file:?}");
                 fs::read_to_string(desktop_file)
                     .ok()
                     .and_then(|content| freedesktop_file_parser::parse(&content).ok())

@@ -819,7 +819,12 @@ fn create_menu_row<T: Clone + 'static>(
     row.set_child(Some(&row_box));
 
     if let Some(image_path) = &menu_item.icon_path {
-        let image = Image::from_icon_name(image_path);
+        let image = if image_path.starts_with("/") {
+            Image::from_file(image_path)
+        } else {
+            Image::from_icon_name(image_path)
+        };
+
         image.set_pixel_size(
             config
                 .image_size
