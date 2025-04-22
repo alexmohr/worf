@@ -428,7 +428,7 @@ impl Default for Config {
 #[allow(clippy::unnecessary_wraps)]
 #[must_use]
 pub fn default_show_animation_time() -> Option<u64> {
-    Some(70)
+    Some(30)
 }
 
 // allowed because option is needed for serde macro

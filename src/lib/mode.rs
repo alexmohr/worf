@@ -1,14 +1,14 @@
+use anyhow::Context;
+use freedesktop_file_parser::EntryType;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Read;
 use std::os::unix::prelude::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::{env, fmt, fs, io};
 use std::time::Instant;
-use anyhow::Context;
-use freedesktop_file_parser::EntryType;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
+use std::{env, fmt, fs, io};
 
 use crate::config::{Config, expand_path};
 use crate::desktop::{
@@ -148,7 +148,10 @@ impl<T: Clone> DRunProvider<T> {
             entries.push(entry);
         }
 
-        log::info!("parsing desktop files took {}ms", start.elapsed().as_millis());
+        log::info!(
+            "parsing desktop files took {}ms",
+            start.elapsed().as_millis()
+        );
 
         gui::sort_menu_items_alphabetically_honor_initial_score(&mut entries);
 
