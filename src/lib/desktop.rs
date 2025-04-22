@@ -61,6 +61,14 @@ fn fetch_icon_from_theme(icon_name: &str) -> Result<String, DesktopError> {
     }
 }
 
+pub fn known_image_extension_regex_pattern() -> Regex {
+    Regex::new(&format!(
+        r"(?i).*{}",
+        format!("\\.({})$", ["png", "jpg", "gif", "svg", "jpeg"].join("|"))
+    ))
+    .expect("Internal image regex is not valid anymore.")
+}
+
 /// # Errors
 ///
 /// Will return `Err`
@@ -76,8 +84,7 @@ pub fn fetch_icon_from_common_dirs(icon_name: &str) -> Result<String, DesktopErr
         paths.push(home.join(".local/share/icons"));
     }
 
-    let extensions = ["png", "jpg", "gif", "svg"].join("|"); // Create regex group for extensions
-    let formatted_name = Regex::new(&format!(r"(?i){icon_name}\.({extensions})$"));
+    let formatted_name = Regex::new(icon_name);
     if let Ok(formatted_name) = formatted_name {
         paths
             .into_iter()

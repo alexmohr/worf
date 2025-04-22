@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use crate::config::{Anchor, Animation, Config, MatchMethod, WrapMode};
+use crate::desktop::known_image_extension_regex_pattern;
+use crate::{config, desktop};
 use anyhow::anyhow;
 use crossbeam::channel;
 use crossbeam::channel::Sender;
@@ -11,8 +14,8 @@ use gdk4::prelude::{Cast, DisplayExt, MonitorExt};
 use gdk4::{Display, Key};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
-    ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
-    GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
+    AppChooserExt, ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt,
+    GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
 };
 use gtk4::{
     Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
@@ -22,9 +25,7 @@ use gtk4::{
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
-
-use crate::config;
-use crate::config::{Anchor, Animation, Config, MatchMethod, WrapMode};
+use regex::Regex;
 
 type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T>>>;
@@ -95,6 +96,8 @@ impl<T: Clone> AsRef<MenuItem<T>> for MenuItem<T> {
     }
 }
 
+type IconCache = Arc<HashMap<String, Image>>;
+
 /// # Errors
 ///
 /// Will return Err when the channel between the UI and this is broken
@@ -137,6 +140,8 @@ fn build_ui<T, P>(
     T: Clone + 'static,
     P: ItemProvider<T> + 'static,
 {
+    let start = Instant::now();
+
     let window = ApplicationWindow::builder()
         .application(app)
         .decorated(false)
@@ -206,8 +211,16 @@ fn build_ui<T, P>(
 
     let item_provider = Arc::new(Mutex::new(item_provider));
     let list_items: ArcMenuMap<T> = Arc::new(Mutex::new(HashMap::new()));
+    // let icon_cache: IconCache = Default::default();
+    let elements = item_provider.lock().unwrap().get_elements(None);
+    // for e in elements {
+    //     tokio::spawn(async move {
+    //        lookup_icon(e, config);
+    //     });
+    // }
+
     build_ui_from_menu_items(
-        &item_provider.lock().unwrap().get_elements(None),
+        &elements,
         &list_items,
         &inner_box,
         config,
@@ -243,9 +256,19 @@ fn build_ui<T, P>(
         item_provider,
     );
 
-    window.set_child(Widget::NONE);
+    window.set_child(Some(&outer_box));
+
+    let window_done = Instant::now();
+
     window.show();
     animate_window_show(config, window.clone(), outer_box);
+
+    log::debug!(
+        "Building UI took {:?}, window creation {:?}, animation {:?}",
+        start.elapsed(),
+        window_done - start,
+        window_done.elapsed()
+    );
 }
 
 fn build_ui_from_menu_items<T: Clone + 'static>(
@@ -257,14 +280,20 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
     app: &Application,
     window: &ApplicationWindow,
 ) {
+    let start = Instant::now();
     {
         let mut arc_lock = list_items.lock().unwrap();
+        let got_lock = Instant::now();
+
         inner_box.unset_sort_func();
 
         while let Some(b) = inner_box.child_at_index(0) {
             inner_box.remove(&b);
             drop(b);
         }
+        arc_lock.clear();
+
+        let cleared_box = Instant::now();
 
         for entry in items {
             arc_lock.insert(
@@ -272,6 +301,15 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
                 (*entry).clone(),
             );
         }
+
+        let created_ui = Instant::now();
+        log::debug!(
+            "Creating UI took {:?}, got locker after {:?}, cleared box after {:?}, created UI after {:?}",
+            start.elapsed(),
+            got_lock - start,
+            cleared_box - start,
+            created_ui - start
+        );
     }
     let lic = ArcMenuMap::clone(list_items);
     inner_box.set_sort_func(move |child2, child1| sort_menu_items_by_score(child1, child2, &lic));
@@ -466,7 +504,6 @@ fn animate_window_show(config: &Config, window: ApplicationWindow, outer_box: gt
                 target_height,
                 target_width,
                 move || {
-                    window.set_child(Some(&outer_box));
                 },
             );
         }
@@ -518,7 +555,7 @@ fn animate_window<Func>(
 {
     let allocation = window.allocation();
 
-    let animation_step_length = Duration::from_millis(10); // ~60 FPS
+    let animation_step_length = Duration::from_millis(10);
     let animation_speed = Duration::from_millis(animation_time);
 
     let animation_steps =
@@ -780,6 +817,7 @@ fn create_menu_row<T: Clone + 'static>(
     window: ApplicationWindow,
     inner_box: FlowBox,
 ) -> Widget {
+    let start = Instant::now();
     let row = ListBoxRow::new();
     row.set_hexpand(true);
     row.set_halign(Align::Fill);
@@ -817,22 +855,16 @@ fn create_menu_row<T: Clone + 'static>(
     row_box.set_halign(Align::Fill);
 
     row.set_child(Some(&row_box));
+    let ui_created = Instant::now();
 
-    if let Some(image_path) = &menu_item.icon_path {
-        let image = if image_path.starts_with("/") {
-            Image::from_file(image_path)
-        } else {
-            Image::from_icon_name(image_path)
-        };
-
-        image.set_pixel_size(
-            config
-                .image_size
-                .unwrap_or(config::default_image_size().unwrap()),
-        );
-        image.set_widget_name("img");
-        row_box.append(&image);
+    if config.allow_images.is_some_and(|allow_images| allow_images) {
+        if let Some(image) = lookup_icon(&menu_item, config) {
+            image.set_widget_name("img");
+            row_box.append(&image);
+        }
     }
+
+    let icon_found = Instant::now();
 
     let label = Label::new(Some(menu_item.label.as_str()));
     let wrap_mode: NaturalWrapMode = if let Some(config_wrap) = &config.line_wrap {
@@ -856,7 +888,41 @@ fn create_menu_row<T: Clone + 'static>(
     {
         label.set_xalign(0.0);
     }
+
+    log::debug!(
+        "Creating menu took {:?}, ui created after {:?}, icon found after {:?}",
+        start.elapsed(),
+        ui_created - start,
+        icon_found - start
+    );
+
     row.upcast()
+}
+
+fn lookup_icon<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Option<Image> {
+    if let Some(image_path) = &menu_item.icon_path {
+        let img_regex = Regex::new(&format!(r"(?i).*{}", known_image_extension_regex_pattern()));
+        let image = if image_path.starts_with("/") {
+            Image::from_file(image_path)
+        } else if img_regex.unwrap().is_match(image_path) {
+            if let Ok(img) = desktop::fetch_icon_from_common_dirs(&image_path) {
+                Image::from_file(img)
+            } else {
+                Image::from_icon_name(image_path)
+            }
+        } else {
+            Image::from_icon_name(image_path)
+        };
+
+        image.set_pixel_size(
+            config
+                .image_size
+                .unwrap_or(config::default_image_size().unwrap()),
+        );
+        Some(image)
+    } else {
+        None
+    }
 }
 
 fn filter_widgets<T: Clone>(
@@ -923,12 +989,6 @@ fn filter_widgets<T: Clone>(
                         (score, score > 0.0)
                     }
                 };
-
-                log::debug!(
-                    "menu item {}, search score {}",
-                    menu_item_search,
-                    search_sort_score
-                );
 
                 menu_item.search_sort_score = search_sort_score;
                 flowbox_child.set_visible(visible);
