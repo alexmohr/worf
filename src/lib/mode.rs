@@ -112,7 +112,7 @@ impl<T: Clone> DRunProvider<T> {
                 action,
                 sub_elements: Vec::default(),
                 working_dir: working_dir.clone(),
-                initial_sort_score: -(*sort_score),
+                initial_sort_score: *sort_score,
                 search_sort_score: 0.0,
                 data: Some(menu_item_data.clone()),
                 visible: true,
