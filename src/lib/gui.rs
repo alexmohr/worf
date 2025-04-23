@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::config::{Anchor, Animation, Config, MatchMethod, WrapMode};
+use crate::config::{Anchor, Config, MatchMethod, WrapMode};
 use crate::desktop::known_image_extension_regex_pattern;
 use crate::{config, desktop};
 use anyhow::anyhow;
@@ -14,7 +14,7 @@ use gdk4::prelude::{Cast, DisplayExt, MonitorExt};
 use gdk4::{Display, Key};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
-    AppChooserExt, ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt,
+    ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt,
     GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
 };
 use gtk4::{
@@ -96,8 +96,6 @@ impl<T: Clone> AsRef<MenuItem<T>> for MenuItem<T> {
         self
     }
 }
-
-type IconCache = Arc<HashMap<String, Image>>;
 
 /// # Errors
 ///
@@ -212,7 +210,6 @@ fn build_ui<T, P>(
 
     let item_provider = Arc::new(Mutex::new(item_provider));
     let list_items: ArcMenuMap<T> = Arc::new(Mutex::new(HashMap::new()));
-    // let icon_cache: IconCache = Default::default();
     let elements = item_provider.lock().unwrap().get_elements(None);
 
     build_ui_from_menu_items(
@@ -257,13 +254,14 @@ fn build_ui<T, P>(
     let window_done = Instant::now();
 
     window.show();
-    animate_window_show(config, window.clone(), outer_box);
+    animate_window_show(config, window.clone());
+    let animation_done = Instant::now();
 
     log::debug!(
         "Building UI took {:?}, window creation {:?}, animation {:?}",
         start.elapsed(),
         window_done - start,
-        window_done.elapsed()
+        animation_done - start
     );
 }
 
@@ -477,7 +475,7 @@ fn sort_menu_items_by_score<T: std::clone::Clone>(
     }
 }
 
-fn animate_window_show(config: &Config, window: ApplicationWindow, outer_box: gtk4::Box) {
+fn animate_window_show(config: &Config, window: ApplicationWindow) {
     let display = window.display();
     if let Some(surface) = window.surface() {
         // todo this does not work for multi monitor systems
@@ -497,7 +495,6 @@ fn animate_window_show(config: &Config, window: ApplicationWindow, outer_box: gt
 
             animate_window(
                 window.clone(),
-                config.show_animation.unwrap_or(Animation::None),
                 config.show_animation_time.unwrap_or(0),
                 target_height,
                 target_width,
@@ -513,36 +510,26 @@ where
     // todo the target size might not work for higher dpi displays or bigger resolutions
     window.set_child(Widget::NONE);
 
-    let (target_h, target_w) = {
-        if let Some(animation) = config.hide_animation {
-            let allocation = window.allocation();
-            match animation {
-                Animation::None | Animation::Expand => (10, 10),
-                Animation::ExpandVertical => (allocation.height(), 0),
-                Animation::ExpandHorizontal => (0, allocation.width()),
-            }
-        } else {
-            (0, 0)
-        }
-    };
-
     animate_window(
         window,
-        config.hide_animation.unwrap_or(Animation::None),
         config.hide_animation_time.unwrap_or(0),
-        target_h,
-        target_w,
+        10,
+        10,
         on_done_func,
     );
 }
 
-// both warnings are disabled because
-// we can deal with truncation and precission loss
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_precision_loss)]
+fn ease_in_out_cubic(t: f32) -> f32 {
+    if t < 0.5 {
+        4.0 * t * t * t
+    } else {
+        1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
+    }
+}
+
+
 fn animate_window<Func>(
     window: ApplicationWindow,
-    animation_type: Animation,
     animation_time: u64,
     target_height: i32,
     target_width: i32,
@@ -552,153 +539,55 @@ fn animate_window<Func>(
 {
     let allocation = window.allocation();
 
-    let animation_step_length = Duration::from_millis(10);
-    let animation_speed = Duration::from_millis(animation_time);
+    // Define animation parameters
+    let animation_step_length = Duration::from_millis(16); // ~60 FPS
 
-    let animation_steps =
-        ((animation_speed.as_millis() / animation_step_length.as_millis()) as f32).max(1.0);
+    // Start positions (initial window dimensions)
+    let start_width = allocation.width() as f32;
+    let start_height = allocation.height() as f32;
 
-    let width = allocation.width();
-    let height = allocation.height();
+    // Calculate the change in width and height
+    let delta_width = target_width as f32 - start_width;
+    let delta_height = target_height as f32 - start_height;
 
-    // Calculate signed steps (can be negative)
-    let mut width_step = ((target_width as f32 - width as f32) / animation_steps).round() as i32;
-    let mut height_step = ((target_height as f32 - height as f32) / animation_steps).round() as i32;
+    // Start the animation timer
+    let start_time = Instant::now();
 
-    // Ensure we move at least 1 pixel per step in the correct direction
-    if width_step == 0 && target_width != width {
-        width_step = if target_width < width { -1 } else { 1 };
-    }
-    if height_step == 0 && target_height != height {
-        height_step = if target_height < height { -1 } else { 1 };
-    }
-
+    // Start the animation loop (runs at ~60 FPS)
     timeout_add_local(animation_step_length, move || {
-        let result = match animation_type {
-            Animation::None => animation_none(&window, target_width, target_height),
-            Animation::Expand => animation_expand(
-                &window,
-                target_width,
-                target_height,
-                width_step,
-                height_step,
-            ),
-            Animation::ExpandVertical => {
-                animation_expand_vertical(&window, target_width, target_height, width_step)
-            }
-            Animation::ExpandHorizontal => {
-                animation_expand_horizontal(&window, target_width, target_height, height_step)
-            }
-        };
+        // Get the elapsed time in milliseconds since the animation started
+        let elapsed_ms = start_time.elapsed().as_millis() as f32; // Elapsed time in milliseconds
 
-        window.queue_draw();
+        // Calculate the progress (t) from 0.0 to 1.0 based on elapsed time and animation duration
+        let t = (elapsed_ms / animation_time as f32).min(1.0);
 
-        if result == ControlFlow::Break {
+        // Apply easing function for smoother transition
+        // could be other easing function, but this looked best
+        // todo make other easing types configurable?
+        let eased_t = ease_in_out_cubic(t);
+
+        // Calculate the new width and height based on easing
+        let current_width = start_width + delta_width * eased_t;
+        let current_height = start_height + delta_height * eased_t;
+
+        // Round the dimensions to nearest integers
+        let rounded_width = current_width.round() as i32;
+        let rounded_height = current_height.round() as i32;
+
+        // Perform the resizing of the window based on the current width and height
+        window.set_width_request(rounded_width);
+        window.set_height_request(rounded_height);
+
+        // If the animation is complete (t >= 1.0), set final size and break the loop
+        if t >= 1.0 {
+            window.set_width_request(target_width);
+            window.set_height_request(target_height);
             on_done_func();
+            ControlFlow::Break
+        } else {
+            ControlFlow::Continue
         }
-        result
     });
-}
-
-fn animation_none(
-    window: &ApplicationWindow,
-    target_width: i32,
-    target_height: i32,
-) -> ControlFlow {
-    window.set_height_request(target_height);
-    window.set_width_request(target_width);
-    ControlFlow::Break
-}
-
-fn animation_expand(
-    window: &ApplicationWindow,
-    target_width: i32,
-    target_height: i32,
-    width_step: i32,
-    height_step: i32,
-) -> ControlFlow {
-    let allocation = window.allocation();
-    let mut done = true;
-    let height = allocation.height();
-    let width = allocation.width();
-
-    if resize_height_needed(window, target_height, height_step, height) {
-        window.set_height_request(height + height_step);
-        done = false;
-    }
-
-    if resize_width_needed(window, target_width, width_step, width) {
-        window.set_width_request(width + width_step);
-        done = false;
-    }
-
-    if done {
-        window.set_height_request(target_height);
-        window.set_width_request(target_width);
-        ControlFlow::Break
-    } else {
-        ControlFlow::Continue
-    }
-}
-
-fn animation_expand_horizontal(
-    window: &ApplicationWindow,
-    target_width: i32,
-    target_height: i32,
-    height_step: i32,
-) -> ControlFlow {
-    let allocation = window.allocation();
-    let height = allocation.height();
-    window.set_width_request(target_width);
-
-    if resize_height_needed(window, target_height, height_step, height) {
-        window.set_height_request(height + height_step);
-        ControlFlow::Continue
-    } else {
-        window.set_height_request(target_height);
-        window.set_width_request(target_width);
-        ControlFlow::Break
-    }
-}
-
-fn animation_expand_vertical(
-    window: &ApplicationWindow,
-    target_width: i32,
-    target_height: i32,
-    width_step: i32,
-) -> ControlFlow {
-    let allocation = window.allocation();
-    let width = allocation.width();
-    window.set_height_request(target_height);
-
-    if resize_width_needed(window, target_width, width_step, width) {
-        window.set_width_request(allocation.width() + width_step);
-        ControlFlow::Continue
-    } else {
-        window.set_height_request(target_height);
-        window.set_width_request(target_width);
-        ControlFlow::Break
-    }
-}
-
-fn resize_height_needed(
-    window: &ApplicationWindow,
-    target_height: i32,
-    height_step: i32,
-    current_height: i32,
-) -> bool {
-    (height_step > 0 && window.height() < target_height)
-        || (height_step < 0 && window.height() > target_height && current_height + height_step > 0)
-}
-
-fn resize_width_needed(
-    window: &ApplicationWindow,
-    target_width: i32,
-    width_step: i32,
-    current_width: i32,
-) -> bool {
-    (width_step > 0 && window.width() < target_width)
-        || (width_step < 0 && window.width() > target_width && current_width + width_step > 0)
 }
 
 fn close_gui(app: Application, window: ApplicationWindow, config: &Config) {
