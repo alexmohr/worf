@@ -14,8 +14,8 @@ use gdk4::prelude::{Cast, DisplayExt, MonitorExt};
 use gdk4::{Display, Key};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
-    ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt,
-    GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
+    ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
+    GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
 };
 use gtk4::{
     Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
@@ -463,7 +463,7 @@ fn sort_menu_items_by_score<T: std::clone::Clone>(
                 } else {
                     Ordering::Larger
                 }
-            } else if menu1.initial_sort_score < menu2.initial_sort_score {
+            } else if menu1.initial_sort_score > menu2.initial_sort_score {
                 Ordering::Smaller
             } else {
                 Ordering::Larger
@@ -526,7 +526,6 @@ fn ease_in_out_cubic(t: f32) -> f32 {
         1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
     }
 }
-
 
 fn animate_window<Func>(
     window: ApplicationWindow,
@@ -820,7 +819,7 @@ fn set_menu_visibility_for_search<T: Clone>(
         if query.is_empty() {
             for menu_item in items.iter_mut() {
                 // todo make initial score and search score both follow same logic.
-                menu_item.search_sort_score = -menu_item.initial_sort_score as f64;
+                menu_item.search_sort_score = menu_item.initial_sort_score as f64;
                 menu_item.visible = true;
             }
         } else {
@@ -877,7 +876,7 @@ fn set_menu_visibility_for_search<T: Clone>(
 
                 // todo turn initial score init f64
                 menu_item.search_sort_score =
-                    search_sort_score - menu_item.initial_sort_score as f64;
+                    search_sort_score + menu_item.initial_sort_score as f64;
                 menu_item.visible = visible;
             }
         }
@@ -921,13 +920,16 @@ fn percent_or_absolute(value: Option<&String>, base_value: i32) -> Option<i32> {
 pub fn sort_menu_items_alphabetically_honor_initial_score<T: std::clone::Clone>(
     items: &mut [MenuItem<T>],
 ) {
-    let mut regular_score = items.len() as i64;
+    let special_score = items.len() as i64;
+    let mut regular_score = 0;
     items.sort_by(|l, r| l.label.cmp(&r.label));
 
     for item in items.iter_mut() {
         if item.initial_sort_score == 0 {
-            item.initial_sort_score = regular_score;
+            item.initial_sort_score += regular_score;
             regular_score += 1;
+        } else {
+            item.initial_sort_score += special_score;
         }
     }
 }

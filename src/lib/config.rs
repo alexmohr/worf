@@ -315,7 +315,6 @@ pub struct Config {
     // #[serde(default = "default_text_wrap_length")]
     // #[clap(long = "text-wrap-length")]
     // pub text_wrap_length: Option<usize>,
-
     /// Defines how long it takes for the show animation to finish
     /// Defaults to 70ms
     #[serde(default = "default_show_animation_time")]
