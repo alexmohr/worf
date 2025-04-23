@@ -83,8 +83,9 @@ pub struct MenuItem<T: Clone> {
     pub action: Option<String>,
     pub sub_elements: Vec<MenuItem<T>>,
     pub working_dir: Option<String>,
-    pub initial_sort_score: i64,
-    pub search_sort_score: f64,
+    pub initial_sort_score: i64, // todo make this f64
+    pub search_sort_score: f64,  //  todo make this private
+    pub visible: bool,           // todo make this private
 
     /// Allows to store arbitrary additional information
     pub data: Option<T>,
@@ -213,11 +214,6 @@ fn build_ui<T, P>(
     let list_items: ArcMenuMap<T> = Arc::new(Mutex::new(HashMap::new()));
     // let icon_cache: IconCache = Default::default();
     let elements = item_provider.lock().unwrap().get_elements(None);
-    // for e in elements {
-    //     tokio::spawn(async move {
-    //        lookup_icon(e, config);
-    //     });
-    // }
 
     build_ui_from_menu_items(
         &elements,
@@ -296,10 +292,12 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
         let cleared_box = Instant::now();
 
         for entry in items {
-            arc_lock.insert(
-                add_menu_item(inner_box, entry, config, sender, list_items, app, window),
-                (*entry).clone(),
-            );
+            if entry.visible {
+                arc_lock.insert(
+                    add_menu_item(inner_box, entry, config, sender, list_items, app, window),
+                    (*entry).clone(),
+                );
+            }
         }
 
         let created_ui = Instant::now();
@@ -359,7 +357,8 @@ fn handle_key_press<T: Clone + 'static>(
     window_clone: &ApplicationWindow,
     keyboard_key: Key,
 ) -> Propagation {
-    let update_view = |query: &String, items: Vec<MenuItem<T>>| {
+    let update_view = |query: &String, items: &mut Vec<MenuItem<T>>| {
+        set_menu_visibility_for_search(query, items, config);
         build_ui_from_menu_items(
             &items,
             list_items,
@@ -369,13 +368,12 @@ fn handle_key_press<T: Clone + 'static>(
             app,
             window_clone,
         );
-        filter_widgets(query, list_items, config, inner_box);
         select_first_visible_child(list_items, inner_box);
     };
 
     let update_view_from_provider = |query: &String| {
-        let filtered_list = item_provider.lock().unwrap().get_elements(Some(query));
-        update_view(query, filtered_list);
+        let mut filtered_list = item_provider.lock().unwrap().get_elements(Some(query));
+        update_view(query, &mut filtered_list);
     };
 
     match keyboard_key {
@@ -415,14 +413,14 @@ fn handle_key_press<T: Clone + 'static>(
                         let lock = list_items.lock().unwrap();
                         let menu_item = lock.get(fb);
                         if let Some(menu_item) = menu_item {
-                            if let Some(new_items) =
+                            if let Some(mut new_items) =
                                 item_provider.lock().unwrap().get_sub_elements(menu_item)
                             {
                                 let query = menu_item.label.clone();
                                 drop(lock);
 
                                 search_entry.set_text(&query);
-                                update_view(&query, new_items);
+                                update_view(&query, &mut new_items);
                             }
                         }
                     }
@@ -461,7 +459,7 @@ fn sort_menu_items_by_score<T: std::clone::Clone>(
 
     match (m1, m2) {
         (Some(menu1), Some(menu2)) => {
-            if menu1.search_sort_score != 0.0 || menu2.search_sort_score != 0.0 {
+            if menu1.search_sort_score > 0.0 || menu2.search_sort_score > 0.0 {
                 if menu1.search_sort_score < menu2.search_sort_score {
                     Ordering::Smaller
                 } else {
@@ -503,8 +501,7 @@ fn animate_window_show(config: &Config, window: ApplicationWindow, outer_box: gt
                 config.show_animation_time.unwrap_or(0),
                 target_height,
                 target_width,
-                move || {
-                },
+                move || {},
             );
         }
     }
@@ -925,22 +922,21 @@ fn lookup_icon<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Option<Ima
     }
 }
 
-fn filter_widgets<T: Clone>(
+fn set_menu_visibility_for_search<T: Clone>(
     query: &str,
-    item_arc: &ArcMenuMap<T>,
+    items: &mut Vec<MenuItem<T>>,
     config: &Config,
-    inner_box: &FlowBox,
 ) {
     {
-        let mut items = item_arc.lock().unwrap();
         if query.is_empty() {
-            for (flowbox_child, menu_item) in items.iter_mut() {
-                flowbox_child.set_visible(true);
-                menu_item.search_sort_score = -1.0;
+            for menu_item in items.iter_mut() {
+                // todo make initial score and search score both follow same logic.
+                menu_item.search_sort_score = -menu_item.initial_sort_score as f64;
+                menu_item.visible = true;
             }
         } else {
             let query = query.to_owned().to_lowercase(); // todo match case senstive according to conf
-            for (flowbox_child, menu_item) in items.iter_mut() {
+            for menu_item in items.iter_mut() {
                 let menu_item_search = format!(
                     "{} {}",
                     menu_item
@@ -990,13 +986,13 @@ fn filter_widgets<T: Clone>(
                     }
                 };
 
-                menu_item.search_sort_score = search_sort_score;
-                flowbox_child.set_visible(visible);
+                // todo turn initial score init f64
+                menu_item.search_sort_score =
+                    search_sort_score - menu_item.initial_sort_score as f64;
+                menu_item.visible = visible;
             }
         }
     }
-
-    inner_box.invalidate_sort();
 }
 
 fn select_first_visible_child<T: Clone>(lock: &ArcMenuMap<T>, inner_box: &FlowBox) {
