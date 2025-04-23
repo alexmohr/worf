@@ -115,6 +115,7 @@ impl<T: Clone> DRunProvider<T> {
                 initial_sort_score: -(*sort_score),
                 search_sort_score: 0.0,
                 data: Some(menu_item_data.clone()),
+                visible: true,
             };
 
             file.actions.iter().for_each(|(_, action)| {
@@ -140,6 +141,7 @@ impl<T: Clone> DRunProvider<T> {
                         initial_sort_score: 0, // subitems are never sorted right now.
                         search_sort_score: 0.0,
                         data: None,
+                        visible: true,
                     };
                     entry.sub_elements.push(sub_entry);
                 }
@@ -280,6 +282,7 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
                             initial_sort_score: 0,
                             search_sort_score: 0.0,
                             data: Some(self.menu_item_data.clone()),
+                            visible: true,
                         });
                     }
                 }
@@ -297,6 +300,7 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
                     initial_sort_score: 0,
                     search_sort_score: 0.0,
                     data: Some(self.menu_item_data.clone()),
+                    visible: true,
                 }
             });
         }
@@ -353,6 +357,7 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
                 initial_sort_score: 0,
                 search_sort_score: 0.0,
                 data: Some(self.menu_item_data.clone()),
+                visible: true,
             };
 
             vec![item]
@@ -390,6 +395,7 @@ impl DMenuProvider {
                 initial_sort_score: 0,
                 search_sort_score: 0.0,
                 data: None,
+                visible: true,
             })
             .collect();
 
