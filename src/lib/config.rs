@@ -50,14 +50,6 @@ pub enum Align {
     Center,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]
-pub enum Animation {
-    None,
-    Expand,
-    ExpandVertical,
-    ExpandHorizontal,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum WrapMode {
     None,
@@ -323,24 +315,12 @@ pub struct Config {
     // #[serde(default = "default_text_wrap_length")]
     // #[clap(long = "text-wrap-length")]
     // pub text_wrap_length: Option<usize>,
-    /// Defines the animation when the window is show.
-    /// Defaults to Expand
-    #[serde(default = "default_show_animation")]
-    #[clap(long = "show-animation")]
-    pub show_animation: Option<Animation>,
 
     /// Defines how long it takes for the show animation to finish
     /// Defaults to 70ms
     #[serde(default = "default_show_animation_time")]
     #[clap(long = "show-animation-time")]
     pub show_animation_time: Option<u64>,
-
-    /// Defines the animation when the window is hidden.
-    /// Defaults to None, because it is a bit buggy with
-    /// gtk layer shell. works fine with normal window though
-    #[serde(default = "default_hide_animation")]
-    #[clap(long = "hide-animation")]
-    pub hide_animation: Option<Animation>,
 
     /// Defines how long it takes for the hide animation to finish
     /// Defaults to 100ms
@@ -416,9 +396,7 @@ impl Default for Config {
             pre_display_exec: None,
             fuzzy_min_score: default_fuzzy_min_score(),
             row_bow_orientation: default_row_box_orientation(),
-            show_animation: default_show_animation(),
             show_animation_time: default_show_animation_time(),
-            hide_animation: default_hide_animation(),
             hide_animation_time: default_hide_animation_time(),
         }
     }
@@ -428,28 +406,14 @@ impl Default for Config {
 #[allow(clippy::unnecessary_wraps)]
 #[must_use]
 pub fn default_show_animation_time() -> Option<u64> {
-    Some(30)
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_show_animation() -> Option<Animation> {
-    Some(Animation::Expand)
+    Some(50)
 }
 
 // allowed because option is needed for serde macro
 #[allow(clippy::unnecessary_wraps)]
 #[must_use]
 pub fn default_hide_animation_time() -> Option<u64> {
-    Some(100)
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_hide_animation() -> Option<Animation> {
-    Some(Animation::None)
+    Some(0)
 }
 
 // allowed because option is needed for serde macro
