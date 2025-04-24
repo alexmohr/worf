@@ -786,10 +786,8 @@ fn create_menu_row<T: Clone + 'static>(
 
 fn lookup_icon<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Option<Image> {
     if let Some(image_path) = &menu_item.icon_path {
-        let img_regex = Regex::new(&format!(r"(?i).*{}", known_image_extension_regex_pattern()));
-        let image = if image_path.starts_with("/") {
-            Image::from_file(image_path)
-        } else if img_regex.unwrap().is_match(image_path) {
+        let img_regex = Regex::new(&format!(r"((?i).*{})|(^/.*)", known_image_extension_regex_pattern()));
+         let image = if img_regex.unwrap().is_match(image_path) {
             if let Ok(img) = desktop::fetch_icon_from_common_dirs(&image_path) {
                 Image::from_file(img)
             } else {
