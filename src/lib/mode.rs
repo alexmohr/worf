@@ -1,5 +1,10 @@
+use crate::config::{Config, expand_path};
+use crate::desktop::{find_desktop_files, get_locale_variants, lookup_name_with_locale};
+use crate::gui;
+use crate::gui::{ItemProvider, MenuItem};
 use anyhow::Context;
 use freedesktop_file_parser::EntryType;
+use rayon::prelude::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -9,13 +14,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 use std::{env, fmt, fs, io};
-
-use crate::config::{Config, expand_path};
-use crate::desktop::{
-    default_icon, find_desktop_files, get_locale_variants, lookup_name_with_locale,
-};
-use crate::gui;
-use crate::gui::{ItemProvider, MenuItem};
 
 #[derive(Debug)]
 pub enum ModeError {
@@ -53,103 +51,101 @@ struct DRunProvider<T: Clone> {
     cache: HashMap<String, i64>,
 }
 
-impl<T: Clone> DRunProvider<T> {
+impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
     fn new(menu_item_data: T) -> Self {
         let locale_variants = get_locale_variants();
-        let default_icon = default_icon().unwrap_or_default();
+        let default_icon = "application-x-executable".to_string();
 
         let (cache_path, d_run_cache) = load_d_run_cache();
 
         let start = Instant::now();
-        let mut entries: Vec<MenuItem<T>> = Vec::new();
-        for file in find_desktop_files().iter().filter(|f| {
-            f.entry.hidden.is_none_or(|hidden| !hidden)
-                && f.entry.no_display.is_none_or(|no_display| !no_display)
-        }) {
-            let Some(name) = lookup_name_with_locale(
-                &locale_variants,
-                &file.entry.name.variants,
-                &file.entry.name.default,
-            ) else {
-                log::warn!("Skipping desktop entry without name {file:?}");
-                continue;
-            };
 
-            let (action, working_dir) = match &file.entry.entry_type {
-                EntryType::Application(app) => (app.exec.clone(), app.path.clone()),
-                _ => (None, None),
-            };
-
-            let cmd_exists = action
-                .as_ref()
-                .and_then(|a| {
-                    a.split(' ')
-                        .next()
-                        .map(|cmd| cmd.replace('"', ""))
-                        .map(|cmd| PathBuf::from(&cmd).exists() || which::which(&cmd).is_ok())
-                })
-                .unwrap_or(false);
-
-            if !cmd_exists {
-                log::warn!(
-                    "Skipping desktop entry for {name:?} because action {action:?} does not exist"
-                );
-                continue;
-            }
-
-            let icon = file
-                .entry
-                .icon
-                .as_ref()
-                .map(|s| s.content.clone())
-                .or(Some(default_icon.clone()));
-            log::debug!("file, name={name:?}, icon={icon:?}, action={action:?}");
-            let sort_score = d_run_cache.get(&name).unwrap_or(&0);
-
-            let mut entry: MenuItem<T> = MenuItem {
-                label: name,
-                icon_path: icon.clone(),
-                action,
-                sub_elements: Vec::default(),
-                working_dir: working_dir.clone(),
-                initial_sort_score: *sort_score,
-                search_sort_score: 0.0,
-                data: Some(menu_item_data.clone()),
-                visible: true,
-            };
-
-            file.actions.iter().for_each(|(_, action)| {
-                if let Some(action_name) = lookup_name_with_locale(
+        let mut entries: Vec<MenuItem<T>> = find_desktop_files()
+            .into_par_iter()
+            .filter_map(|file| {
+                let name = lookup_name_with_locale(
                     &locale_variants,
-                    &action.name.variants,
-                    &action.name.default,
-                ) {
-                    let action_icon = action
-                        .icon
-                        .as_ref()
-                        .map(|s| s.content.clone())
-                        .or(icon.clone())
-                        .unwrap_or("application-x-executable".to_string());
+                    &file.entry.name.variants,
+                    &file.entry.name.default,
+                )?;
 
-                    log::debug!("sub, action_name={action_name:?}, action_icon={action_icon:?}");
+                let (action, working_dir) = match &file.entry.entry_type {
+                    EntryType::Application(app) => (app.exec.clone(), app.path.clone()),
+                    _ => return None,
+                };
 
-                    let sub_entry = MenuItem {
-                        label: action_name,
-                        icon_path: Some(action_icon),
-                        action: action.exec.clone(),
-                        sub_elements: Vec::default(),
-                        working_dir: working_dir.clone(),
-                        initial_sort_score: 0, // subitems are never sorted right now.
-                        search_sort_score: 0.0,
-                        data: None,
-                        visible: true,
-                    };
-                    entry.sub_elements.push(sub_entry);
+                let cmd_exists = action
+                    .as_ref()
+                    .and_then(|a| {
+                        a.split(' ')
+                            .next()
+                            .map(|cmd| cmd.replace('"', ""))
+                            .map(|cmd| PathBuf::from(&cmd).exists() || which::which(&cmd).is_ok())
+                    })
+                    .unwrap_or(false);
+
+                if !cmd_exists {
+                    log::warn!(
+                "Skipping desktop entry for {name:?} because action {action:?} does not exist"
+            );
+                    return None;
                 }
-            });
 
-            entries.push(entry);
-        }
+                let icon = file
+                    .entry
+                    .icon
+                    .as_ref()
+                    .map(|s| s.content.clone())
+                    .or(Some(default_icon.clone()));
+
+                log::debug!("file, name={name:?}, icon={icon:?}, action={action:?}");
+
+                let sort_score = *d_run_cache.get(&name).unwrap_or(&0);
+
+                let mut entry = MenuItem {
+                    label: name.clone(),
+                    icon_path: icon.clone(),
+                    action: action.clone(),
+                    sub_elements: Vec::new(),
+                    working_dir: working_dir.clone(),
+                    initial_sort_score: sort_score,
+                    search_sort_score: 0.0,
+                    data: Some(menu_item_data.clone()),
+                    visible: true,
+                };
+
+                for (_, action) in &file.actions {
+                    if let Some(action_name) = lookup_name_with_locale(
+                        &locale_variants,
+                        &action.name.variants,
+                        &action.name.default,
+                    ) {
+                        let action_icon = action
+                            .icon
+                            .as_ref()
+                            .map(|s| s.content.clone())
+                            .or(icon.clone())
+                            .unwrap_or("application-x-executable".to_string());
+
+                        log::debug!("sub, action_name={action_name:?}, action_icon={action_icon:?}");
+
+                        entry.sub_elements.push(MenuItem {
+                            label: action_name,
+                            icon_path: Some(action_icon),
+                            action: action.exec.clone(),
+                            sub_elements: Vec::new(),
+                            working_dir: working_dir.clone(),
+                            initial_sort_score: 0,
+                            search_sort_score: 0.0,
+                            data: None,
+                            visible: true,
+                        });
+                    }
+                }
+
+                Some(entry)
+            })
+            .collect();
 
         log::info!(
             "parsing desktop files took {}ms",
