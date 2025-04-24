@@ -4,10 +4,13 @@ use std::path::PathBuf;
 use std::{env, fs, string};
 
 use freedesktop_file_parser::DesktopFile;
+use futures::stream;
 use gdk4::Display;
-use gtk4::prelude::*;
+use gdk4::prelude::FileExt;
 use gtk4::{IconLookupFlags, IconTheme, TextDirection};
-use home::home_dir;
+use rayon::prelude::*;
+
+use futures::StreamExt;
 use log;
 use regex::Regex;
 
@@ -16,50 +19,50 @@ pub enum DesktopError {
     MissingIcon,
     ParsingError(String),
 }
-
-/// # Errors
-///
-/// Will return `Err` if no icon can be found
-pub fn default_icon() -> Result<String, DesktopError> {
-    fetch_icon_from_theme("image-missing").map_err(|_| DesktopError::MissingIcon)
-}
-
-fn fetch_icon_from_theme(icon_name: &str) -> Result<String, DesktopError> {
-    let display = gtk4::gdk::Display::default();
-    if display.is_none() {
-        log::error!("Failed to get display");
-    }
-
-    let display = Display::default().expect("Failed to get default display");
-    let theme = IconTheme::for_display(&display);
-
-    let icon = theme.lookup_icon(
-        icon_name,
-        &[],
-        32,
-        1,
-        TextDirection::None,
-        IconLookupFlags::empty(),
-    );
-
-    match icon
-        .file()
-        .and_then(|file| file.path())
-        .and_then(|path| path.to_str().map(string::ToString::to_string))
-    {
-        None => {
-            let path = PathBuf::from("/usr/share/icons")
-                .join(theme.theme_name())
-                .join(format!("{icon_name}.svg"));
-            if path.exists() {
-                Ok(path.display().to_string())
-            } else {
-                Err(DesktopError::MissingIcon)
-            }
-        }
-        Some(i) => Ok(i),
-    }
-}
+//
+// /// # Errors
+// ///
+// /// Will return `Err` if no icon can be found
+// pub fn default_icon() -> Result<String, DesktopError> {
+//     fetch_icon_from_theme("image-missing").map_err(|_| DesktopError::MissingIcon)
+// }
+//
+// fn fetch_icon_from_theme(icon_name: &str) -> Result<String, DesktopError> {
+//     let display = Display::default();
+//     if display.is_none() {
+//         log::error!("Failed to get display");
+//     }
+//
+//     let display = Display::default().expect("Failed to get default display");
+//     let theme = IconTheme::for_display(&display);
+//
+//     let icon = theme.lookup_icon(
+//         icon_name,
+//         &[],
+//         32,
+//         1,
+//         TextDirection::None,
+//         IconLookupFlags::empty(),
+//     );
+//
+//     match icon
+//         .file()
+//         .and_then(|file| file.path())
+//         .and_then(|path| path.to_str().map(string::ToString::to_string))
+//     {
+//         None => {
+//             let path = PathBuf::from("/usr/share/icons")
+//                 .join(theme.theme_name())
+//                 .join(format!("{icon_name}.svg"));
+//             if path.exists() {
+//                 Ok(path.display().to_string())
+//             } else {
+//                 Err(DesktopError::MissingIcon)
+//             }
+//         }
+//         Some(i) => Ok(i),
+//     }
+// }
 
 pub fn known_image_extension_regex_pattern() -> Regex {
     Regex::new(&format!(
@@ -80,7 +83,7 @@ pub fn fetch_icon_from_common_dirs(icon_name: &str) -> Result<String, DesktopErr
         PathBuf::from("/usr/share/pixmaps"),
     ];
 
-    if let Some(home) = home_dir() {
+    if let Some(home) = dirs::home_dir() {
         paths.push(home.join(".local/share/icons"));
     }
 
@@ -124,6 +127,7 @@ fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<Pa
 ///
 /// When it cannot parse the internal regex
 #[must_use]
+
 pub fn find_desktop_files() -> Vec<DesktopFile> {
     let mut paths = vec![
         PathBuf::from("/usr/share/applications"),
@@ -131,27 +135,28 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
         PathBuf::from("/var/lib/flatpak/exports/share/applications"),
     ];
 
-    if let Some(home) = home_dir() {
+    if let Some(home) = dirs::home_dir() {
         paths.push(home.join(".local/share/applications"));
     }
 
     if let Ok(xdg_data_home) = env::var("XDG_DATA_HOME") {
-        // todo use dirs:: instead
         paths.push(PathBuf::from(xdg_data_home).join(".applications"));
     }
 
-    if let Ok(xdg_data_dir) = env::var("XDG_DATA_DIRS") {
-        paths.push(PathBuf::from(xdg_data_dir).join(".applications"));
+    if let Ok(xdg_data_dirs) = env::var("XDG_DATA_DIRS") {
+        for dir in xdg_data_dirs.split(':') {
+            paths.push(PathBuf::from(dir).join(".applications"));
+        }
     }
 
     let regex = &Regex::new("(?i).*\\.desktop$").unwrap();
 
     let p: Vec<_> = paths
-        .into_iter()
+        .into_par_iter()
         .filter(|desktop_dir| desktop_dir.exists())
         .filter_map(|icon_dir| find_file_case_insensitive(&icon_dir, regex))
         .flat_map(|desktop_files| {
-            desktop_files.into_iter().filter_map(|desktop_file| {
+            desktop_files.into_par_iter().filter_map(|desktop_file| {
                 fs::read_to_string(desktop_file)
                     .ok()
                     .and_then(|content| freedesktop_file_parser::parse(&content).ok())
@@ -159,6 +164,26 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
         })
         .collect();
     p
+}
+
+pub fn lookup_icon(name: &str, size: i32) -> gtk4::Image {
+    let img_regex = Regex::new(&format!(
+        r"((?i).*{})|(^/.*)",
+        known_image_extension_regex_pattern()
+    ));
+    let image = if img_regex.unwrap().is_match(name) {
+        if let Ok(img) = fetch_icon_from_common_dirs(&name) {
+            gtk4::Image::from_file(img)
+        } else {
+            gtk4::Image::from_icon_name(name)
+        }
+    } else {
+        gtk4::Image::from_icon_name(name)
+    };
+
+    image.set_pixel_size(size);
+
+    image
 }
 
 #[must_use]

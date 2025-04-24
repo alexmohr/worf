@@ -251,17 +251,18 @@ fn build_ui<T, P>(
 
     window.set_child(Some(&outer_box));
 
+    let window_show = Instant::now();
+    window.show();
     let window_done = Instant::now();
 
-    window.show();
     animate_window_show(config, window.clone());
     let animation_done = Instant::now();
 
     log::debug!(
-        "Building UI took {:?}, window creation {:?}, animation {:?}",
+        "Building UI took {:?}, window show {:?}, animation {:?}",
         start.elapsed(),
-        window_done - start,
-        animation_done - start
+        window_done - window_show,
+        animation_done - window_done
     );
 }
 
@@ -300,7 +301,7 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
 
         let created_ui = Instant::now();
         log::debug!(
-            "Creating UI took {:?}, got locker after {:?}, cleared box after {:?}, created UI after {:?}",
+            "Creating UI took {:?}, got lock after {:?}, cleared box after {:?}, created UI after {:?}",
             start.elapsed(),
             got_lock - start,
             cleared_box - start,
@@ -482,6 +483,7 @@ fn animate_window_show(config: &Config, window: ApplicationWindow) {
         let monitor = display.monitor_at_surface(&surface);
         if let Some(monitor) = monitor {
             let geometry = monitor.geometry();
+            log::debug!("monitor geometry: {:?}", geometry);
             let Some(target_width) = percent_or_absolute(config.width.as_ref(), geometry.width())
             else {
                 return;
@@ -536,10 +538,17 @@ fn animate_window<Func>(
 ) where
     Func: Fn() + 'static,
 {
+    if animation_time == 0 {
+        window.set_width_request(target_width);
+        window.set_height_request(target_height);
+        on_done_func();
+        return;
+    }
+
     let allocation = window.allocation();
 
     // Define animation parameters
-    let animation_step_length = Duration::from_millis(16); // ~60 FPS
+    let animation_step_length = Duration::from_millis(8); // ~120 FPS
 
     // Start positions (initial window dimensions)
     let start_width = allocation.width() as f32;
@@ -552,32 +561,29 @@ fn animate_window<Func>(
     // Start the animation timer
     let start_time = Instant::now();
 
-    // Start the animation loop (runs at ~60 FPS)
+    let mut last_t = 0.0;
+
     timeout_add_local(animation_step_length, move || {
-        // Get the elapsed time in milliseconds since the animation started
-        let elapsed_ms = start_time.elapsed().as_millis() as f32; // Elapsed time in milliseconds
+        let elapsed_us = start_time.elapsed().as_micros() as f32;
+        let t = (elapsed_us / (animation_time * 1000) as f32).min(1.0);
 
-        // Calculate the progress (t) from 0.0 to 1.0 based on elapsed time and animation duration
-        let t = (elapsed_ms / animation_time as f32).min(1.0);
+        // Skip if there's no meaningful change in progress
+        if (t - last_t).abs() < 0.001 && t < 1.0 {
+            return ControlFlow::Continue;
+        }
+        last_t = t;
 
-        // Apply easing function for smoother transition
-        // could be other easing function, but this looked best
-        // todo make other easing types configurable?
         let eased_t = ease_in_out_cubic(t);
 
-        // Calculate the new width and height based on easing
         let current_width = start_width + delta_width * eased_t;
         let current_height = start_height + delta_height * eased_t;
 
-        // Round the dimensions to nearest integers
         let rounded_width = current_width.round() as i32;
         let rounded_height = current_height.round() as i32;
 
-        // Perform the resizing of the window based on the current width and height
         window.set_width_request(rounded_width);
         window.set_height_request(rounded_height);
 
-        // If the animation is complete (t >= 1.0), set final size and break the loop
         if t >= 1.0 {
             window.set_width_request(target_width);
             window.set_height_request(target_height);
@@ -774,20 +780,23 @@ fn create_menu_row<T: Clone + 'static>(
         label.set_xalign(0.0);
     }
 
-    log::debug!(
-        "Creating menu took {:?}, ui created after {:?}, icon found after {:?}",
-        start.elapsed(),
-        ui_created - start,
-        icon_found - start
-    );
+    // log::debug!(
+    //     "Creating menu took {:?}, ui created after {:?}, icon found after {:?}",
+    //     start.elapsed(),
+    //     ui_created - start,
+    //     icon_found - start
+    // );
 
     row.upcast()
 }
 
 fn lookup_icon<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Option<Image> {
     if let Some(image_path) = &menu_item.icon_path {
-        let img_regex = Regex::new(&format!(r"((?i).*{})|(^/.*)", known_image_extension_regex_pattern()));
-         let image = if img_regex.unwrap().is_match(image_path) {
+        let img_regex = Regex::new(&format!(
+            r"((?i).*{})|(^/.*)",
+            known_image_extension_regex_pattern()
+        ));
+        let image = if img_regex.unwrap().is_match(image_path) {
             if let Ok(img) = desktop::fetch_icon_from_common_dirs(&image_path) {
                 Image::from_file(img)
             } else {
