@@ -128,13 +128,14 @@ impl<T: Clone> DRunProvider<T> {
                         .icon
                         .as_ref()
                         .map(|s| s.content.clone())
-                        .or(icon.clone());
+                        .or(icon.clone())
+                        .unwrap_or("application-x-executable".to_string());
 
                     log::debug!("sub, action_name={action_name:?}, action_icon={action_icon:?}");
 
                     let sub_entry = MenuItem {
                         label: action_name,
-                        icon_path: action_icon,
+                        icon_path: Some(action_icon),
                         action: action.exec.clone(),
                         sub_elements: Vec::default(),
                         working_dir: working_dir.clone(),
