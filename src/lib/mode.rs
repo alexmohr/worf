@@ -52,7 +52,7 @@ struct DRunProvider<T: Clone> {
     data: T,
 }
 
-impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
+impl<T: Clone + Send + Sync> DRunProvider<T> {
     fn new(menu_item_data: T) -> Self {
         let (cache_path, d_run_cache) = load_d_run_cache();
         DRunProvider {
@@ -63,6 +63,8 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
         }
     }
 
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_precision_loss)]
     fn load(&self) -> Vec<MenuItem<T>> {
         let locale_variants = get_locale_variants();
         let default_icon = "application-x-executable".to_string();
@@ -120,7 +122,7 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
                      Some(self.data.clone()),
                      );
 
-                for (_, action) in &file.actions {
+                for action in file.actions.values() {
                     if let Some(action_name) = lookup_name_with_locale(
                         &locale_variants,
                         &action.name.variants,
