@@ -84,12 +84,37 @@ pub struct MenuItem<T: Clone> {
     pub action: Option<String>,
     pub sub_elements: Vec<MenuItem<T>>,
     pub working_dir: Option<String>,
-    pub initial_sort_score: i64, // todo make this f64
-    pub search_sort_score: f64,  //  todo make this private
-    pub visible: bool,           // todo make this private
+    pub initial_sort_score: f64,
 
     /// Allows to store arbitrary additional information
     pub data: Option<T>,
+
+    search_sort_score: f64,
+    visible: bool,
+}
+
+impl<T: Clone> MenuItem<T> {
+    pub fn new(
+        label: String,
+        icon_path: Option<String>,
+        action: Option<String>,
+        sub_elements: Vec<MenuItem<T>>,
+        working_dir: Option<String>,
+        initial_sort_score: f64,
+        data: Option<T>,
+    ) -> Self {
+        MenuItem {
+            label,
+            icon_path,
+            action,
+            sub_elements,
+            working_dir,
+            initial_sort_score,
+            data,
+            search_sort_score: 0.0,
+            visible: true,
+        }
+    }
 }
 
 impl<T: Clone> AsRef<MenuItem<T>> for MenuItem<T> {
@@ -671,7 +696,7 @@ where
             action: None,
             sub_elements: Vec::new(),
             working_dir: None,
-            initial_sort_score: 0,
+            initial_sort_score: 0.0,
             search_sort_score: 0.0,
             data: None,
             visible: true,
@@ -776,9 +801,9 @@ fn create_menu_row<T: Clone + 'static>(
     row.set_halign(Align::Fill);
     row.set_widget_name("row");
 
+    let config_clone = config.clone();
     let click = GestureClick::new();
     click.set_button(gdk::BUTTON_PRIMARY);
-    let config_clone = config.clone();
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
         if n_press == 2 {
             if let Err(e) = handle_selected_item(
@@ -795,7 +820,6 @@ fn create_menu_row<T: Clone + 'static>(
             }
         }
     });
-
     row.add_controller(click);
 
     let row_box = gtk4::Box::new(
@@ -880,8 +904,7 @@ fn set_menu_visibility_for_search<T: Clone>(
     {
         if query.is_empty() {
             for menu_item in items.iter_mut() {
-                // todo make initial score and search score both follow same logic.
-                menu_item.search_sort_score = menu_item.initial_sort_score as f64;
+                menu_item.search_sort_score = menu_item.initial_sort_score;
                 menu_item.visible = true;
             }
         } else {
@@ -936,9 +959,7 @@ fn set_menu_visibility_for_search<T: Clone>(
                     }
                 };
 
-                // todo turn initial score init f64
-                menu_item.search_sort_score =
-                    search_sort_score + menu_item.initial_sort_score as f64;
+                menu_item.search_sort_score = search_sort_score + menu_item.initial_sort_score;
                 menu_item.visible = visible;
             }
         }
@@ -979,17 +1000,15 @@ fn percent_or_absolute(value: Option<&String>, base_value: i32) -> Option<i32> {
 
 // highly unlikely that we are dealing with > i64 items
 #[allow(clippy::cast_possible_wrap)]
-pub fn sort_menu_items_alphabetically_honor_initial_score<T: std::clone::Clone>(
-    items: &mut [MenuItem<T>],
-) {
-    let special_score = items.len() as i64;
-    let mut regular_score = 0;
+pub fn sort_menu_items_alphabetically_honor_initial_score<T: Clone>(items: &mut [MenuItem<T>]) {
+    let special_score = items.len() as f64;
+    let mut regular_score = 0.0;
     items.sort_by(|l, r| l.label.cmp(&r.label));
 
     for item in items.iter_mut() {
-        if item.initial_sort_score == 0 {
+        if item.initial_sort_score == 0.0 {
             item.initial_sort_score += regular_score;
-            regular_score += 1;
+            regular_score += 1.0;
         } else {
             item.initial_sort_score += special_score;
         }

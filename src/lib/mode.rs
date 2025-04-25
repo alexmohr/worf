@@ -108,19 +108,17 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
                     .map(|s| s.content.clone())
                     .or(Some(default_icon.clone()));
 
-                let sort_score = *self.cache.get(&name).unwrap_or(&0);
+                let sort_score = *self.cache.get(&name).unwrap_or(&0) as f64;
 
-                let mut entry = MenuItem {
-                    label: name.clone(),
-                    icon_path: icon.clone(),
-                    action: action.clone(),
-                    sub_elements: Vec::new(),
-                    working_dir: working_dir.clone(),
-                    initial_sort_score: sort_score,
-                    search_sort_score: 0.0,
-                    data: Some(self.data.clone()),
-                    visible: true,
-                };
+                let mut entry = MenuItem::new(
+                     name.clone(),
+                     icon.clone(),
+                     action.clone(),
+                     Vec::new(),
+                     working_dir.clone(),
+                     sort_score,
+                     Some(self.data.clone()),
+                     );
 
                 for (_, action) in &file.actions {
                     if let Some(action_name) = lookup_name_with_locale(
@@ -136,17 +134,15 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
                             .unwrap_or("application-x-executable".to_string());
 
 
-                        entry.sub_elements.push(MenuItem {
-                            label: action_name,
-                            icon_path: Some(action_icon),
-                            action: action.exec.clone(),
-                            sub_elements: Vec::new(),
-                            working_dir: working_dir.clone(),
-                            initial_sort_score: 0,
-                            search_sort_score: 0.0,
-                            data: Some(self.data.clone()),
-                            visible: true,
-                        });
+                        entry.sub_elements.push(MenuItem::new(
+                            action_name,
+                            Some(action_icon),
+                            action.exec.clone(),
+                            Vec::new(),
+                            working_dir.clone(),
+                            0.0,
+                            Some(self.data.clone()),
+                        ));
                     }
                 }
 
@@ -279,37 +275,31 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
                             path_str.push('/');
                         }
 
-                        items.push(MenuItem {
-                            label: path_str.clone(),
-                            icon_path: Some(FileItemProvider::<T>::resolve_icon_for_name(
-                                &entry.path(),
-                            )),
-                            action: Some(format!("xdg-open {path_str}")),
-                            sub_elements: vec![],
-                            working_dir: None,
-                            initial_sort_score: 0,
-                            search_sort_score: 0.0,
-                            data: Some(self.menu_item_data.clone()),
-                            visible: true,
-                        });
+                        items.push(MenuItem::new(
+                            path_str.clone(),
+                            Some(FileItemProvider::<T>::resolve_icon_for_name(&entry.path())),
+                            Some(format!("xdg-open {path_str}")),
+                            vec![],
+                            None,
+                            0.0,
+                            Some(self.menu_item_data.clone()),
+                        ));
                     }
                 }
             }
         } else {
             items.push({
-                MenuItem {
-                    label: trimmed_search.clone(),
-                    icon_path: Some(FileItemProvider::<T>::resolve_icon_for_name(
+                MenuItem::new(
+                    trimmed_search.clone(),
+                    Some(FileItemProvider::<T>::resolve_icon_for_name(
                         &PathBuf::from(&trimmed_search),
                     )),
-                    action: Some(format!("xdg-open {trimmed_search}")),
-                    sub_elements: vec![],
-                    working_dir: None,
-                    initial_sort_score: 0,
-                    search_sort_score: 0.0,
-                    data: Some(self.menu_item_data.clone()),
-                    visible: true,
-                }
+                    Some(format!("xdg-open {trimmed_search}")),
+                    vec![],
+                    None,
+                    0.0,
+                    Some(self.menu_item_data.clone()),
+                )
             });
         }
 
@@ -356,18 +346,15 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
                 Err(e) => format!("failed to calculate {e:?}"),
             };
 
-            let item = MenuItem {
-                label: result,
-                icon_path: None,
-                action: search.map(String::from),
-                sub_elements: vec![],
-                working_dir: None,
-                initial_sort_score: 0,
-                search_sort_score: 0.0,
-                data: Some(self.menu_item_data.clone()),
-                visible: true,
-            };
-
+            let item = MenuItem::new(
+                result,
+                None,
+                search.map(String::from),
+                vec![],
+                None,
+                0.0,
+                Some(self.menu_item_data.clone()),
+            );
             vec![item]
         } else {
             vec![]
@@ -394,17 +381,7 @@ impl DMenuProvider {
         let items: Vec<MenuItem<String>> = input
             .lines()
             .map(String::from)
-            .map(|s| MenuItem {
-                label: s,
-                icon_path: None,
-                action: None,
-                sub_elements: vec![],
-                working_dir: None,
-                initial_sort_score: 0,
-                search_sort_score: 0.0,
-                data: None,
-                visible: true,
-            })
+            .map(|s| MenuItem::new(s.clone(), None, None, vec![], None, 0.0, None))
             .collect();
 
         Ok(Self { items })
