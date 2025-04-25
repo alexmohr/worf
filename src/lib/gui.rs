@@ -101,10 +101,14 @@ impl<T: Clone> AsRef<MenuItem<T>> for MenuItem<T> {
 /// # Errors
 ///
 /// Will return Err when the channel between the UI and this is broken
-pub fn show<T, P>(config: Config, item_provider: P) -> Result<MenuItem<T>, anyhow::Error>
+pub fn show<T, P>(
+    config: Config,
+    item_provider: P,
+    new_on_empty: bool,
+) -> Result<MenuItem<T>, anyhow::Error>
 where
-    T: Clone + 'static + std::marker::Send,
-    P: ItemProvider<T> + 'static + Clone + std::marker::Send,
+    T: Clone + 'static + Send,
+    P: ItemProvider<T> + 'static + Clone + Send,
 {
     log::debug!("Starting GUI");
     if let Some(ref css) = config.style {
@@ -124,7 +128,7 @@ where
     let (sender, receiver) = channel::bounded(1);
 
     app.connect_activate(move |app| {
-        build_ui(&config, item_provider.clone(), &sender, app);
+        build_ui(&config, item_provider.clone(), &sender, app, new_on_empty);
     });
 
     let gtk_args: [&str; 0] = [];
@@ -137,9 +141,10 @@ fn build_ui<T, P>(
     item_provider: P,
     sender: &Sender<Result<MenuItem<T>, anyhow::Error>>,
     app: &Application,
+    new_on_empty: bool,
 ) where
-    T: Clone + 'static + std::marker::Send,
-    P: ItemProvider<T> + 'static + std::marker::Send,
+    T: Clone + 'static + Send,
+    P: ItemProvider<T> + 'static + Send,
 {
     let start = Instant::now();
 
@@ -173,6 +178,7 @@ fn build_ui<T, P>(
         ArcMenuMap::clone(&list_items),
         config.clone(),
         item_provider,
+        new_on_empty,
     );
 
     log::debug!("keyboard ready after {:?}", start.elapsed());
@@ -333,6 +339,7 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
     list_items: Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>,
     config: Config,
     item_provider: ArcProvider<T>,
+    new_on_empty: bool,
 ) {
     let key_controller = EventControllerKey::new();
 
@@ -349,6 +356,7 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
             &item_provider,
             &window_clone,
             key_value,
+            new_on_empty,
         )
     });
 
@@ -366,6 +374,7 @@ fn handle_key_press<T: Clone + 'static>(
     item_provider: &ArcProvider<T>,
     window_clone: &ApplicationWindow,
     keyboard_key: Key,
+    new_on_empty: bool,
 ) -> Propagation {
     let update_view = |query: &String, items: &mut Vec<MenuItem<T>>| {
         set_menu_visibility_for_search(query, items, config);
@@ -394,6 +403,7 @@ fn handle_key_press<T: Clone + 'static>(
             close_gui(app.clone(), window_clone.clone(), config);
         }
         Key::Return => {
+            let query = search_entry.text().to_string();
             if let Err(e) = handle_selected_item(
                 sender,
                 app.clone(),
@@ -401,6 +411,8 @@ fn handle_key_press<T: Clone + 'static>(
                 config,
                 inner_box,
                 list_items,
+                new_on_empty,
+                Some(&query),
             ) {
                 log::error!("{e}");
             }
@@ -610,15 +622,14 @@ fn animate_window<Func>(
         let rounded_width = current_width.round() as i32;
         let rounded_height = current_height.round() as i32;
 
-        window.set_width_request(rounded_width);
-        window.set_height_request(rounded_height);
-
-        if t >= 1.0 {
+        if t >= 1.0 || rounded_height > target_height || rounded_width > target_width {
             window.set_width_request(target_width);
             window.set_height_request(target_height);
             on_done_func();
             ControlFlow::Break
         } else {
+            window.set_width_request(rounded_width);
+            window.set_height_request(rounded_height);
             ControlFlow::Continue
         }
     });
@@ -635,6 +646,8 @@ fn handle_selected_item<T>(
     config: &Config,
     inner_box: &FlowBox,
     lock_arc: &ArcMenuMap<T>,
+    new_on_empty: bool,
+    query: Option<&str>,
 ) -> Result<(), String>
 where
     T: Clone,
@@ -650,7 +663,28 @@ where
         close_gui(app, window, config);
         return Ok(());
     }
-    Err("selected item cannot be resolved".to_owned())
+
+    if new_on_empty {
+        let item = MenuItem {
+            label: query.unwrap_or("").to_owned(),
+            icon_path: None,
+            action: None,
+            sub_elements: Vec::new(),
+            working_dir: None,
+            initial_sort_score: 0,
+            search_sort_score: 0.0,
+            data: None,
+            visible: true,
+        };
+
+        if let Err(e) = sender.send(Ok(item.clone())) {
+            log::error!("failed to send message {e}");
+        }
+        close_gui(app, window, config);
+        Ok(())
+    } else {
+        Err("selected item cannot be resolved".to_owned())
+    }
 }
 
 fn add_menu_item<T: Clone + 'static>(
@@ -737,7 +771,6 @@ fn create_menu_row<T: Clone + 'static>(
     window: ApplicationWindow,
     inner_box: FlowBox,
 ) -> Widget {
-    let start = Instant::now();
     let row = ListBoxRow::new();
     row.set_hexpand(true);
     row.set_halign(Align::Fill);
@@ -755,6 +788,8 @@ fn create_menu_row<T: Clone + 'static>(
                 &config_clone,
                 &inner_box,
                 &lock_arc,
+                false,
+                None,
             ) {
                 log::error!("{e}");
             }
