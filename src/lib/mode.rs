@@ -168,7 +168,7 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
     }
 }
 
-impl<T: Clone + std::marker::Send + std::marker::Sync> ItemProvider<T> for DRunProvider<T> {
+impl<T: Clone + Send + Sync> ItemProvider<T> for DRunProvider<T> {
     fn get_elements(&mut self, _: Option<&str>) -> Vec<MenuItem<T>> {
         if self.items.is_none() {
             self.items = Some(self.load().clone());
@@ -319,11 +319,15 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
 #[derive(Clone)]
 struct MathProvider<T: Clone> {
     menu_item_data: T,
+    elements: Vec<MenuItem<T>>,
 }
 
 impl<T: Clone> MathProvider<T> {
     fn new(menu_item_data: T) -> Self {
-        Self { menu_item_data }
+        Self {
+            menu_item_data,
+            elements: vec![],
+        }
     }
 
     fn contains_math_functions_or_starts_with_number(input: &str) -> bool {
@@ -337,6 +341,10 @@ impl<T: Clone> MathProvider<T> {
         let number_regex = Regex::new(starts_with_number).unwrap();
 
         math_regex.is_match(input) || number_regex.is_match(input)
+    }
+
+    fn add_elements(&mut self, elements: &mut Vec<MenuItem<T>>) {
+        self.elements.append(elements);
     }
 }
 
@@ -357,9 +365,11 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
                 0.0,
                 Some(self.menu_item_data.clone()),
             );
-            vec![item]
+            let mut result = vec![item];
+            result.append(&mut self.elements.clone());
+            result
         } else {
-            vec![]
+            self.elements.clone()
         }
     }
 
@@ -484,31 +494,40 @@ pub fn d_run(config: &Config) -> Result<(), ModeError> {
 /// Will return `Err`
 /// * if it was not able to spawn the process
 pub fn auto(config: &Config) -> Result<(), ModeError> {
-    let provider = AutoItemProvider::new();
+    let mut provider = AutoItemProvider::new();
     let cache_path = provider.drun.cache_path.clone();
     let mut cache = provider.drun.cache.clone();
+    let mut cfg_clone = config.clone();
 
-    // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider, false);
+    loop {
+        // todo ues a arc instead of cloning the config
+        let selection_result = gui::show(cfg_clone.clone(), provider.clone(), false);
 
-    match selection_result {
-        Ok(selection_result) => {
-            if let Some(data) = &selection_result.data {
-                match data {
-                    AutoRunType::Math => {}
-                    AutoRunType::DRun => {
-                        update_drun_cache_and_run(cache_path, &mut cache, selection_result)?;
-                    }
-                    AutoRunType::File => {
-                        if let Some(action) = selection_result.action {
-                            spawn_fork(&action, selection_result.working_dir.as_ref())?;
+        match selection_result {
+            Ok(selection_result) => {
+                if let Some(data) = &selection_result.data {
+                    match data {
+                        AutoRunType::Math => {
+                            cfg_clone.prompt = Some(selection_result.label.clone());
+                            provider.math.elements.push(selection_result);
+                        }
+                        AutoRunType::DRun => {
+                            update_drun_cache_and_run(cache_path, &mut cache, selection_result)?;
+                            break;
+                        }
+                        AutoRunType::File => {
+                            if let Some(action) = selection_result.action {
+                                spawn_fork(&action, selection_result.working_dir.as_ref())?;
+                            }
+                            break;
                         }
                     }
                 }
             }
-        }
-        Err(_) => {
-            log::error!("No item selected");
+            Err(_) => {
+                log::error!("No item selected");
+                break;
+            }
         }
     }
 
@@ -539,14 +558,21 @@ pub fn file(config: &Config) -> Result<(), ModeError> {
 }
 
 pub fn math(config: &Config) {
-    let provider = MathProvider::new(String::new);
-
-    // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider, false);
-    match selection_result {
-        Ok(_) => {}
-        Err(_) => {
-            log::error!("No item selected");
+    let mut cfg_clone = config.clone();
+    let mut calc: Vec<MenuItem<String>> = vec![];
+    loop {
+        let mut provider = MathProvider::new(String::new());
+        provider.add_elements(&mut calc.clone());
+        let selection_result = gui::show(cfg_clone.clone(), provider, true);
+        match selection_result {
+            Ok(mi) => {
+                cfg_clone.prompt = Some(mi.label.clone());
+                calc.push(mi);
+            }
+            Err(_) => {
+                log::error!("No item selected");
+                break;
+            }
         }
     }
 }
