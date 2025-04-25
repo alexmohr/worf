@@ -489,7 +489,7 @@ pub fn d_run(config: &Config) -> Result<(), ModeError> {
     let mut cache = provider.cache.clone();
 
     // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider);
+    let selection_result = gui::show(config.clone(), provider, false);
     match selection_result {
         Ok(s) => update_drun_cache_and_run(cache_path, &mut cache, s)?,
         Err(_) => {
@@ -510,7 +510,7 @@ pub fn auto(config: &Config) -> Result<(), ModeError> {
     let mut cache = provider.drun.cache.clone();
 
     // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider);
+    let selection_result = gui::show(config.clone(), provider, false);
 
     match selection_result {
         Ok(selection_result) => {
@@ -544,7 +544,7 @@ pub fn file(config: &Config) -> Result<(), ModeError> {
     let provider = FileItemProvider::new(String::new());
 
     // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider);
+    let selection_result = gui::show(config.clone(), provider, false);
     match selection_result {
         Ok(s) => {
             if let Some(action) = s.action {
@@ -563,7 +563,7 @@ pub fn math(config: &Config) {
     let provider = MathProvider::new(String::new);
 
     // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider);
+    let selection_result = gui::show(config.clone(), provider, false);
     match selection_result {
         Ok(_) => {}
         Err(_) => {
@@ -578,7 +578,7 @@ pub fn math(config: &Config) {
 pub fn dmenu(config: &Config) -> Result<(), ModeError> {
     let provider = DMenuProvider::new()?;
 
-    let selection_result = gui::show(config.clone(), provider);
+    let selection_result = gui::show(config.clone(), provider, true);
     match selection_result {
         Ok(s) => {
             println!("{}", s.label);
