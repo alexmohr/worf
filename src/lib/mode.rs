@@ -7,7 +7,7 @@ use freedesktop_file_parser::EntryType;
 use rayon::prelude::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::os::unix::prelude::CommandExt;
 use std::path::{Path, PathBuf};
@@ -46,22 +46,34 @@ struct DRunCache {
 
 #[derive(Clone)]
 struct DRunProvider<T: Clone> {
-    items: Vec<MenuItem<T>>,
+    items: Option<Vec<MenuItem<T>>>,
     cache_path: Option<PathBuf>,
     cache: HashMap<String, i64>,
+    data: T,
 }
 
 impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
     fn new(menu_item_data: T) -> Self {
+        let (cache_path, d_run_cache) = load_d_run_cache();
+        DRunProvider {
+            items: None,
+            cache_path,
+            cache: d_run_cache,
+            data: menu_item_data,
+        }
+    }
+
+    fn load(&self) -> Vec<MenuItem<T>> {
         let locale_variants = get_locale_variants();
         let default_icon = "application-x-executable".to_string();
-
-        let (cache_path, d_run_cache) = load_d_run_cache();
-
         let start = Instant::now();
 
-        let mut entries: Vec<MenuItem<T>> = find_desktop_files()
+        let entries: Vec<MenuItem<T>> = find_desktop_files()
             .into_par_iter()
+            .filter(|file| {
+                !file.entry.no_display.unwrap_or(false)
+                    && !file.entry.hidden.unwrap_or(false)
+            })
             .filter_map(|file| {
                 let name = lookup_name_with_locale(
                     &locale_variants,
@@ -85,9 +97,7 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
                     .unwrap_or(false);
 
                 if !cmd_exists {
-                    log::warn!(
-                "Skipping desktop entry for {name:?} because action {action:?} does not exist"
-            );
+                    log::warn!("Skipping desktop entry for {name:?} because action {action:?} does not exist");
                     return None;
                 }
 
@@ -98,9 +108,7 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
                     .map(|s| s.content.clone())
                     .or(Some(default_icon.clone()));
 
-                log::debug!("file, name={name:?}, icon={icon:?}, action={action:?}");
-
-                let sort_score = *d_run_cache.get(&name).unwrap_or(&0);
+                let sort_score = *self.cache.get(&name).unwrap_or(&0);
 
                 let mut entry = MenuItem {
                     label: name.clone(),
@@ -110,7 +118,7 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
                     working_dir: working_dir.clone(),
                     initial_sort_score: sort_score,
                     search_sort_score: 0.0,
-                    data: Some(menu_item_data.clone()),
+                    data: Some(self.data.clone()),
                     visible: true,
                 };
 
@@ -127,7 +135,6 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
                             .or(icon.clone())
                             .unwrap_or("application-x-executable".to_string());
 
-                        log::debug!("sub, action_name={action_name:?}, action_icon={action_icon:?}");
 
                         entry.sub_elements.push(MenuItem {
                             label: action_name,
@@ -137,7 +144,7 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
                             working_dir: working_dir.clone(),
                             initial_sort_score: 0,
                             search_sort_score: 0.0,
-                            data: None,
+                            data: Some(self.data.clone()),
                             visible: true,
                         });
                     }
@@ -147,24 +154,28 @@ impl<T: Clone + std::marker::Send + std::marker::Sync> DRunProvider<T> {
             })
             .collect();
 
+        let mut seen_actions = HashSet::new();
+        let mut entries: Vec<MenuItem<T>> = entries
+            .into_iter()
+            .filter(|entry| seen_actions.insert(entry.action.clone()))
+            .collect();
+
         log::info!(
             "parsing desktop files took {}ms",
             start.elapsed().as_millis()
         );
 
         gui::sort_menu_items_alphabetically_honor_initial_score(&mut entries);
-
-        DRunProvider {
-            items: entries,
-            cache_path,
-            cache: d_run_cache,
-        }
+        entries
     }
 }
 
-impl<T: Clone> ItemProvider<T> for DRunProvider<T> {
+impl<T: Clone + std::marker::Send + std::marker::Sync> ItemProvider<T> for DRunProvider<T> {
     fn get_elements(&mut self, _: Option<&str>) -> Vec<MenuItem<T>> {
-        self.items.clone()
+        if self.items.is_none() {
+            self.items = Some(self.load().clone());
+        }
+        self.items.clone().unwrap()
     }
 
     fn get_sub_elements(&mut self, _: &MenuItem<T>) -> Option<Vec<MenuItem<T>>> {
