@@ -3,12 +3,12 @@ use std::env;
 use anyhow::anyhow;
 use worf_lib::config::Mode;
 use worf_lib::{config, mode};
-
 fn main() -> anyhow::Result<()> {
     gtk4::init()?;
 
     env_logger::Builder::new()
         .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
+        .format_timestamp_micros()
         .init();
 
     let args = config::parse_args();

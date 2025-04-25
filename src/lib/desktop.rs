@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Instant;
 use std::{env, fs, string};
 
 use freedesktop_file_parser::DesktopFile;
@@ -112,6 +113,7 @@ fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<Pa
     fs::read_dir(folder).ok().map(|entries| {
         entries
             .filter_map(Result::ok)
+            .par_bridge() // Convert to parallel iterator
             .filter_map(|entry| entry.path().canonicalize().ok())
             .filter(|entry| {
                 entry
@@ -134,6 +136,8 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
         PathBuf::from("/usr/local/share/applications"),
         PathBuf::from("/var/lib/flatpak/exports/share/applications"),
     ];
+
+    let start = Instant::now();
 
     if let Some(home) = dirs::home_dir() {
         paths.push(home.join(".local/share/applications"));
@@ -163,6 +167,7 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
             })
         })
         .collect();
+    log::debug!("Found {} desktop files in {:?}", p.len(), start.elapsed());
     p
 }
 
