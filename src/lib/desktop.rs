@@ -2,17 +2,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
-use std::{env, fs, string};
+use std::{env, fs};
 
 use freedesktop_file_parser::DesktopFile;
-use futures::stream;
-use gdk4::Display;
-use gdk4::prelude::FileExt;
-use gtk4::{IconLookupFlags, IconTheme, TextDirection};
 use rayon::prelude::*;
-
-use futures::StreamExt;
-use log;
 use regex::Regex;
 
 #[derive(Debug)]
@@ -63,14 +56,15 @@ pub enum DesktopError {
 //         }
 //         Some(i) => Ok(i),
 //     }
-// }
+// }use futures::StreamExt;
 
+/// # Panics
+///
+/// When it cannot parse the internal regex
+#[must_use]
 pub fn known_image_extension_regex_pattern() -> Regex {
-    Regex::new(&format!(
-        r"(?i).*{}",
-        format!("\\.({})$", ["png", "jpg", "gif", "svg", "jpeg"].join("|"))
-    ))
-    .expect("Internal image regex is not valid anymore.")
+    Regex::new(r"(?i).*\.(png|jpg|gif|svg|jpeg)$")
+        .expect("Internal image regex is not valid anymore.")
 }
 
 /// # Errors
@@ -129,7 +123,6 @@ fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<Pa
 ///
 /// When it cannot parse the internal regex
 #[must_use]
-
 pub fn find_desktop_files() -> Vec<DesktopFile> {
     let mut paths = vec![
         PathBuf::from("/usr/share/applications"),
@@ -153,7 +146,7 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
         }
     }
 
-    let regex = &Regex::new("(?i).*\\.desktop$").unwrap();
+    let regex = &Regex::new("(?i).*\\.desktop$").expect("invalid internal regex");
 
     let p: Vec<_> = paths
         .into_par_iter()
@@ -171,13 +164,17 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
     p
 }
 
+/// # Panics
+///
+/// When it cannot parse the internal regex
+#[must_use]
 pub fn lookup_icon(name: &str, size: i32) -> gtk4::Image {
     let img_regex = Regex::new(&format!(
         r"((?i).*{})|(^/.*)",
         known_image_extension_regex_pattern()
     ));
-    let image = if img_regex.unwrap().is_match(name) {
-        if let Ok(img) = fetch_icon_from_common_dirs(&name) {
+    let image = if img_regex.expect("invalid icon regex").is_match(name) {
+        if let Ok(img) = fetch_icon_from_common_dirs(name) {
             gtk4::Image::from_file(img)
         } else {
             gtk4::Image::from_icon_name(name)
