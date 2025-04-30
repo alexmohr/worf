@@ -1,8 +1,10 @@
 image_size=0
 columns=999
+allow_images=false
 orientation="Horizontal"
 row_bow_orientation="Horizontal"
-content_halign="Center"
-height="25"
+content_halign="Start"
+height="0"
 width="100%"
-valign="Start"
+hide_scroll=true
+location=["Top"]
