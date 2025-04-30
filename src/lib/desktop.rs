@@ -1,63 +1,17 @@
-use std::collections::HashMap;
-use std::path::Path;
-use std::path::PathBuf;
-use std::time::Instant;
-use std::{env, fs};
-
+use crate::Error;
+use crate::config::expand_path;
 use freedesktop_file_parser::DesktopFile;
 use rayon::prelude::*;
 use regex::Regex;
+use std::collections::HashMap;
+use std::os::unix::prelude::CommandExt;
+use std::path::Path;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::time::Instant;
+use std::{env, fs, io};
 
-#[derive(Debug)]
-pub enum DesktopError {
-    MissingIcon,
-    ParsingError(String),
-}
-//
-// /// # Errors
-// ///
-// /// Will return `Err` if no icon can be found
-// pub fn default_icon() -> Result<String, DesktopError> {
-//     fetch_icon_from_theme("image-missing").map_err(|_| DesktopError::MissingIcon)
-// }
-//
-// fn fetch_icon_from_theme(icon_name: &str) -> Result<String, DesktopError> {
-//     let display = Display::default();
-//     if display.is_none() {
-//         log::error!("Failed to get display");
-//     }
-//
-//     let display = Display::default().expect("Failed to get default display");
-//     let theme = IconTheme::for_display(&display);
-//
-//     let icon = theme.lookup_icon(
-//         icon_name,
-//         &[],
-//         32,
-//         1,
-//         TextDirection::None,
-//         IconLookupFlags::empty(),
-//     );
-//
-//     match icon
-//         .file()
-//         .and_then(|file| file.path())
-//         .and_then(|path| path.to_str().map(string::ToString::to_string))
-//     {
-//         None => {
-//             let path = PathBuf::from("/usr/share/icons")
-//                 .join(theme.theme_name())
-//                 .join(format!("{icon_name}.svg"));
-//             if path.exists() {
-//                 Ok(path.display().to_string())
-//             } else {
-//                 Err(DesktopError::MissingIcon)
-//             }
-//         }
-//         Some(i) => Ok(i),
-//     }
-// }use futures::StreamExt;
-
+/// Returns a regex with supported image extensions
 /// # Panics
 ///
 /// When it cannot parse the internal regex
@@ -67,11 +21,16 @@ pub fn known_image_extension_regex_pattern() -> Regex {
         .expect("Internal image regex is not valid anymore.")
 }
 
+/// Read an icon from a shared directory
+/// * /usr/local/share/icon
+/// * /usr/share/icons
+/// * /usr/share/pixmaps
+/// * $HOME/.local/share/icon (if exists)
 /// # Errors
 ///
 /// Will return `Err`
 /// * if it was not able to find any icon
-pub fn fetch_icon_from_common_dirs(icon_name: &str) -> Result<String, DesktopError> {
+pub fn fetch_icon_from_common_dirs(icon_name: &str) -> Result<String, Error> {
     let mut paths = vec![
         PathBuf::from("/usr/local/share/icons"),
         PathBuf::from("/usr/share/icons"),
@@ -88,19 +47,20 @@ pub fn fetch_icon_from_common_dirs(icon_name: &str) -> Result<String, DesktopErr
             .into_iter()
             .filter(|dir| dir.exists())
             .find_map(|dir| {
-                find_file_case_insensitive(dir.as_path(), &formatted_name)
+                find_file_via_regex(dir.as_path(), &formatted_name)
                     .and_then(|files| files.first().map(|f| f.to_string_lossy().into_owned()))
             })
-            .ok_or(DesktopError::MissingIcon)
+            .ok_or(Error::MissingIcon)
     } else {
-        Err(DesktopError::ParsingError(
+        Err(Error::ParsingError(
             "Failed to get formatted icon, likely the internal regex did not parse properly"
                 .to_string(),
         ))
     }
 }
 
-fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<PathBuf>> {
+/// Helper function to retrieve a file with given regex.
+fn find_file_via_regex(folder: &Path, file_name: &Regex) -> Option<Vec<PathBuf>> {
     if !folder.exists() || !folder.is_dir() {
         return None;
     }
@@ -119,6 +79,10 @@ fn find_file_case_insensitive(folder: &Path, file_name: &Regex) -> Option<Vec<Pa
     })
 }
 
+/// Parse all desktop files in known locations
+/// * /usr/share/applications
+/// * /usr/local/share/applications
+/// * /var/lib/flatpak/exports/share/applications
 /// # Panics
 ///
 /// When it cannot parse the internal regex
@@ -151,7 +115,7 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
     let p: Vec<_> = paths
         .into_par_iter()
         .filter(|desktop_dir| desktop_dir.exists())
-        .filter_map(|icon_dir| find_file_case_insensitive(&icon_dir, regex))
+        .filter_map(|icon_dir| find_file_via_regex(&icon_dir, regex))
         .flat_map(|desktop_files| {
             desktop_files.into_par_iter().filter_map(|desktop_file| {
                 fs::read_to_string(desktop_file)
@@ -164,30 +128,7 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
     p
 }
 
-/// # Panics
-///
-/// When it cannot parse the internal regex
-#[must_use]
-pub fn lookup_icon(name: &str, size: i32) -> gtk4::Image {
-    let img_regex = Regex::new(&format!(
-        r"((?i).*{})|(^/.*)",
-        known_image_extension_regex_pattern()
-    ));
-    let image = if img_regex.expect("invalid icon regex").is_match(name) {
-        if let Ok(img) = fetch_icon_from_common_dirs(name) {
-            gtk4::Image::from_file(img)
-        } else {
-            gtk4::Image::from_icon_name(name)
-        }
-    } else {
-        gtk4::Image::from_icon_name(name)
-    };
-
-    image.set_pixel_size(size);
-
-    image
-}
-
+/// Return all possible locales based on the users preferences
 #[must_use]
 pub fn get_locale_variants() -> Vec<String> {
     let locale = env::var("LC_ALL")
@@ -208,6 +149,7 @@ pub fn get_locale_variants() -> Vec<String> {
     variants
 }
 
+/// Lookup a value from a hashmap with respect to current locale
 // implicit hasher does not make sense here, it is only for desktop files
 #[allow(clippy::implicit_hasher)]
 #[must_use]
@@ -221,4 +163,108 @@ pub fn lookup_name_with_locale(
         .find_map(|local| variants.get(local))
         .map(std::borrow::ToOwned::to_owned)
         .or_else(|| Some(fallback.to_owned()))
+}
+
+/// Spawn a new process and forks it away from the current worf process
+/// # Errors
+/// * No action in menu item
+/// * Cannot run command (i.e. not found)
+pub fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), Error> {
+    // todo fix actions ??
+    // todo graphical disk map icon not working
+
+    let parts = cmd.split(' ').collect::<Vec<_>>();
+    if parts.is_empty() {
+        return Err(Error::MissingAction);
+    }
+
+    if let Some(dir) = working_dir {
+        env::set_current_dir(dir)
+            .map_err(|e| Error::RunFailed(format!("cannot set workdir {e}")))?;
+    }
+
+    let exec = parts[0].replace('"', "");
+    let args: Vec<_> = parts
+        .iter()
+        .skip(1)
+        .filter(|arg| !arg.starts_with('%'))
+        .map(|arg| expand_path(arg))
+        .collect();
+
+    unsafe {
+        let _ = Command::new(exec)
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            })
+            .spawn();
+    }
+    Ok(())
+}
+
+/// Parse a simple toml cache file from the format below
+/// "Key"=score
+/// i.e.
+/// "Firefox"=42
+/// "Chrome"=12
+/// "Files"=50
+/// # Errors
+/// Returns an Error when the given file is not found or did not parse.
+pub fn load_cache_file(cache_path: Option<&PathBuf>) -> Result<HashMap<String, i64>, Error> {
+    let Some(path) = cache_path else {
+        return Err(Error::MissingFile);
+    };
+
+    let toml_content =
+        fs::read_to_string(path).map_err(|e| Error::UpdateCacheError(format!("{e}")))?;
+    let parsed: toml::Value = toml_content
+        .parse()
+        .map_err(|_| Error::ParsingError("failed to parse cache".to_owned()))?;
+
+    let mut result: HashMap<String, i64> = HashMap::new();
+    if let toml::Value::Table(table) = parsed {
+        for (key, val) in table {
+            if let toml::Value::Integer(i) = val {
+                result.insert(key, i);
+            } else {
+                log::warn!("Skipping key '{key}' because it's not an integer");
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Stores a cache file in the cache format. See `load_cache_file` for details.
+/// # Errors
+/// `Error::Parsing` if converting into toml was not possible
+/// `Error::Io` if storing the file failed.
+// implicit hasher does not make sense here, it is only for desktop files
+#[allow(clippy::implicit_hasher)]
+pub fn save_cache_file(path: &PathBuf, data: &HashMap<String, i64>) -> Result<(), Error> {
+    // Convert the HashMap to TOML string
+    let toml_string =
+        toml::ser::to_string(&data).map_err(|e| Error::ParsingError(e.to_string()))?;
+    fs::write(path, toml_string).map_err(|e| Error::Io(e.to_string()))?;
+    Ok(())
+}
+
+/// Crates a new file if it does not exist yet.
+/// # Errors
+/// `Errors::Io` if creating the file failed
+pub fn create_file_if_not_exists(path: &PathBuf) -> Result<(), Error> {
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path);
+
+    match file {
+        Ok(_) => Ok(()),
+
+        Err(ref e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) => Err(Error::Io(e.to_string())),
+    }
 }

@@ -78,19 +78,29 @@ impl From<config::Align> for Align {
     }
 }
 
+/// An entry in the list of selectable items in the UI.
+/// Supports nested items but these cannot nested again (only nesting with depth == 1 is supported)
 #[derive(Clone, PartialEq)]
 pub struct MenuItem<T: Clone> {
-    pub label: String, // todo support empty label?
+    /// text to show in the UI
+    pub label: String,
+    /// optional icon, will use fallback icon if None is given
     pub icon_path: Option<String>,
+    /// the action to run when this is selected.
     pub action: Option<String>,
+    /// Sub elements of this entry. If this already has a parent entry, nesting is not supported
     pub sub_elements: Vec<MenuItem<T>>,
+    /// Working directory to run the action in.
     pub working_dir: Option<String>,
+    /// Initial sort score to display favourites at the top
     pub initial_sort_score: f64,
 
     /// Allows to store arbitrary additional information
     pub data: Option<T>,
 
+    /// Score the item got in the current search
     search_sort_score: f64,
+    /// True if the item is visible
     visible: bool,
 }
 
@@ -140,6 +150,7 @@ struct UiElements<T: Clone> {
     menu_rows: ArcMenuMap<T>,
 }
 
+/// Shows the user interface and **blocks** until the user selected an entry
 /// # Errors
 ///
 /// Will return Err when the channel between the UI and this is broken
@@ -953,6 +964,7 @@ fn percent_or_absolute(value: Option<&String>, base_value: i32) -> Option<i32> {
     }
 }
 
+/// Sorts menu items in alphabetical order, while maintaining the initial score
 // highly unlikely that we are dealing with > i64 items
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]

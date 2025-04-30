@@ -21,6 +21,9 @@ name = "worf"
 path = "src/main.rs"
 
 
+[package.metadata.docs.rs]
+no-deps = true
+
 [dependencies]
 gtk4 = { version = "0.9.5", default-features = true, features = ["v4_6"] }
 gtk4-layer-shell = "0.5.0"
@@ -29,7 +32,6 @@ anyhow = "1.0.97"
 env_logger = "0.11.8"
 log = "0.4.27"
 regex = "1.11.1"
-hyprland = "0.4.0-beta.2"
 clap = { version = "4.5.35", features = ["derive"] }
 thiserror = "2.0.12"
 serde = { version = "1.0.219", features = ["derive"] }
@@ -44,5 +46,3 @@ which = "7.0.3"
 meval = "0.2.0"
 tree_magic_mini = "3.1.6"
 rayon = "1.10.0"
-tokio = { version = "1.44.2", features = ["full"] }
-futures = "0.3.31"
