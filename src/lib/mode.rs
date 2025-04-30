@@ -317,6 +317,56 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
 }
 
 #[derive(Clone)]
+struct SshProvider<T: Clone> {
+    elements: Vec<MenuItem<T>>,
+}
+
+impl<T: Clone> SshProvider<T> {
+    fn new(menu_item_data: T, config: &Config) -> Self {
+        let re = Regex::new(r"(?m)^\s*Host\s+(.+)$").unwrap();
+        let items: Vec<_> = dirs::home_dir()
+            .map(|home| home.join(".ssh").join("config"))
+            .filter(|path| path.exists())
+            .map(|path| fs::read_to_string(&path).unwrap_or_default())
+            .into_iter()
+            .flat_map(|content| {
+                re.captures_iter(&content)
+                    .flat_map(|cap| {
+                        cap[1]
+                            .split_whitespace()
+                            .map(|host| {
+                                log::debug!("found ssh host {host}");
+                                MenuItem::new(
+                                    host.to_owned(),
+                                    Some("computer".to_owned()),
+                                    config.term.clone().map(|cmd| format!("{cmd} ssh {host}")),
+                                    vec![],
+                                    None,
+                                    0.0,
+                                    Some(menu_item_data.clone()),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        Self { elements: items }
+    }
+}
+
+impl<T: Clone> ItemProvider<T> for SshProvider<T> {
+    fn get_elements(&mut self, _: Option<&str>) -> Vec<MenuItem<T>> {
+        self.elements.clone()
+    }
+
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> Option<Vec<MenuItem<T>>> {
+        None
+    }
+}
+
+#[derive(Clone)]
 struct MathProvider<T: Clone> {
     menu_item_data: T,
     elements: Vec<MenuItem<T>>,
@@ -415,7 +465,7 @@ enum AutoRunType {
     Math,
     DRun,
     File,
-    // Ssh,
+    Ssh,
     // WebSearch,
     // Emoji,
     // Run,
@@ -426,14 +476,16 @@ struct AutoItemProvider {
     drun: DRunProvider<AutoRunType>,
     file: FileItemProvider<AutoRunType>,
     math: MathProvider<AutoRunType>,
+    ssh: SshProvider<AutoRunType>,
 }
 
 impl AutoItemProvider {
-    fn new() -> Self {
+    fn new(config: &Config) -> Self {
         AutoItemProvider {
             drun: DRunProvider::new(AutoRunType::DRun),
             file: FileItemProvider::new(AutoRunType::File),
             math: MathProvider::new(AutoRunType::Math),
+            ssh: SshProvider::new(AutoRunType::Ssh, config),
         }
     }
 }
@@ -453,6 +505,8 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
                 || trimmed_search.starts_with('~')
             {
                 self.file.get_elements(search_opt)
+            } else if trimmed_search.starts_with("ssh") {
+                self.ssh.get_elements(search_opt)
             } else {
                 self.drun.get_elements(search_opt)
             }
@@ -494,40 +548,44 @@ pub fn d_run(config: &Config) -> Result<(), ModeError> {
 /// Will return `Err`
 /// * if it was not able to spawn the process
 pub fn auto(config: &Config) -> Result<(), ModeError> {
-    let mut provider = AutoItemProvider::new();
+    let mut provider = AutoItemProvider::new(config);
     let cache_path = provider.drun.cache_path.clone();
     let mut cache = provider.drun.cache.clone();
     let mut cfg_clone = config.clone();
 
     loop {
         // todo ues a arc instead of cloning the config
-        let selection_result = gui::show(cfg_clone.clone(), provider.clone(), false);
+        let selection_result = gui::show(cfg_clone.clone(), provider.clone(), true);
 
-        match selection_result {
-            Ok(selection_result) => {
-                if let Some(data) = &selection_result.data {
-                    match data {
-                        AutoRunType::Math => {
-                            cfg_clone.prompt = Some(selection_result.label.clone());
-                            provider.math.elements.push(selection_result);
+        if let Ok(mut selection_result) = selection_result {
+            if let Some(data) = &selection_result.data {
+                match data {
+                    AutoRunType::Math => {
+                        cfg_clone.prompt = Some(selection_result.label.clone());
+                        provider.math.elements.push(selection_result);
+                    }
+                    AutoRunType::DRun => {
+                        update_drun_cache_and_run(cache_path, &mut cache, selection_result)?;
+                        break;
+                    }
+                    AutoRunType::File => {
+                        if let Some(action) = selection_result.action {
+                            spawn_fork(&action, selection_result.working_dir.as_ref())?;
                         }
-                        AutoRunType::DRun => {
-                            update_drun_cache_and_run(cache_path, &mut cache, selection_result)?;
-                            break;
-                        }
-                        AutoRunType::File => {
-                            if let Some(action) = selection_result.action {
-                                spawn_fork(&action, selection_result.working_dir.as_ref())?;
-                            }
-                            break;
-                        }
+                        break;
+                    }
+                    AutoRunType::Ssh => {
+                        ssh_launch(&selection_result, config)?;
+                        break;
                     }
                 }
+            } else if selection_result.label.starts_with("ssh") {
+                selection_result.label = selection_result.label.chars().skip(4).collect();
+                ssh_launch(&selection_result, config)?;
             }
-            Err(_) => {
-                log::error!("No item selected");
-                break;
-            }
+        } else {
+            log::error!("No item selected");
+            break;
         }
     }
 
@@ -557,6 +615,37 @@ pub fn file(config: &Config) -> Result<(), ModeError> {
     Ok(())
 }
 
+fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), ModeError> {
+    if let Some(action) = &menu_item.action {
+        spawn_fork(action, None)?;
+    } else {
+        let cmd = config
+            .term
+            .clone()
+            .map(|s| format!("{s} ssh {}", menu_item.label));
+        if let Some(cmd) = cmd {
+            spawn_fork(&cmd, None)?;
+        }
+    }
+    Err(ModeError::MissingAction)
+}
+
+/// # Errors
+///
+/// Will return `Err`
+/// * if it was not able to spawn the process
+/// * if it didn't find a terminal
+pub fn ssh(config: &Config) -> Result<(), ModeError> {
+    let provider = SshProvider::new(String::new(), config);
+    let selection_result = gui::show(config.clone(), provider, true);
+    if let Ok(mi) = selection_result {
+        ssh_launch(&mi, config)?;
+    } else {
+        log::error!("No item selected");
+    }
+    Ok(())
+}
+
 pub fn math(config: &Config) {
     let mut cfg_clone = config.clone();
     let mut calc: Vec<MenuItem<String>> = vec![];
@@ -564,15 +653,12 @@ pub fn math(config: &Config) {
         let mut provider = MathProvider::new(String::new());
         provider.add_elements(&mut calc.clone());
         let selection_result = gui::show(cfg_clone.clone(), provider, true);
-        match selection_result {
-            Ok(mi) => {
-                cfg_clone.prompt = Some(mi.label.clone());
-                calc.push(mi);
-            }
-            Err(_) => {
-                log::error!("No item selected");
-                break;
-            }
+        if let Ok(mi) = selection_result {
+            cfg_clone.prompt = Some(mi.label.clone());
+            calc.push(mi);
+        } else {
+            log::error!("No item selected");
+            break;
         }
     }
 }

@@ -7,6 +7,7 @@ use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
+use which::which;
 
 #[derive(Debug)]
 pub enum ConfigurationError {
@@ -76,6 +77,9 @@ pub enum Mode {
 
     /// Use is as calculator
     Math,
+
+    /// Connect via ssh to a given host
+    Ssh,
 }
 
 #[derive(Debug, Error)]
@@ -108,6 +112,7 @@ impl FromStr for Mode {
             "dmenu" => Ok(Mode::Dmenu),
             "file" => Ok(Mode::File),
             "math" => Ok(Mode::Math),
+            "ssh" => Ok(Mode::Ssh),
             "auto" => Ok(Mode::Auto),
             _ => Err(ArgsError::InvalidParameter(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
@@ -192,6 +197,19 @@ pub struct Config {
     #[clap(short = 'k', long = "cache-file")]
     pub cache_file: Option<String>,
 
+    /// Defines which terminal to use. defaults to the first one found:
+    /// * kitty
+    /// * gnome-terminal
+    /// * konsole
+    /// * xfce4-terminal
+    /// * lxterminal
+    /// * xterm
+    /// * alacritty
+    /// * terminator
+    ///
+    /// Must be configured including the needed arguments to launch something
+    /// i.e. 'kitty -c'
+    #[serde(default = "default_terminal")]
     #[clap(short = 't', long = "term")]
     pub term: Option<String>,
 
@@ -573,6 +591,29 @@ pub fn default_width() -> Option<String> {
 // allowed because option is needed for serde macro
 #[allow(clippy::unnecessary_wraps)]
 #[must_use]
+pub fn default_terminal() -> Option<String> {
+    let terminals = [
+        ("gnome-terminal", vec!["--"]),
+        ("konsole", vec!["-e"]),
+        ("xfce4-terminal", vec!["--command"]),
+        ("xterm", vec!["-e"]),
+        ("alacritty", vec!["-e"]),
+        ("lxterminal", vec!["-e"]),
+        ("kitty", vec!["-e"]),
+        ("tilix", vec!["-e"]),
+    ];
+
+    for (term, launch) in &terminals {
+        if which(term).is_ok() {
+            return Some(format!("{term} {}", launch.join(" ")));
+        }
+    }
+    None
+}
+
+// allowed because option is needed for serde macro
+#[allow(clippy::unnecessary_wraps)]
+#[must_use]
 pub fn default_password_char() -> Option<String> {
     Some("*".to_owned())
 }
@@ -692,6 +733,7 @@ pub fn load_config(args_opt: Option<Config>) -> Result<Config, ConfigurationErro
                             Mode::Math => merge_result.prompt = Some("math".to_owned()),
                             Mode::File => merge_result.prompt = Some("file".to_owned()),
                             Mode::Auto => merge_result.prompt = Some("auto".to_owned()),
+                            Mode::Ssh => merge_result.prompt = Some("ssh".to_owned()),
                         },
                     }
                 }
