@@ -15,10 +15,7 @@ use gdk4::glib::{Propagation, timeout_add_local};
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt};
 use gdk4::{Display, Key};
 use gtk4::glib::ControlFlow;
-use gtk4::prelude::{
-    ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
-    GtkWindowExt, ListBoxRowExt, NativeExt, WidgetExt,
-};
+use gtk4::prelude::{ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt};
 use gtk4::{
     Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
     ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry,
@@ -246,7 +243,7 @@ fn build_ui<T, P>(
             .set_keyboard_mode(KeyboardMode::Exclusive);
         ui_elements.window.set_namespace(Some("worf"));
     }
-
+    
     let window_done = Instant::now();
 
     if let Some(location) = config.location.as_ref() {
@@ -318,12 +315,13 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
     }
     if let Some(valign) = config.valign {
         ui_elements.main_box.set_valign(valign.into());
-    } else if config.orientation.unwrap() == config::Orientation::Horizontal {
+    }
+    if config.orientation.unwrap() == config::Orientation::Horizontal {
         ui_elements.main_box.set_valign(Align::Center);
+        ui_elements.main_box.set_orientation(Orientation::Vertical);
     } else {
         ui_elements.main_box.set_valign(Align::Start);
     }
-
     let ui_clone = Rc::clone(ui_elements);
     ui_elements.main_box.connect_map(move |fb| {
         fb.grab_focus();

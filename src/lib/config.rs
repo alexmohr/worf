@@ -182,6 +182,7 @@ pub struct Config {
     #[clap(short = 'n', long = "normal-window")]
     pub normal_window: bool,
 
+    /// Set to 'false' to disable images, defaults to true
     #[clap(short = 'I', long = "allow-images")]
     pub allow_images: Option<bool>,
 
@@ -201,9 +202,11 @@ pub struct Config {
     #[clap(short = 'e', long = "exec-search")]
     pub exec_search: Option<bool>,
 
+    /// Defines whether the scrollbar is visible
     #[clap(short = 'b', long = "hide-scroll")]
     pub hide_scroll: Option<bool>,
 
+    /// Defines the matching method, defaults to contains
     #[serde(default = "default_match_method")]
     #[clap(short = 'M', long = "matching")]
     pub matching: Option<MatchMethod>,

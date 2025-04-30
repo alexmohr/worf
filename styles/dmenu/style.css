@@ -2,6 +2,7 @@
   font-family: DejaVu;
   margin: 0;
   padding: 0;
+  min-height: 1px;
 }
 
 #window {
@@ -22,8 +23,8 @@
   background-color: rgba(32, 32, 32, 0.6);
   color: #f2f2f2;
   border-bottom: 2px solid rgba(214, 174, 0, 1);
-  padding: 0.8rem 1rem;
   font-size: 1rem;
+  min-height: 1px;
 }
 
 #window #outer-box #input:focus, #window #outer-box #input:focus-visible, #window #outer-box #input:active {
@@ -37,10 +38,11 @@
   background-color: rgba(32, 32, 32, 0.1);
   border-radius: 0.5rem;
   border-bottom: 5px solid rgba(32, 32, 32, 0.1);
-
+  padding-left: 1rem;
+  padding-right: 1rem;
+  min-height: 1px;
 }
 #window #outer-box #scroll #inner-box #entry #img {
-
 }
 
 #window #outer-box #scroll #inner-box #entry:selected {
