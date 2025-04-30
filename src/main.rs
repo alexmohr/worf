@@ -31,6 +31,9 @@ fn main() -> anyhow::Result<()> {
             Mode::Math => {
                 mode::math(&config);
             }
+            Mode::Ssh => {
+                mode::ssh(&config).map_err(|e| anyhow!(e))?;
+            }
             Mode::Auto => {
                 mode::auto(&config).map_err(|e| anyhow!(e))?;
             }

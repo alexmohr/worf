@@ -15,7 +15,10 @@ use gdk4::glib::{Propagation, timeout_add_local};
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt};
 use gdk4::{Display, Key};
 use gtk4::glib::ControlFlow;
-use gtk4::prelude::{ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt};
+use gtk4::prelude::{
+    ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
+    GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt,
+};
 use gtk4::{
     Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
     ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry,
@@ -243,7 +246,7 @@ fn build_ui<T, P>(
             .set_keyboard_mode(KeyboardMode::Exclusive);
         ui_elements.window.set_namespace(Some("worf"));
     }
-    
+
     let window_done = Instant::now();
 
     if let Some(location) = config.location.as_ref() {

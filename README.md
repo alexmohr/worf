@@ -6,12 +6,10 @@ Worf is written in Rust on top of GTK4.
 It aims to be a drop in replacement for wofi in most part, so it is (almost) compatible with its 
 configuration and css files. See below for differences
 
-## Not finished 
-* [ ] dmenu
+## Not finished
 * [ ] run
 * [ ] key support
 * [ ] full config support
-* [ ] ssh mode
 * [ ] web search mode
 * [ ] emoji finder
 * [ ] publish library
