@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
     if let Some(show) = &config.show() {
         match show {
             Mode::Run => {
-                todo!("run not implemented")
+                mode::run(&config).map_err(|e| anyhow!(e))?;
             }
             Mode::Drun => {
                 mode::d_run(&config).map_err(|e| anyhow!(e))?;
