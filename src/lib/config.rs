@@ -295,8 +295,11 @@ pub struct Config {
     // todo re-add this
     // #[serde(flatten)]
     // key_custom: Option<HashMap<String, String>>,
-    global_coords: Option<bool>,    // todo support this
-    hide_search: Option<bool>,      // todo support this
+    global_coords: Option<bool>, // todo support this
+
+    /// If set to `true` the search field will be hidden.
+    #[clap(long = "hide-search")]
+    hide_search: Option<bool>,
     dynamic_lines: Option<bool>,    // todo support this
     layer: Option<String>,          // todo support this
     copy_exec: Option<String>,      // todo support this
@@ -477,6 +480,11 @@ impl Config {
     #[must_use]
     pub fn insensitive(&self) -> bool {
         self.insensitive.unwrap_or(true)
+    }
+
+    #[must_use]
+    pub fn hide_search(&self) -> bool {
+        self.hide_search.unwrap_or(false)
     }
 }
 
