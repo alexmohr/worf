@@ -349,6 +349,9 @@ fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>) {
         .search
         .set_placeholder_text(Some(config.prompt().as_ref()));
     ui_elements.search.set_can_focus(false);
+    if config.hide_search() {
+        ui_elements.search.set_visible(false);
+    }
 }
 
 fn build_ui_from_menu_items<T: Clone + 'static>(
