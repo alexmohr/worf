@@ -174,10 +174,10 @@ pub struct Config {
     prompt: Option<String>,
 
     #[clap(short = 'x', long = "xoffset")]
-    xoffset: Option<i32>,
+    xoffset: Option<i32>, // todo support this
 
     #[clap(short = 'y', long = "yoffset")]
-    yoffset: Option<i32>,
+    yoffset: Option<i32>, // todo support this
 
     /// If true a normal window instead of a layer shell will be used
     #[clap(short = 'n', long = "normal-window")]
@@ -188,10 +188,10 @@ pub struct Config {
     allow_images: Option<bool>,
 
     #[clap(short = 'm', long = "allow-markup")]
-    allow_markup: Option<bool>,
+    allow_markup: Option<bool>, // todo support this
 
     #[clap(short = 'k', long = "cache-file")]
-    cache_file: Option<String>,
+    cache_file: Option<String>, // todo support this
 
     /// Defines which terminal to use. defaults to the first one found:
     /// * kitty
@@ -209,10 +209,10 @@ pub struct Config {
     term: Option<String>,
 
     #[clap(short = 'P', long = "password")]
-    password: Option<String>,
+    password: Option<String>, // todo support this
 
     #[clap(short = 'e', long = "exec-search")]
-    exec_search: Option<bool>,
+    exec_search: Option<bool>, // todo support this
 
     /// Defines whether the scrollbar is visible
     #[clap(short = 'b', long = "hide-scroll")]
@@ -223,41 +223,41 @@ pub struct Config {
     matching: Option<MatchMethod>,
 
     #[clap(short = 'i', long = "insensitive")]
-    insensitive: Option<bool>,
+    insensitive: Option<bool>, // todo support this
 
     #[clap(short = 'q', long = "parse-search")]
-    parse_search: Option<bool>,
+    parse_search: Option<bool>, // todo support this
 
     /// set where the window is displayed.
     /// can be used to anchor a window to an edge by
     /// setting top,left for example
     #[clap(short = 'l', long = "location", value_delimiter = ',', value_parser = clap::builder::ValueParser::new(Anchor::from_str)
     )]
-    location: Option<Vec<Anchor>>,
+    location: Option<Vec<Anchor>>, 
 
     #[clap(short = 'a', long = "no-actions")]
-    no_actions: Option<bool>,
+    no_actions: Option<bool>, // todo support this
 
     #[clap(short = 'L', long = "lines")]
-    lines: Option<u32>,
+    lines: Option<u32>, // todo support this
 
     #[clap(short = 'w', long = "columns")]
     columns: Option<u32>,
 
-    #[clap(short = 'O', long = "sort-order")]
+    #[clap(short = 'O', long = "sort-order")] // todo support this
     sort_order: Option<String>,
 
     #[clap(short = 'G', long = "gtk-dark")]
-    gtk_dark: Option<bool>,
+    gtk_dark: Option<bool>, // todo support this
 
     #[clap(short = 'Q', long = "search")]
-    search: Option<String>,
+    search: Option<String>, // todo support this
 
     #[clap(short = 'o', long = "monitor")]
-    monitor: Option<String>,
+    monitor: Option<String>, // todo support this
 
     #[clap(short = 'r', long = "pre-display-cmd")]
-    pre_display_cmd: Option<String>,
+    pre_display_cmd: Option<String>, // todo support this
 
     #[clap(long = "orientation")]
     orientation: Option<Orientation>,
@@ -274,36 +274,36 @@ pub struct Config {
     #[clap(long = "valign")]
     valign: Option<Align>,
 
-    filter_rate: Option<u32>,
+    filter_rate: Option<u32>, // todo support this
 
     /// Defines the image size in pixels
     #[clap(long = "image-size")]
     image_size: Option<i32>,
 
-    key_up: Option<String>,
-    key_down: Option<String>,
-    key_left: Option<String>,
-    key_right: Option<String>,
-    key_forward: Option<String>,
-    key_backward: Option<String>,
-    key_submit: Option<String>,
-    key_exit: Option<String>,
-    key_pgup: Option<String>,
-    key_pgdn: Option<String>,
-    key_expand: Option<String>,
-    key_hide_search: Option<String>,
-    key_copy: Option<String>,
+    key_up: Option<String>, // todo support this
+    key_down: Option<String>, // todo support this
+    key_left: Option<String>, // todo support this
+    key_right: Option<String>, // todo support this
+    key_forward: Option<String>, // todo support this
+    key_backward: Option<String>, // todo support this
+    key_submit: Option<String>, // todo support this
+    key_exit: Option<String>, // todo support this
+    key_pgup: Option<String>, // todo support this
+    key_pgdn: Option<String>, // todo support this
+    key_expand: Option<String>, // todo support this
+    key_hide_search: Option<String>, // todo support this
+    key_copy: Option<String>, // todo support this
 
     // todo re-add this
     // #[serde(flatten)]
     // key_custom: Option<HashMap<String, String>>,
-    global_coords: Option<bool>,
-    hide_search: Option<bool>,
-    dynamic_lines: Option<bool>,
-    layer: Option<String>,
-    copy_exec: Option<String>,
-    single_click: Option<bool>,
-    pre_display_exec: Option<bool>,
+    global_coords: Option<bool>, // todo support this
+    hide_search: Option<bool>, // todo support this
+    dynamic_lines: Option<bool>,// todo support this
+    layer: Option<String>, // todo support this
+    copy_exec: Option<String>,// todo support this
+    single_click: Option<bool>,// todo support this
+    pre_display_exec: Option<bool>,// todo support this
 
     /// Minimum score for a fuzzy search to be shown
     #[clap(long = "fuzzy-min-score")]
