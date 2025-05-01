@@ -854,7 +854,11 @@ fn set_menu_visibility_for_search<T: Clone>(
                 menu_item.visible = true;
             }
         } else {
-            let query = query.to_owned().to_lowercase(); // todo match case sensitive according to conf
+            let query = if config.insensitive() {
+                query.to_owned().to_lowercase()
+            } else {
+                query.to_owned()
+            };
             for menu_item in items.iter_mut() {
                 let menu_item_search = format!(
                     "{} {}",
