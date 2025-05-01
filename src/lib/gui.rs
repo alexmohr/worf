@@ -787,7 +787,7 @@ fn create_menu_row<T: Clone + 'static>(
 
     label.set_natural_wrap_mode(meta.config.line_wrap().into());
     label.set_hexpand(true);
-    label.set_widget_name("label");
+    label.set_widget_name("text");
     label.set_wrap(true);
     row_box.append(&label);
 

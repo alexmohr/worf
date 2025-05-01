@@ -3,8 +3,22 @@
 Worf is yet another style launcher, heavily inspired by wofi, rofi and walker.
 Worf is written in Rust on top of GTK4. 
 
-It aims to be a drop in replacement for wofi in most part, so it is (almost) compatible with its 
-configuration and css files. See below for differences
+It started out as a drop in replacement for wofi, so styles and config in most part (should) be compatible, 
+with a few exception documented below. 
+Worf has more features than wofi though, so there won't be 100% compatibility.
+
+It supports various modes:
+* Math
+* DRun
+* File
+* Ssh
+* // WebSearch
+* // Emoji
+* // Run
+* Auto
+
+Auto mode tries to detect the desired mode automatically, i.e. `ssh`, `?` (for web search), `emoji`, `/` or `~` (for file).
+
 
 ## Not finished
 * [ ] run
@@ -14,37 +28,6 @@ configuration and css files. See below for differences
 * [ ] emoji finder
 * [ ] publish library
 
-
-## Showcases
-
-You will find all showcases in the styles folder with a corresponding subfolder.
-
-### Compact
-
-Please note that the car in the background is just my wallpaper at the time and this project is not endorsed or affiliated with my employer. 
-
-![](styles/compact/example.png)
-
-### Fullscreen / Launcher
-
-Only difference is that one is fullscreen the other is not
-
-![](styles/fullscreen/example.png)
-
-### Relaxed
-
-![](styles/relaxed/example.png)
-
-
-
-## Setup
-
-### Hyprland
-
-Allow blur for Worf
-```
-layerrule = blur, worf
-```
 
 ## Additional functionality compared to Wofi
 * Support passing 'hidden' parameters that are not visible in the launcher but will be returned to the application
@@ -57,25 +40,56 @@ layerrule = blur, worf
 * configurable animation time
 
 ### New Styling options
-* `label`: Allows styling the label
-* `row`: Allows styling to row, mainly used to disable hover effects
+
+## Styling
+
+Styling names and classes are inspired by wofi, so most of the documentation and styling is the same
+
+### Selectors
+
+|name|description|
+window|Entire main window|
+|outer-box|A box that everything else sits inside of|
+|input|Text box for filtering items|
+|scroll|Scroll window containing inner-box|
+|inner-box|Box containing the menu entries|
+|entry|Box containing the text and optionally the image of an entry|
+|text|Name of the program/option inserted|
+|img|Images displayed in entries|
+|row|The row containing the entry, i.e. used to control hover effects|
+
+Checkout more showcases in the styles directory of this repo.
+
+![](styles/compact/example.png)
+
+
+## Setup
+
+### Hyprland
+
+Allow blur for Worf
+```
+layerrule = blur, worf
+```
+
 
 ## Library
 
 The launcher and UI can be used to build any launcher, as the ui, config and run logic is available as a separate crate.
 This library is not available publicly yet as the interface is not stable enough.
 
+## Wofi compatibility
 
-## Breaking changes to Wofi
+### Breaking changes
 * Runtime behaviour is not guaranteed to be the same and won't ever be, this includes error messages and themes.
 * Themes in general are mostly compatible. Worf is using the same entity ids, 
   because worf is build on GTK4 instead of GTK3 there will be differences in the look and feel.
 * Configuration files are not 100% compatible, Worf is using toml files instead, for most part this only means strings have to be quoted
 * Color files are not supported
 * `line_wrap` is now called `line-wrap`
-* Wofi has a C-API, that is not and won't be supported.
+* Wofi has a C-API, that is not and won't be supported, but Worf can be used as a rust library.
 
-## Dropped arguments
+### Dropped arguments
 * `mode`, use show
 * `dmenu`, use show
 * `D`, arguments are the same as config in worf, no need to have this flag.
