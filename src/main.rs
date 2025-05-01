@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
     let args = config::parse_args();
     let config = config::load_config(Some(args)).map_err(|e| anyhow!(e))?;
 
-    if let Some(show) = &config.show {
+    if let Some(show) = &config.show() {
         match show {
             Mode::Run => {
                 todo!("run not implemented")

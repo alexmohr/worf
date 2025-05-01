@@ -7,7 +7,6 @@ use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
-use which::which;
 
 #[derive(Debug)]
 pub enum ConfigurationError {
@@ -138,64 +137,61 @@ impl FromStr for WrapMode {
 
 #[derive(Debug, Deserialize, Serialize, Clone, Parser)]
 #[clap(about = "Worf is a wofi clone written in rust, it aims to be a drop-in replacement")]
+#[derive(Default)]
 pub struct Config {
     /// Forks the menu so you can close the terminal
     #[clap(short = 'f', long = "fork")]
-    pub fork: Option<bool>,
+    fork: Option<bool>, // todo support fork
 
     /// Selects a config file to use
     #[clap(short = 'c', long = "conf")]
-    pub config: Option<String>,
+    config: Option<String>,
 
     /// Prints the version and then exits
     #[clap(short = 'v', long = "version")]
-    pub version: Option<bool>,
+    version: Option<bool>, // todo support or drop
 
     /// Defines the style sheet to be loaded.
     /// Defaults to `$XDG_CONF_DIR/worf/style.css`
     /// or `$HOME/.config/worf/style.css` if `$XDG_CONF_DIR` is not set.
-    #[serde(default = "default_style")]
     #[clap(long = "style")]
-    pub style: Option<String>,
+    style: Option<String>,
 
     /// Defines the mode worf is running in
     #[clap(long = "show")]
-    pub show: Option<Mode>,
+    show: Option<Mode>,
 
     /// Default width of the window, defaults to 50% of the screen
-    #[serde(default = "default_width")]
     #[clap(long = "width")]
-    pub width: Option<String>,
+    width: Option<String>,
 
     /// Default height of the window, defaults to 40% of the screen
-    #[serde(default = "default_height")]
     #[clap(long = "height")]
-    pub height: Option<String>,
+    height: Option<String>,
 
     /// Defines which prompt is used. Default is selected 'show'
     #[clap(short = 'p', long = "prompt")]
-    pub prompt: Option<String>,
+    prompt: Option<String>,
 
     #[clap(short = 'x', long = "xoffset")]
-    pub xoffset: Option<i32>,
+    xoffset: Option<i32>,
 
     #[clap(short = 'y', long = "yoffset")]
-    pub yoffset: Option<i32>,
+    yoffset: Option<i32>,
 
     /// If true a normal window instead of a layer shell will be used
-    #[serde(default = "default_normal_window")]
     #[clap(short = 'n', long = "normal-window")]
-    pub normal_window: bool,
+    normal_window: bool,
 
     /// Set to 'false' to disable images, defaults to true
     #[clap(short = 'I', long = "allow-images")]
-    pub allow_images: Option<bool>,
+    allow_images: Option<bool>,
 
     #[clap(short = 'm', long = "allow-markup")]
-    pub allow_markup: Option<bool>,
+    allow_markup: Option<bool>,
 
     #[clap(short = 'k', long = "cache-file")]
-    pub cache_file: Option<String>,
+    cache_file: Option<String>,
 
     /// Defines which terminal to use. defaults to the first one found:
     /// * kitty
@@ -209,442 +205,355 @@ pub struct Config {
     ///
     /// Must be configured including the needed arguments to launch something
     /// i.e. 'kitty -c'
-    #[serde(default = "default_terminal")]
     #[clap(short = 't', long = "term")]
-    pub term: Option<String>,
+    term: Option<String>,
 
-    #[serde(default = "default_password_char")]
     #[clap(short = 'P', long = "password")]
-    pub password: Option<String>,
+    password: Option<String>,
 
     #[clap(short = 'e', long = "exec-search")]
-    pub exec_search: Option<bool>,
+    exec_search: Option<bool>,
 
     /// Defines whether the scrollbar is visible
     #[clap(short = 'b', long = "hide-scroll")]
-    pub hide_scroll: Option<bool>,
+    hide_scroll: Option<bool>,
 
     /// Defines the matching method, defaults to contains
-    #[serde(default = "default_match_method")]
     #[clap(short = 'M', long = "matching")]
-    pub matching: Option<MatchMethod>,
+    matching: Option<MatchMethod>,
 
     #[clap(short = 'i', long = "insensitive")]
-    pub insensitive: Option<bool>,
+    insensitive: Option<bool>,
 
     #[clap(short = 'q', long = "parse-search")]
-    pub parse_search: Option<bool>,
+    parse_search: Option<bool>,
 
     /// set where the window is displayed.
     /// can be used to anchor a window to an edge by
     /// setting top,left for example
-    #[clap(short = 'l', long = "location", value_delimiter = ',', value_parser = clap::builder::ValueParser::new(Anchor::from_str))]
-    pub location: Option<Vec<Anchor>>,
+    #[clap(short = 'l', long = "location", value_delimiter = ',', value_parser = clap::builder::ValueParser::new(Anchor::from_str)
+    )]
+    location: Option<Vec<Anchor>>,
 
     #[clap(short = 'a', long = "no-actions")]
-    pub no_actions: Option<bool>,
+    no_actions: Option<bool>,
 
     #[clap(short = 'L', long = "lines")]
-    pub lines: Option<u32>,
+    lines: Option<u32>,
 
-    #[serde(default = "default_columns")]
     #[clap(short = 'w', long = "columns")]
-    pub columns: Option<u32>,
+    columns: Option<u32>,
 
     #[clap(short = 'O', long = "sort-order")]
-    pub sort_order: Option<String>,
+    sort_order: Option<String>,
 
     #[clap(short = 'G', long = "gtk-dark")]
-    pub gtk_dark: Option<bool>,
+    gtk_dark: Option<bool>,
 
     #[clap(short = 'Q', long = "search")]
-    pub search: Option<String>,
+    search: Option<String>,
 
     #[clap(short = 'o', long = "monitor")]
-    pub monitor: Option<String>,
+    monitor: Option<String>,
 
     #[clap(short = 'r', long = "pre-display-cmd")]
-    pub pre_display_cmd: Option<String>,
+    pre_display_cmd: Option<String>,
 
-    #[serde(default = "default_orientation")]
     #[clap(long = "orientation")]
-    pub orientation: Option<Orientation>,
+    orientation: Option<Orientation>,
 
     /// Horizontal alignment
-    #[serde(default = "default_halign")]
     #[clap(long = "halign")]
-    pub halign: Option<Align>,
+    halign: Option<Align>,
 
     /// Alignment of content
-    #[serde(default = "default_content_halign")]
     #[clap(long = "content-halign")]
-    pub content_halign: Option<Align>,
+    content_halign: Option<Align>,
 
     /// Vertical alignment
     #[clap(long = "valign")]
-    pub valign: Option<Align>,
+    valign: Option<Align>,
 
-    pub filter_rate: Option<u32>,
+    filter_rate: Option<u32>,
 
     /// Defines the image size in pixels
-    #[serde(default = "default_image_size")]
     #[clap(long = "image-size")]
-    pub image_size: Option<i32>,
+    image_size: Option<i32>,
 
-    pub key_up: Option<String>,
-    pub key_down: Option<String>,
-    pub key_left: Option<String>,
-    pub key_right: Option<String>,
-    pub key_forward: Option<String>,
-    pub key_backward: Option<String>,
-    pub key_submit: Option<String>,
-    pub key_exit: Option<String>,
-    pub key_pgup: Option<String>,
-    pub key_pgdn: Option<String>,
-    pub key_expand: Option<String>,
-    pub key_hide_search: Option<String>,
-    pub key_copy: Option<String>,
+    key_up: Option<String>,
+    key_down: Option<String>,
+    key_left: Option<String>,
+    key_right: Option<String>,
+    key_forward: Option<String>,
+    key_backward: Option<String>,
+    key_submit: Option<String>,
+    key_exit: Option<String>,
+    key_pgup: Option<String>,
+    key_pgdn: Option<String>,
+    key_expand: Option<String>,
+    key_hide_search: Option<String>,
+    key_copy: Option<String>,
 
     // todo re-add this
     // #[serde(flatten)]
-    // pub key_custom: Option<HashMap<String, String>>,
-    pub global_coords: Option<bool>,
-    pub hide_search: Option<bool>,
-    pub dynamic_lines: Option<bool>,
-    pub layer: Option<String>,
-    pub copy_exec: Option<String>,
-    pub single_click: Option<bool>,
-    pub pre_display_exec: Option<bool>,
+    // key_custom: Option<HashMap<String, String>>,
+    global_coords: Option<bool>,
+    hide_search: Option<bool>,
+    dynamic_lines: Option<bool>,
+    layer: Option<String>,
+    copy_exec: Option<String>,
+    single_click: Option<bool>,
+    pre_display_exec: Option<bool>,
 
     /// Minimum score for a fuzzy search to be shown
-    #[serde(default = "default_fuzzy_min_score")]
     #[clap(long = "fuzzy-min-score")]
-    pub fuzzy_min_score: Option<f64>,
+    fuzzy_min_score: Option<f64>,
 
     /// Orientation of items in the row box where items are displayed
-    #[serde(default = "default_row_box_orientation")]
     #[clap(long = "row-box-orientation")]
-    pub row_bow_orientation: Option<Orientation>,
+    row_bow_orientation: Option<Orientation>,
 
-    // /// Set to to true to wrap text after a given amount of chars
-    // #[serde(default = "default_text_wrap")]
-    // #[clap(long = "text-wrap")]
-    // pub text_wrap: Option<bool>,
-    //
-    // /// Defines after how many chars a line is broken over.
-    // /// Only cuts at spaces.
-    // #[serde(default = "default_text_wrap_length")]
-    // #[clap(long = "text-wrap-length")]
-    // pub text_wrap_length: Option<usize>,
     /// Defines how long it takes for the show animation to finish
     /// Defaults to 70ms
-    #[serde(default = "default_show_animation_time")]
     #[clap(long = "show-animation-time")]
-    pub show_animation_time: Option<u64>,
+    show_animation_time: Option<u64>,
 
     /// Defines how long it takes for the hide animation to finish
     /// Defaults to 100ms
-    #[serde(default = "default_hide_animation_time")]
     #[clap(long = "hide-animation-time")]
-    pub hide_animation_time: Option<u64>,
+    hide_animation_time: Option<u64>,
 
-    #[serde(default = "default_line_wrap")]
     #[clap(long = "line-wrap")]
-    pub line_wrap: Option<WrapMode>,
+    line_wrap: Option<WrapMode>,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            fork: None,
-            config: None,
-            version: None,
-            style: default_style(),
-            show: None,
-            width: default_width(),
-            height: default_height(),
-            prompt: None,
-            xoffset: None,
-            yoffset: None,
-            normal_window: default_normal_window(),
-            allow_images: None,
-            allow_markup: None,
-            cache_file: None,
-            term: None,
-            password: None,
-            exec_search: None,
-            hide_scroll: None,
-            matching: None,
-            insensitive: None,
-            parse_search: None,
-            location: None,
-            no_actions: None,
-            lines: None,
-            columns: default_columns(),
-            sort_order: None,
-            gtk_dark: None,
-            search: None,
-            monitor: None,
-            pre_display_cmd: None,
-            orientation: default_row_box_orientation(),
-            halign: default_halign(),
-            content_halign: default_content_halign(),
-            valign: None,
-            filter_rate: None,
-            image_size: default_image_size(),
-            key_up: None,
-            key_down: None,
-            key_left: None,
-            key_right: None,
-            key_forward: None,
-            key_backward: None,
-            key_submit: None,
-            key_exit: None,
-            key_pgup: None,
-            key_pgdn: None,
-            key_expand: None,
-            key_hide_search: None,
-            key_copy: None,
-            //key_custom: None,
-            line_wrap: default_line_wrap(),
-            global_coords: None,
-            hide_search: None,
-            dynamic_lines: None,
-            layer: None,
-            copy_exec: None,
-            single_click: None,
-            pre_display_exec: None,
-            fuzzy_min_score: default_fuzzy_min_score(),
-            row_bow_orientation: default_row_box_orientation(),
-            show_animation_time: default_show_animation_time(),
-            hide_animation_time: default_hide_animation_time(),
+impl Config {
+    #[must_use]
+    pub fn image_size(&self) -> i32 {
+        self.image_size.unwrap_or(32)
+    }
+
+    #[must_use]
+    pub fn match_method(&self) -> MatchMethod {
+        self.matching.unwrap_or(MatchMethod::Contains)
+    }
+
+    #[must_use]
+    pub fn fuzzy_min_score(&self) -> f64 {
+        self.fuzzy_min_score.unwrap_or(0.0)
+    }
+
+    #[must_use]
+    pub fn style(&self) -> Option<String> {
+        style_path(None)
+            .ok()
+            .map(|pb| pb.display().to_string())
+            .or_else(|| {
+                log::error!("no stylesheet found, using system styles");
+                None
+            })
+    }
+
+    #[must_use]
+    pub fn normal_window(&self) -> bool {
+        self.normal_window
+    }
+
+    #[must_use]
+    pub fn location(&self) -> Option<&Vec<Anchor>> {
+        self.location.as_ref()
+    }
+
+    #[must_use]
+    pub fn hide_scroll(&self) -> bool {
+        self.hide_scroll.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn columns(&self) -> u32 {
+        self.columns.unwrap_or(1)
+    }
+
+    #[must_use]
+    pub fn halign(&self) -> Align {
+        self.halign.unwrap_or(Align::Fill)
+    }
+
+    #[must_use]
+    pub fn content_halign(&self) -> Align {
+        self.content_halign.unwrap_or(Align::Fill)
+    }
+
+    #[must_use]
+    pub fn valign(&self) -> Align {
+        self.valign.unwrap_or(Align::Center)
+    }
+    #[must_use]
+    pub fn orientation(&self) -> Orientation {
+        self.orientation.unwrap_or(Orientation::Vertical)
+    }
+
+    #[must_use]
+    pub fn prompt(&self) -> String {
+        match &self.prompt {
+            None => match &self.show {
+                None => String::new(),
+                Some(mode) => match mode {
+                    Mode::Run => "run".to_owned(),
+                    Mode::Drun => "drun".to_owned(),
+                    Mode::Dmenu => "dmenu".to_owned(),
+                    Mode::Math => "math".to_owned(),
+                    Mode::File => "file".to_owned(),
+                    Mode::Auto => "auto".to_owned(),
+                    Mode::Ssh => "ssh".to_owned(),
+                },
+            },
+
+            Some(prompt) => prompt.clone(),
         }
     }
-}
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_show_animation_time() -> Option<u64> {
-    Some(10)
-}
+    #[must_use]
+    pub fn height(&self) -> String {
+        self.height.clone().unwrap_or("40%".to_owned())
+    }
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_hide_animation_time() -> Option<u64> {
-    Some(0)
-}
+    #[must_use]
+    pub fn width(&self) -> String {
+        self.width.clone().unwrap_or("50%".to_owned())
+    }
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_row_box_orientation() -> Option<Orientation> {
-    Some(Orientation::Horizontal)
-}
+    #[must_use]
+    pub fn show_animation_time(&self) -> u64 {
+        self.show_animation_time.unwrap_or(10)
+    }
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_orientation() -> Option<Orientation> {
-    Some(Orientation::Vertical)
-}
+    #[must_use]
+    pub fn hide_animation_time(&self) -> u64 {
+        self.hide_animation_time.unwrap_or(10)
+    }
+    #[must_use]
+    pub fn row_bow_orientation(&self) -> Orientation {
+        self.row_bow_orientation.unwrap_or(Orientation::Horizontal)
+    }
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_halign() -> Option<Align> {
-    Some(Align::Fill)
-}
+    #[must_use]
+    pub fn allow_images(&self) -> bool {
+        self.allow_images.unwrap_or(true)
+    }
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_content_halign() -> Option<Align> {
-    Some(Align::Fill)
-}
+    #[must_use]
+    pub fn line_wrap(&self) -> WrapMode {
+        self.line_wrap.clone().unwrap_or(WrapMode::None)
+    }
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_columns() -> Option<u32> {
-    Some(1)
-}
+    #[must_use]
+    pub fn term(&self) -> Option<String> {
+        self.term.clone().or_else(|| {
+            let terminals = [
+                ("gnome-terminal", vec!["--"]),
+                ("konsole", vec!["-e"]),
+                ("xfce4-terminal", vec!["--command"]),
+                ("xterm", vec!["-e"]),
+                ("alacritty", vec!["-e"]),
+                ("lxterminal", vec!["-e"]),
+                ("kitty", vec!["-e"]),
+                ("tilix", vec!["-e"]),
+            ];
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_normal_window() -> bool {
-    false
-}
+            for (term, launch) in &terminals {
+                if which::which(term).is_ok() {
+                    return Some(format!("{} {}", term, launch.join(" ")));
+                }
+            }
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_line_wrap() -> Option<WrapMode> {
-    Some(WrapMode::Word)
-}
-
-// TODO
-// GtkOrientation orientation = config_get_mnemonic(config, "orientation", "vertical", 2, "vertical", "horizontal");
-// outer_orientation = config_get_mnemonic(cstoonfig, "orientation", "vertical", 2, "horizontal", "vertical");
-// GtkAlign halign = config_get_mnemonic(config, "halign", "fill", 4, "fill", "start", "end", "center");
-// content_halign = config_get_mnemonic(config, "content_halign", "fill", 4, "fill", "start", "end", "center");
-// char* default_valign = "start";
-// if(outer_orientation == GTK_ORIENTATION_HORIZONTAL) {
-// default_valign = "center";
-// }
-// GtkAlign valign = config_get_mnemonic(config, "valign", default_valign, 4, "fill", "start", "end", "center");
-// char* prompt = config_get(config, "prompt", mode);
-// uint64_t filter_rate = strtol(config_get(config, "filter_rate", "100"), NULL, 10);
-// allow_images = strcmp(config_get(config, "allow_images", "false"), "true") == 0;
-// allow_markup = strcmp(config_get(config, "allow_markup", "false"), "true") == 0;
-// image_size = strtol(config_get(config, "image_size", "32"), NULL, 10);
-// cache_file = map_get(config, "cache_file");
-// config_dir = map_get(config, "config_dir");
-// terminal = map_get(config, "term");
-// exec_search = strcmp(config_get(config, "exec_search", "false"), "true") == 0;
-// bool hide_scroll = strcmp(config_get(config, "hide_scroll", "false"), "true") == 0;
-// matching = config_get_mnemonic(config, "matching", "contains", 3, "contains", "multi-contains", "fuzzy");
-// insensitive = strcmp(config_get(config, "insensitive", "false"), "true") == 0;
-// parse_search = strcmp(config_get(config, "parse_search", "false"), "true") == 0;
-// location = config_get_mnemonic(config, "location", "center", 18,
-// "center", "top_left", "top", "top_right", "right", "bottom_right", "bottom", "bottom_left", "left",
-// "0", "1", "2", "3", "4", "5", "6", "7", "8");
-// no_actions = strcmp(config_get(config, "no_actions", "false"), "true") == 0;
-// lines = strtol(config_get(config, "lines", "0"), NULL, 10);
-// max_lines = lines;
-// columns = strtol(config_get(config, "columns", "1"), NULL, 10);
-// sort_order = config_get_mnemonic(config, "sort_order", "default", 2, "default", "alphabetical");
-// bool global_coords = strcmp(config_get(config, "global_coords", "false"), "true") == 0;
-// hide_search = strcmp(config_get(config, "hide_search", "false"), "true") == 0;
-// char* search = map_get(config, "search");
-// dynamic_lines = strcmp(config_get(config, "dynamic_lines", "false"), "true") == 0;
-// char* monitor = map_get(config, "monitor");
-// char* layer = config_get(config, "layer", "top");
-// copy_exec = config_get(config, "copy_exec", "wl-copy");
-// pre_display_cmd = map_get(config, "pre_display_cmd");
-// pre_display_exec = strcmp(config_get(config, "pre_display_exec", "false"), "true") == 0;
-// single_click = strcmp(config_get(config, "single_click", "false"), "true") == 0;
-//
-// keys = map_init_void();
-// mods = map_init_void();
-//
-// map_put_void(mods, "Shift", &shift_mask);
-// map_put_void(mods, "Ctrl", &ctrl_mask);
-// map_put_void(mods, "Alt", &alt_mask);
-//
-// key_default = "Up";
-// char* key_up = (i == 0) ? "Up" : config_get(config, "key_up", key_default);
-// key_default = "Down";
-// char* key_down = (i == 0) ? key_default : config_get(config, "key_down", key_default);
-// key_default = "Left";
-// char* key_left = (i == 0) ? key_default : config_get(config, "key_left", key_default);
-// key_default = "Right";
-// char* key_right = (i == 0) ? key_default : config_get(config, "key_right", key_default);
-// key_default = "Tab";
-// char* key_forward = (i == 0) ? key_default : config_get(config, "key_forward", key_default);
-// key_default = "Shift-ISO_Left_Tab";
-// char* key_backward = (i == 0) ? key_default : config_get(config, "key_backward", key_default);
-// key_default = "Return";
-// char* key_submit = (i == 0) ? key_default : config_get(config, "key_submit", key_default);
-// key_default = "Escape";
-// char* key_exit = (i == 0) ? key_default : config_get(config, "key_exit", key_default);
-// key_default = "Page_Up";
-// char* key_pgup = (i == 0) ? key_default : config_get(config, "key_pgup", key_default);
-// key_default = "Page_Down";
-// char* key_pgdn = (i == 0) ? key_default : config_get(config, "key_pgdn", key_default);
-// key_default = "";
-// char* key_expand = (i == 0) ? key_default: config_get(config, "key_expand", key_default);
-// key_default = "";
-// char* key_hide_search = (i == 0) ? key_default: config_get(config, "key_hide_search", key_default);
-// key_default = "Ctrl-c";
-// char* key_copy = (i == 0) ? key_default : config_get(config, "key_copy", key_default);
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_style() -> Option<String> {
-    style_path(None)
-        .ok()
-        .map(|pb| pb.display().to_string())
-        .or_else(|| {
-            log::error!("no stylesheet found, using system styles");
             None
         })
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_height() -> Option<String> {
-    Some("40%".to_owned())
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_width() -> Option<String> {
-    Some("50%".to_owned())
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_terminal() -> Option<String> {
-    let terminals = [
-        ("gnome-terminal", vec!["--"]),
-        ("konsole", vec!["-e"]),
-        ("xfce4-terminal", vec!["--command"]),
-        ("xterm", vec!["-e"]),
-        ("alacritty", vec!["-e"]),
-        ("lxterminal", vec!["-e"]),
-        ("kitty", vec!["-e"]),
-        ("tilix", vec!["-e"]),
-    ];
-
-    for (term, launch) in &terminals {
-        if which(term).is_ok() {
-            return Some(format!("{term} {}", launch.join(" ")));
-        }
     }
-    None
+
+    #[must_use]
+    pub fn show(&self) -> Option<Mode> {
+        self.show.clone()
+    }
 }
 
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_password_char() -> Option<String> {
-    Some("*".to_owned())
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_fuzzy_min_length() -> Option<i32> {
-    Some(10)
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_fuzzy_min_score() -> Option<f64> {
-    Some(0.0)
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_match_method() -> Option<MatchMethod> {
-    Some(MatchMethod::Contains)
-}
-
-// allowed because option is needed for serde macro
-#[allow(clippy::unnecessary_wraps)]
-#[must_use]
-pub fn default_image_size() -> Option<i32> {
-    Some(32)
-}
+//
+// // TODO
+// // GtkOrientation orientation = config_get_mnemonic(config, "orientation", "vertical", 2, "vertical", "horizontal");
+// // outer_orientation = config_get_mnemonic(cstoonfig, "orientation", "vertical", 2, "horizontal", "vertical");
+// // GtkAlign halign = config_get_mnemonic(config, "halign", "fill", 4, "fill", "start", "end", "center");
+// // content_halign = config_get_mnemonic(config, "content_halign", "fill", 4, "fill", "start", "end", "center");
+// // char* default_valign = "start";
+// // if(outer_orientation == GTK_ORIENTATION_HORIZONTAL) {
+// // default_valign = "center";
+// // }
+// // GtkAlign valign = config_get_mnemonic(config, "valign", default_valign, 4, "fill", "start", "end", "center");
+// // char* prompt = config_get(config, "prompt", mode);
+// // uint64_t filter_rate = strtol(config_get(config, "filter_rate", "100"), NULL, 10);
+// // allow_images = strcmp(config_get(config, "allow_images", "false"), "true") == 0;
+// // allow_markup = strcmp(config_get(config, "allow_markup", "false"), "true") == 0;
+// // image_size = strtol(config_get(config, "image_size", "32"), NULL, 10);
+// // cache_file = map_get(config, "cache_file");
+// // config_dir = map_get(config, "config_dir");
+// // terminal = map_get(config, "term");
+// // exec_search = strcmp(config_get(config, "exec_search", "false"), "true") == 0;
+// // bool hide_scroll = strcmp(config_get(config, "hide_scroll", "false"), "true") == 0;
+// // matching = config_get_mnemonic(config, "matching", "contains", 3, "contains", "multi-contains", "fuzzy");
+// // insensitive = strcmp(config_get(config, "insensitive", "false"), "true") == 0;
+// // parse_search = strcmp(config_get(config, "parse_search", "false"), "true") == 0;
+// // location = config_get_mnemonic(config, "location", "center", 18,
+// // "center", "top_left", "top", "top_right", "right", "bottom_right", "bottom", "bottom_left", "left",
+// // "0", "1", "2", "3", "4", "5", "6", "7", "8");
+// // no_actions = strcmp(config_get(config, "no_actions", "false"), "true") == 0;
+// // lines = strtol(config_get(config, "lines", "0"), NULL, 10);
+// // max_lines = lines;
+// // columns = strtol(config_get(config, "columns", "1"), NULL, 10);
+// // sort_order = config_get_mnemonic(config, "sort_order", "default", 2, "default", "alphabetical");
+// // bool global_coords = strcmp(config_get(config, "global_coords", "false"), "true") == 0;
+// // hide_search = strcmp(config_get(config, "hide_search", "false"), "true") == 0;
+// // char* search = map_get(config, "search");
+// // dynamic_lines = strcmp(config_get(config, "dynamic_lines", "false"), "true") == 0;
+// // char* monitor = map_get(config, "monitor");
+// // char* layer = config_get(config, "layer", "top");
+// // copy_exec = config_get(config, "copy_exec", "wl-copy");
+// // pre_display_cmd = map_get(config, "pre_display_cmd");
+// // pre_display_exec = strcmp(config_get(config, "pre_display_exec", "false"), "true") == 0;
+// // single_click = strcmp(config_get(config, "single_click", "false"), "true") == 0;
+// //
+// // keys = map_init_void();
+// // mods = map_init_void();
+// //
+// // map_put_void(mods, "Shift", &shift_mask);
+// // map_put_void(mods, "Ctrl", &ctrl_mask);
+// // map_put_void(mods, "Alt", &alt_mask);
+// //
+// // key_default = "Up";
+// // char* key_up = (i == 0) ? "Up" : config_get(config, "key_up", key_default);
+// // key_default = "Down";
+// // char* key_down = (i == 0) ? key_default : config_get(config, "key_down", key_default);
+// // key_default = "Left";
+// // char* key_left = (i == 0) ? key_default : config_get(config, "key_left", key_default);
+// // key_default = "Right";
+// // char* key_right = (i == 0) ? key_default : config_get(config, "key_right", key_default);
+// // key_default = "Tab";
+// // char* key_forward = (i == 0) ? key_default : config_get(config, "key_forward", key_default);
+// // key_default = "Shift-ISO_Left_Tab";
+// // char* key_backward = (i == 0) ? key_default : config_get(config, "key_backward", key_default);
+// // key_default = "Return";
+// // char* key_submit = (i == 0) ? key_default : config_get(config, "key_submit", key_default);
+// // key_default = "Escape";
+// // char* key_exit = (i == 0) ? key_default : config_get(config, "key_exit", key_default);
+// // key_default = "Page_Up";
+// // char* key_pgup = (i == 0) ? key_default : config_get(config, "key_pgup", key_default);
+// // key_default = "Page_Down";
+// // char* key_pgdn = (i == 0) ? key_default : config_get(config, "key_pgdn", key_default);
+// // key_default = "";
+// // char* key_expand = (i == 0) ? key_default: config_get(config, "key_expand", key_default);
+// // key_default = "";
+// // char* key_hide_search = (i == 0) ? key_default: config_get(config, "key_hide_search", key_default);
+// // key_default = "Ctrl-c";
+// // char* key_copy = (i == 0) ? key_default : config_get(config, "key_copy", key_default);
+// }
 
 #[must_use]
 pub fn parse_args() -> Config {
@@ -654,7 +563,7 @@ pub fn parse_args() -> Config {
 /// # Errors
 ///
 /// Will return Err when it cannot resolve any path or no style is found
-pub fn style_path(full_path: Option<String>) -> Result<PathBuf, anyhow::Error> {
+fn style_path(full_path: Option<String>) -> Result<PathBuf, anyhow::Error> {
     let alternative_paths = path_alternatives(
         vec![dirs::config_dir()],
         &PathBuf::from("worf").join("style.css"),
@@ -720,24 +629,8 @@ pub fn load_config(args_opt: Option<Config>) -> Result<Config, ConfigurationErro
                 .map_err(|e| ConfigurationError::Parse(format!("{e}")))?;
 
             if let Some(args) = args_opt {
-                let mut merge_result = merge_config_with_args(&mut config, &args)
+                let merge_result = merge_config_with_args(&mut config, &args)
                     .map_err(|e| ConfigurationError::Parse(format!("{e}")))?;
-
-                if merge_result.prompt.is_none() {
-                    match &merge_result.show {
-                        None => {}
-                        Some(mode) => match mode {
-                            Mode::Run => merge_result.prompt = Some("run".to_owned()),
-                            Mode::Drun => merge_result.prompt = Some("drun".to_owned()),
-                            Mode::Dmenu => merge_result.prompt = Some("dmenu".to_owned()),
-                            Mode::Math => merge_result.prompt = Some("math".to_owned()),
-                            Mode::File => merge_result.prompt = Some("file".to_owned()),
-                            Mode::Auto => merge_result.prompt = Some("auto".to_owned()),
-                            Mode::Ssh => merge_result.prompt = Some("ssh".to_owned()),
-                        },
-                    }
-                }
-
                 Ok(merge_result)
             } else {
                 Ok(config)
