@@ -169,11 +169,22 @@ pub fn lookup_name_with_locale(
 /// # Errors
 /// * No action in menu item
 /// * Cannot run command (i.e. not found)
+/// # Panics
+/// When internal regex unwrapping fails. Should not happen as the regex is static
 pub fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), Error> {
-    // todo fix actions ??
-    // todo graphical disk map icon not working
+    let re = Regex::new(r#"'([^']*)'|"([^"]*)"|(\S+)"#).expect("invalid regex in spawn_fork");
+    let parts: Vec<String> = re
+        .captures_iter(cmd)
+        .map(|cap| {
+            cap.get(1)
+                .or_else(|| cap.get(2))
+                .or_else(|| cap.get(3))
+                .unwrap()
+                .as_str()
+                .to_string()
+        })
+        .collect();
 
-    let parts = cmd.split(' ').collect::<Vec<_>>();
     if parts.is_empty() {
         return Err(Error::MissingAction);
     }

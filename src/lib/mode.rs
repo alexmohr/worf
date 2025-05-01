@@ -299,7 +299,7 @@ struct SshProvider<T: Clone> {
 }
 
 impl<T: Clone> SshProvider<T> {
-    fn new(menu_item_data: T, config: &Config) -> Self {
+    fn new(menu_item_data: T) -> Self {
         let re = Regex::new(r"(?m)^\s*Host\s+(.+)$").unwrap();
         let items: Vec<_> = dirs::home_dir()
             .map(|home| home.join(".ssh").join("config"))
@@ -316,7 +316,7 @@ impl<T: Clone> SshProvider<T> {
                                 MenuItem::new(
                                     host.to_owned(),
                                     Some("computer".to_owned()),
-                                    config.term.clone().map(|cmd| format!("{cmd} ssh {host}")),
+                                    Some(format!("ssh {host}")),
                                     vec![],
                                     None,
                                     0.0,
@@ -457,12 +457,12 @@ struct AutoItemProvider {
 }
 
 impl AutoItemProvider {
-    fn new(config: &Config) -> Self {
+    fn new() -> Self {
         AutoItemProvider {
             drun: DRunProvider::new(AutoRunType::DRun),
             file: FileItemProvider::new(AutoRunType::File),
             math: MathProvider::new(AutoRunType::Math),
-            ssh: SshProvider::new(AutoRunType::Ssh, config),
+            ssh: SshProvider::new(AutoRunType::Ssh),
         }
     }
 }
@@ -485,7 +485,10 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
             } else if trimmed_search.starts_with("ssh") {
                 self.ssh.get_elements(search_opt)
             } else {
-                self.drun.get_elements(search_opt)
+                // return ssh and drun items
+                let mut drun = self.drun.get_elements(search_opt);
+                drun.append(&mut self.ssh.get_elements(search_opt));
+                drun
             }
         } else {
             self.drun.get_elements(search_opt)
@@ -527,7 +530,7 @@ pub fn d_run(config: &Config) -> Result<(), Error> {
 /// Will return `Err`
 /// * if it was not able to spawn the process
 pub fn auto(config: &Config) -> Result<(), Error> {
-    let mut provider = AutoItemProvider::new(config);
+    let mut provider = AutoItemProvider::new();
     let cache_path = provider.drun.cache_path.clone();
     let mut cache = provider.drun.cache.clone();
     let mut cfg_clone = config.clone();
@@ -596,18 +599,25 @@ pub fn file(config: &Config) -> Result<(), Error> {
 }
 
 fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), Error> {
-    if let Some(action) = &menu_item.action {
-        spawn_fork(action, None)?;
+    let ssh_cmd = if let Some(action) = &menu_item.action {
+        action.clone()
     } else {
         let cmd = config
             .term
             .clone()
             .map(|s| format!("{s} ssh {}", menu_item.label));
         if let Some(cmd) = cmd {
-            spawn_fork(&cmd, None)?;
+            cmd
+        } else {
+            return Err(Error::MissingAction);
         }
-    }
-    Err(Error::MissingAction)
+    };
+
+    let cmd = format!(
+        "{} bash -c \"source ~/.bashrc; {ssh_cmd}\"",
+        config.term.clone().unwrap_or_default()
+    );
+    spawn_fork(&cmd, menu_item.working_dir.as_ref())
 }
 
 /// Shows the ssh mode
@@ -617,7 +627,7 @@ fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), 
 /// * if it was not able to spawn the process
 /// * if it didn't find a terminal
 pub fn ssh(config: &Config) -> Result<(), Error> {
-    let provider = SshProvider::new(String::new(), config);
+    let provider = SshProvider::new(String::new());
     let selection_result = gui::show(config.clone(), provider, true);
     if let Ok(mi) = selection_result {
         ssh_launch(&mi, config)?;
