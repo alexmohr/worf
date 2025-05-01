@@ -237,6 +237,16 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
         }
 
         if path.is_dir() {
+            items.push(MenuItem::new(
+                trimmed_search.clone(),
+                Some(FileItemProvider::<T>::resolve_icon_for_name(&path)),
+                Some(format!("xdg-open {}", path.display())),
+                vec![],
+                None,
+                100.0,
+                Some(self.menu_item_data.clone()),
+            ));
+
             if let Ok(entries) = path.read_dir() {
                 for entry in entries.flatten() {
                     if let Some(mut path_str) =
