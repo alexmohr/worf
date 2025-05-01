@@ -19,11 +19,7 @@ use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
     GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt,
 };
-use gtk4::{
-    Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
-    ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry,
-    Widget, gdk,
-};
+use gtk4::{Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry, Widget, gdk};
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
@@ -163,6 +159,7 @@ where
     T: Clone + 'static + Send,
     P: ItemProvider<T> + 'static + Clone + Send,
 {
+    gtk4::init()?;
     log::debug!("Starting GUI");
     if let Some(ref css) = config.style() {
         let provider = CssProvider::new();
