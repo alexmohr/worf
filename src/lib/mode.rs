@@ -533,17 +533,15 @@ pub fn auto(config: &Config) -> Result<(), Error> {
     let mut provider = AutoItemProvider::new();
     let cache_path = provider.drun.cache_path.clone();
     let mut cache = provider.drun.cache.clone();
-    let mut cfg_clone = config.clone();
 
     loop {
         // todo ues a arc instead of cloning the config
-        let selection_result = gui::show(cfg_clone.clone(), provider.clone(), true);
+        let selection_result = gui::show(config.clone(), provider.clone(), true);
 
         if let Ok(mut selection_result) = selection_result {
             if let Some(data) = &selection_result.data {
                 match data {
                     AutoRunType::Math => {
-                        cfg_clone.prompt = Some(selection_result.label.clone());
                         provider.math.elements.push(selection_result);
                     }
                     AutoRunType::DRun => {
@@ -603,8 +601,7 @@ fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), 
         action.clone()
     } else {
         let cmd = config
-            .term
-            .clone()
+            .term()
             .map(|s| format!("{s} ssh {}", menu_item.label));
         if let Some(cmd) = cmd {
             cmd
@@ -615,7 +612,7 @@ fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), 
 
     let cmd = format!(
         "{} bash -c \"source ~/.bashrc; {ssh_cmd}\"",
-        config.term.clone().unwrap_or_default()
+        config.term().unwrap_or_default()
     );
     spawn_fork(&cmd, menu_item.working_dir.as_ref())
 }
@@ -639,14 +636,12 @@ pub fn ssh(config: &Config) -> Result<(), Error> {
 
 /// Shows the math mode
 pub fn math(config: &Config) {
-    let mut cfg_clone = config.clone();
     let mut calc: Vec<MenuItem<String>> = vec![];
     loop {
         let mut provider = MathProvider::new(String::new());
         provider.add_elements(&mut calc.clone());
-        let selection_result = gui::show(cfg_clone.clone(), provider, true);
+        let selection_result = gui::show(config.clone(), provider, true);
         if let Ok(mi) = selection_result {
-            cfg_clone.prompt = Some(mi.label.clone());
             calc.push(mi);
         } else {
             log::error!("No item selected");

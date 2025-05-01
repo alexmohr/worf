@@ -58,8 +58,8 @@ impl From<config::Orientation> for Orientation {
     }
 }
 
-impl From<&WrapMode> for NaturalWrapMode {
-    fn from(value: &WrapMode) -> Self {
+impl From<WrapMode> for NaturalWrapMode {
+    fn from(value: WrapMode) -> Self {
         match value {
             WrapMode::None => NaturalWrapMode::None,
             WrapMode::Word => NaturalWrapMode::Word,
@@ -164,7 +164,7 @@ where
     P: ItemProvider<T> + 'static + Clone + Send,
 {
     log::debug!("Starting GUI");
-    if let Some(ref css) = config.style {
+    if let Some(ref css) = config.style() {
         let provider = CssProvider::new();
         let css_file_path = File::for_path(css);
         provider.load_from_file(&css_file_path);
@@ -246,7 +246,7 @@ fn build_ui<T, P>(
 
     ui_elements.window.set_widget_name("window");
 
-    if !config.normal_window {
+    if !config.normal_window() {
         // Initialize the window as a layer
         ui_elements.window.init_layer_shell();
         ui_elements
@@ -260,13 +260,13 @@ fn build_ui<T, P>(
 
     let window_done = Instant::now();
 
-    if let Some(location) = config.location.as_ref() {
+    if let Some(location) = config.location() {
         for anchor in location {
             ui_elements.window.set_anchor(anchor.into(), true);
         }
     }
 
-    let outer_box = gtk4::Box::new(config.orientation.unwrap().into(), 0);
+    let outer_box = gtk4::Box::new(config.orientation().into(), 0);
     outer_box.set_widget_name("outer-box");
     outer_box.append(&ui_elements.search);
     ui_elements.window.set_child(Some(&outer_box));
@@ -276,7 +276,7 @@ fn build_ui<T, P>(
     scroll.set_hexpand(true);
     scroll.set_vexpand(true);
 
-    if config.hide_scroll.is_some_and(|hs| hs) {
+    if config.hide_scroll() {
         scroll.set_policy(PolicyType::External, PolicyType::External);
     }
     outer_box.append(&scroll);
@@ -321,16 +321,12 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
         .set_selection_mode(gtk4::SelectionMode::Browse);
     ui_elements
         .main_box
-        .set_max_children_per_line(config.columns.unwrap());
+        .set_max_children_per_line(config.columns());
     ui_elements.main_box.set_activate_on_single_click(true);
 
-    if let Some(halign) = config.halign {
-        ui_elements.main_box.set_halign(halign.into());
-    }
-    if let Some(valign) = config.valign {
-        ui_elements.main_box.set_valign(valign.into());
-    }
-    if config.orientation.unwrap() == config::Orientation::Horizontal {
+    ui_elements.main_box.set_halign(config.halign().into());
+    ui_elements.main_box.set_valign(config.valign().into());
+    if config.orientation() == config::Orientation::Horizontal {
         ui_elements.main_box.set_valign(Align::Center);
         ui_elements.main_box.set_orientation(Orientation::Vertical);
     } else {
@@ -350,7 +346,7 @@ fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>) {
     ui_elements.search.set_css_classes(&["input"]);
     ui_elements
         .search
-        .set_placeholder_text(config.prompt.as_deref());
+        .set_placeholder_text(Some(config.prompt().as_ref()));
     ui_elements.search.set_can_focus(false);
 }
 
@@ -533,13 +529,11 @@ fn animate_window_show(config: &Config, window: ApplicationWindow) {
         let monitor = display.monitor_at_surface(&surface);
         if let Some(monitor) = monitor {
             let geometry = monitor.geometry();
-            let Some(target_width) = percent_or_absolute(config.width.as_ref(), geometry.width())
-            else {
+            let Some(target_width) = percent_or_absolute(&config.width(), geometry.width()) else {
                 return;
             };
 
-            let Some(target_height) =
-                percent_or_absolute(config.height.as_ref(), geometry.height())
+            let Some(target_height) = percent_or_absolute(&config.height(), geometry.height())
             else {
                 return;
             };
@@ -551,7 +545,7 @@ fn animate_window_show(config: &Config, window: ApplicationWindow) {
             let animation_start = Instant::now();
             animate_window(
                 window,
-                config.show_animation_time.unwrap_or(0),
+                config.show_animation_time(),
                 target_height,
                 target_width,
                 move || {
@@ -568,13 +562,7 @@ where
     // todo the target size might not work for higher dpi displays or bigger resolutions
     window.set_child(Widget::NONE);
 
-    animate_window(
-        window,
-        config.hide_animation_time.unwrap_or(0),
-        10,
-        10,
-        on_done_func,
-    );
+    animate_window(window, config.hide_animation_time(), 10, 10, on_done_func);
 }
 
 fn ease_in_out_cubic(t: f32) -> f32 {
@@ -782,23 +770,13 @@ fn create_menu_row<T: Clone + 'static>(
     });
     row.add_controller(click);
 
-    let row_box = gtk4::Box::new(
-        meta.config
-            .row_bow_orientation
-            .unwrap_or(config::Orientation::Horizontal)
-            .into(),
-        0,
-    );
+    let row_box = gtk4::Box::new(meta.config.row_bow_orientation().into(), 0);
     row_box.set_hexpand(true);
     row_box.set_vexpand(false);
     row_box.set_halign(Align::Fill);
 
     row.set_child(Some(&row_box));
-    if meta
-        .config
-        .allow_images
-        .is_some_and(|allow_images| allow_images)
-    {
+    if meta.config.allow_images() {
         if let Some(image) = lookup_icon(element_to_add, &meta.config) {
             image.set_widget_name("img");
             row_box.append(&image);
@@ -806,26 +784,15 @@ fn create_menu_row<T: Clone + 'static>(
     }
 
     let label = Label::new(Some(element_to_add.label.as_str()));
-    let wrap_mode: NaturalWrapMode = if let Some(config_wrap) = &meta.config.line_wrap {
-        config_wrap.into()
-    } else {
-        NaturalWrapMode::Word
-    };
 
-    label.set_natural_wrap_mode(wrap_mode);
+    label.set_natural_wrap_mode(meta.config.line_wrap().into());
     label.set_hexpand(true);
     label.set_widget_name("label");
     label.set_wrap(true);
     row_box.append(&label);
 
-    if meta
-        .config
-        .content_halign
-        .is_some_and(|c| c == config::Align::Start)
-        || meta
-            .config
-            .content_halign
-            .is_some_and(|c| c == config::Align::Fill)
+    if meta.config.content_halign().eq(&config::Align::Start)
+        || meta.config.content_halign().eq(&config::Align::Fill)
     {
         label.set_xalign(0.0);
     }
@@ -851,11 +818,7 @@ fn lookup_icon<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Option<Ima
             Image::from_icon_name(image_path)
         };
 
-        image.set_pixel_size(
-            config
-                .image_size
-                .unwrap_or(config::default_image_size().unwrap()),
-        );
+        image.set_pixel_size(config.image_size());
         Some(image)
     } else {
         None
@@ -886,27 +849,14 @@ fn set_menu_visibility_for_search<T: Clone>(
                     &menu_item.label.to_lowercase()
                 );
 
-                let matching = if let Some(matching) = &config.matching {
-                    matching
-                } else {
-                    &config::default_match_method().unwrap()
-                };
-
-                let (search_sort_score, visible) = match matching {
+                let (search_sort_score, visible) = match config.match_method() {
                     MatchMethod::Fuzzy => {
                         let mut score = strsim::jaro_winkler(&query, &menu_item_search);
                         if score == 0.0 {
                             score = -1.0;
                         }
 
-                        (
-                            score,
-                            score
-                                > config
-                                    .fuzzy_min_score
-                                    .unwrap_or(config::default_fuzzy_min_score().unwrap_or(0.0))
-                                && score > 0.0,
-                        )
+                        (score, score > config.fuzzy_min_score() && score > 0.0)
                     }
                     MatchMethod::Contains => {
                         if menu_item_search.contains(&query) {
@@ -948,19 +898,15 @@ fn select_first_visible_child<T: Clone>(ui: &UiElements<T>) {
 // allowed because truncating is fine, we do no need the precision
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_precision_loss)]
-fn percent_or_absolute(value: Option<&String>, base_value: i32) -> Option<i32> {
-    if let Some(value) = value {
-        if value.contains('%') {
-            let value = value.replace('%', "").trim().to_string();
-            match value.parse::<i32>() {
-                Ok(n) => Some(((n as f32 / 100.0) * base_value as f32) as i32),
-                Err(_) => None,
-            }
-        } else {
-            value.parse::<i32>().ok()
+fn percent_or_absolute(value: &str, base_value: i32) -> Option<i32> {
+    if value.contains('%') {
+        let value = value.replace('%', "").trim().to_string();
+        match value.parse::<i32>() {
+            Ok(n) => Some(((n as f32 / 100.0) * base_value as f32) as i32),
+            Err(_) => None,
         }
     } else {
-        None
+        value.parse::<i32>().ok()
     }
 }
 
