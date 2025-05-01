@@ -19,7 +19,11 @@ use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
     GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt,
 };
-use gtk4::{Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry, Widget, gdk};
+use gtk4::{
+    Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
+    ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry,
+    Widget, gdk,
+};
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
@@ -432,7 +436,7 @@ fn handle_key_press<T: Clone + 'static>(
         }
         Key::Return => {
             let query = ui.search.text().to_string();
-            if let Err(e) = handle_selected_item(ui, meta, Some(&query), meta.new_on_empty) {
+            if let Err(e) = handle_selected_item(ui, meta, Some(&query), None, meta.new_on_empty) {
                 log::error!("{e}");
             }
         }
@@ -659,21 +663,29 @@ fn handle_selected_item<T>(
     ui: &UiElements<T>,
     meta: &MetaData<T>,
     query: Option<&str>,
+    item: Option<MenuItem<T>>,
     new_on_empty: bool,
 ) -> Result<(), String>
 where
     T: Clone,
 {
-    if let Some(s) = ui.main_box.selected_children().into_iter().next() {
+    if let Some(selected_item) = item {
+        if let Err(e) = meta.selected_sender.send(Ok(selected_item.clone())) {
+            log::error!("failed to send message {e}");
+        }
+
+        close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
+        return Ok(());
+    } else if let Some(s) = ui.main_box.selected_children().into_iter().next() {
         let list_items = ui.menu_rows.lock().unwrap();
         let item = list_items.get(&s);
         if let Some(item) = item {
             if let Err(e) = meta.selected_sender.send(Ok(item.clone())) {
                 log::error!("failed to send message {e}");
             }
+            close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
+            return Ok(());
         }
-        close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
-        return Ok(());
     }
 
     if new_on_empty {
@@ -754,22 +766,6 @@ fn create_menu_row<T: Clone + 'static>(
     row.set_halign(Align::Fill);
     row.set_widget_name("row");
 
-    let click_ui = Rc::clone(ui);
-    let click_meta = Rc::clone(meta);
-
-    let click = GestureClick::new();
-    click.set_button(gdk::BUTTON_PRIMARY);
-    click.connect_pressed(move |_gesture, n_press, _x, _y| {
-        if n_press == 2 {
-            if let Err(e) =
-                handle_selected_item(click_ui.as_ref(), click_meta.as_ref(), None, false)
-            {
-                log::error!("{e}");
-            }
-        }
-    });
-    row.add_controller(click);
-
     let row_box = gtk4::Box::new(meta.config.row_bow_orientation().into(), 0);
     row_box.set_hexpand(true);
     row_box.set_vexpand(false);
@@ -796,6 +792,27 @@ fn create_menu_row<T: Clone + 'static>(
     {
         label.set_xalign(0.0);
     }
+
+    let click_ui = Rc::clone(ui);
+    let click_meta = Rc::clone(meta);
+    let element_clone = element_to_add.clone();
+
+    let click = GestureClick::new();
+    click.set_button(gdk::BUTTON_PRIMARY);
+    click.connect_pressed(move |_gesture, n_press, _x, _y| {
+        if n_press == 2 {
+            if let Err(e) = handle_selected_item(
+                click_ui.as_ref(),
+                click_meta.as_ref(),
+                None,
+                Some(element_clone.clone()),
+                false,
+            ) {
+                log::error!("{e}");
+            }
+        }
+    });
+    row.add_controller(click);
 
     row.upcast()
 }
