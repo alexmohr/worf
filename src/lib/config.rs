@@ -181,6 +181,7 @@ pub struct Config {
 
     /// If true a normal window instead of a layer shell will be used
     #[clap(short = 'n', long = "normal-window")]
+    #[serde(default = "default_false")]
     normal_window: bool,
 
     /// Set to 'false' to disable images, defaults to true
@@ -233,7 +234,7 @@ pub struct Config {
     /// setting top,left for example
     #[clap(short = 'l', long = "location", value_delimiter = ',', value_parser = clap::builder::ValueParser::new(Anchor::from_str)
     )]
-    location: Option<Vec<Anchor>>, 
+    location: Option<Vec<Anchor>>,
 
     #[clap(short = 'a', long = "no-actions")]
     no_actions: Option<bool>, // todo support this
@@ -280,30 +281,30 @@ pub struct Config {
     #[clap(long = "image-size")]
     image_size: Option<i32>,
 
-    key_up: Option<String>, // todo support this
-    key_down: Option<String>, // todo support this
-    key_left: Option<String>, // todo support this
-    key_right: Option<String>, // todo support this
-    key_forward: Option<String>, // todo support this
-    key_backward: Option<String>, // todo support this
-    key_submit: Option<String>, // todo support this
-    key_exit: Option<String>, // todo support this
-    key_pgup: Option<String>, // todo support this
-    key_pgdn: Option<String>, // todo support this
-    key_expand: Option<String>, // todo support this
+    key_up: Option<String>,          // todo support this
+    key_down: Option<String>,        // todo support this
+    key_left: Option<String>,        // todo support this
+    key_right: Option<String>,       // todo support this
+    key_forward: Option<String>,     // todo support this
+    key_backward: Option<String>,    // todo support this
+    key_submit: Option<String>,      // todo support this
+    key_exit: Option<String>,        // todo support this
+    key_pgup: Option<String>,        // todo support this
+    key_pgdn: Option<String>,        // todo support this
+    key_expand: Option<String>,      // todo support this
     key_hide_search: Option<String>, // todo support this
-    key_copy: Option<String>, // todo support this
+    key_copy: Option<String>,        // todo support this
 
     // todo re-add this
     // #[serde(flatten)]
     // key_custom: Option<HashMap<String, String>>,
-    global_coords: Option<bool>, // todo support this
-    hide_search: Option<bool>, // todo support this
-    dynamic_lines: Option<bool>,// todo support this
-    layer: Option<String>, // todo support this
-    copy_exec: Option<String>,// todo support this
-    single_click: Option<bool>,// todo support this
-    pre_display_exec: Option<bool>,// todo support this
+    global_coords: Option<bool>,    // todo support this
+    hide_search: Option<bool>,      // todo support this
+    dynamic_lines: Option<bool>,    // todo support this
+    layer: Option<String>,          // todo support this
+    copy_exec: Option<String>,      // todo support this
+    single_click: Option<bool>,     // todo support this
+    pre_display_exec: Option<bool>, // todo support this
 
     /// Minimum score for a fuzzy search to be shown
     #[clap(long = "fuzzy-min-score")]
@@ -475,6 +476,10 @@ impl Config {
     pub fn show(&self) -> Option<Mode> {
         self.show.clone()
     }
+}
+
+fn default_false() -> bool {
+    false
 }
 
 //
