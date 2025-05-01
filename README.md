@@ -19,6 +19,7 @@ It supports various modes:
 
 Auto mode tries to detect the desired mode automatically, i.e. `ssh`, `?` (for web search), `emoji`, `/` or `~` (for file).
 
+<img src="images/demo.gif" style="width:600px;">
 
 ## Not finished
 * [ ] run
