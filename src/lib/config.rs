@@ -272,8 +272,6 @@ pub struct Config {
     #[clap(long = "valign")]
     valign: Option<Align>,
 
-    filter_rate: Option<u32>, // todo support this
-
     /// Defines the image size in pixels
     #[clap(long = "image-size")]
     image_size: Option<i32>,

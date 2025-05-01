@@ -95,6 +95,7 @@ This library is not available publicly yet as the interface is not stable enough
 * `dmenu`, use show
 * `D`, arguments are the same as config in worf, no need to have this flag.
 * `dark`, dark setting from theme is used now.
+* `filter-rate`, worf is fast enough not to need this debounce
 
 ### Dropped configuration options
 * stylesheet -> use style instead
