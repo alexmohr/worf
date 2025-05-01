@@ -224,7 +224,7 @@ pub struct Config {
     matching: Option<MatchMethod>,
 
     #[clap(short = 'i', long = "insensitive")]
-    insensitive: Option<bool>, // todo support this
+    insensitive: Option<bool>,
 
     #[clap(short = 'q', long = "parse-search")]
     parse_search: Option<bool>, // todo support this
@@ -472,6 +472,11 @@ impl Config {
     #[must_use]
     pub fn show(&self) -> Option<Mode> {
         self.show.clone()
+    }
+
+    #[must_use]
+    pub fn insensitive(&self) -> bool {
+        self.insensitive.unwrap_or(true)
     }
 }
 

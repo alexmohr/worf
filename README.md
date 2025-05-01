@@ -90,10 +90,11 @@ This library is not available publicly yet as the interface is not stable enough
 * `line_wrap` is now called `line-wrap`
 * Wofi has a C-API, that is not and won't be supported, but Worf can be used as a rust library.
 
-### Dropped arguments
+### Dropped arguments / config values
 * `mode`, use show
 * `dmenu`, use show
 * `D`, arguments are the same as config in worf, no need to have this flag.
+* `dark`, dark setting from theme is used now.
 
 ### Dropped configuration options
 * stylesheet -> use style instead
