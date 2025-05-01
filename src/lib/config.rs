@@ -248,9 +248,6 @@ pub struct Config {
     #[clap(short = 'O', long = "sort-order")] // todo support this
     sort_order: Option<String>,
 
-    #[clap(short = 'G', long = "gtk-dark")]
-    gtk_dark: Option<bool>, // todo support this
-
     #[clap(short = 'Q', long = "search")]
     search: Option<String>, // todo support this
 
