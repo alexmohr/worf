@@ -424,6 +424,9 @@ fn handle_key_press<T: Clone + 'static>(
     };
 
     match keyboard_key {
+        Key::Down => {
+            return Propagation::Stop;
+        }
         Key::Escape => {
             if let Err(e) = meta.selected_sender.send(Err(anyhow!("No item selected"))) {
                 log::error!("failed to send message {e}");
