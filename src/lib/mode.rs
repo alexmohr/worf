@@ -11,6 +11,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{env, fs, io};
+use std::ffi::CString;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct DRunCache {
@@ -532,7 +533,7 @@ impl ItemProvider<String> for DMenuProvider {
         (false, self.items.clone())
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> (bool, std::option::Option<Vec<gui::MenuItem<std::string::String>>>) {
+    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> (bool, Option<Vec<gui::MenuItem<std::string::String>>>) {
         (false, None)
     }
 }
@@ -822,7 +823,12 @@ fn update_run_cache_and_run<T: Clone>(
     }
 
     if let Some(action) = selection_result.action {
-        spawn_fork(&action, selection_result.working_dir.as_ref())
+        let program = CString::new(action).unwrap();
+        let args = [program.clone()];
+
+        // This replaces the current process image
+        nix::unistd::execvp(&program, &args).map_err(|e| Error::RunFailed(e.to_string()))?;
+        Ok(())
     } else {
         Err(Error::MissingAction)
     }
