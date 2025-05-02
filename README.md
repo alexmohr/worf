@@ -12,9 +12,9 @@ It supports various modes:
 * DRun
 * File
 * Ssh
+* Run
 * // WebSearch
 * // Emoji
-* // Run
 * Auto
 
 Auto mode tries to detect the desired mode automatically, i.e. `ssh`, `?` (for web search), `emoji`, `/` or `~` (for file).
@@ -22,7 +22,6 @@ Auto mode tries to detect the desired mode automatically, i.e. `ssh`, `?` (for w
 <img src="images/demo.gif" style="width:600px;">
 
 ## Not finished
-* [ ] run
 * [ ] key support
 * [ ] full config support
 * [ ] web search mode

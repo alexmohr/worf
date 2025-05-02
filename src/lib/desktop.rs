@@ -4,13 +4,13 @@ use freedesktop_file_parser::DesktopFile;
 use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashMap;
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::prelude::CommandExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Instant;
 use std::{env, fs, io};
-use std::os::unix::fs::PermissionsExt;
 
 /// Returns a regex with supported image extensions
 /// # Panics
@@ -281,9 +281,9 @@ pub fn create_file_if_not_exists(path: &PathBuf) -> Result<(), Error> {
     }
 }
 
-
 /// Check if the given dir entry is an executable
-pub fn is_executable(entry: &PathBuf) -> bool {
+#[must_use]
+pub fn is_executable(entry: &Path) -> bool {
     if let Ok(metadata) = entry.metadata() {
         let permissions = metadata.permissions();
         metadata.is_file() && (permissions.mode() & 0o111 != 0)
