@@ -1,5 +1,8 @@
 use crate::config::{Config, expand_path};
-use crate::desktop::{create_file_if_not_exists, find_desktop_files, get_locale_variants, is_executable, load_cache_file, lookup_name_with_locale, save_cache_file, spawn_fork};
+use crate::desktop::{
+    create_file_if_not_exists, find_desktop_files, get_locale_variants, is_executable,
+    load_cache_file, lookup_name_with_locale, save_cache_file, spawn_fork,
+};
 use crate::gui::{ItemProvider, MenuItem};
 use crate::{Error, gui};
 use freedesktop_file_parser::EntryType;
@@ -7,11 +10,11 @@ use rayon::prelude::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::ffi::CString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{env, fs, io};
-use std::ffi::CString;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct DRunCache {
@@ -143,45 +146,43 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
     }
 }
 
-impl<T: Clone + Send + Sync> ItemProvider<T> for RunProvider<T> {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<gui::MenuItem<T>>) {
+impl ItemProvider<i32> for RunProvider {
+    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<i32>>) {
         if self.items.is_none() {
             self.items = Some(self.load().clone());
         }
         (false, self.items.clone().unwrap())
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, std::option::Option<Vec<gui::MenuItem<T>>>) {
+    fn get_sub_elements(&mut self, _: &MenuItem<i32>) -> (bool, Option<Vec<MenuItem<i32>>>) {
         (false, None)
     }
 }
 
 #[derive(Clone)]
-struct RunProvider<T: Clone> {
-    items: Option<Vec<MenuItem<T>>>,
+struct RunProvider {
+    items: Option<Vec<MenuItem<i32>>>,
     cache_path: Option<PathBuf>,
     cache: HashMap<String, i64>,
-    data: T,
 }
 
-impl<T: Clone + Send + Sync> RunProvider<T> {
-    fn new(menu_item_data: T) -> Self {
+impl RunProvider {
+    fn new() -> Self {
         let (cache_path, d_run_cache) = load_run_cache();
         RunProvider {
             items: None,
             cache_path,
             cache: d_run_cache,
-            data: menu_item_data,
         }
     }
 
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_precision_loss)]
-    fn load(&self) -> Vec<MenuItem<T>> {
+    fn load(&self) -> Vec<MenuItem<i32>> {
         let path_var = env::var("PATH").unwrap_or_default();
         let paths = env::split_paths(&path_var);
 
-        let entries : Vec<_>= paths
+        let entries: Vec<_> = paths
             .filter(|dir| dir.is_dir())
             .flat_map(|dir| {
                 fs::read_dir(dir)
@@ -212,9 +213,8 @@ impl<T: Clone + Send + Sync> RunProvider<T> {
             })
             .collect();
 
-
         let mut seen_actions = HashSet::new();
-        let mut entries: Vec<MenuItem<T>> = entries
+        let mut entries: Vec<MenuItem<i32>> = entries
             .into_iter()
             .filter(|entry| {
                 if let Some(action) = &entry.action {
@@ -229,25 +229,23 @@ impl<T: Clone + Send + Sync> RunProvider<T> {
             })
             .collect();
 
-
         gui::sort_menu_items_alphabetically_honor_initial_score(&mut entries);
         entries
     }
 }
 
 impl<T: Clone + Send + Sync> ItemProvider<T> for DRunProvider<T> {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<gui::MenuItem<T>>) {
+    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
         if self.items.is_none() {
             self.items = Some(self.load().clone());
         }
         (false, self.items.clone().unwrap())
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, std::option::Option<Vec<gui::MenuItem<T>>>) {
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
         (false, None)
     }
 }
-
 
 #[derive(Clone)]
 struct FileItemProvider<T: Clone> {
@@ -304,7 +302,7 @@ impl<T: Clone> FileItemProvider<T> {
 }
 
 impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
-    fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<gui::MenuItem<T>>) {
+    fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
         let default_path = if let Some(home) = dirs::home_dir() {
             home.display().to_string()
         } else {
@@ -389,7 +387,7 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
         (true, items)
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, std::option::Option<Vec<gui::MenuItem<T>>>) {
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
         (false, self.last_result.clone())
     }
 }
@@ -435,11 +433,11 @@ impl<T: Clone> SshProvider<T> {
 }
 
 impl<T: Clone> ItemProvider<T> for SshProvider<T> {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<gui::MenuItem<T>>) {
+    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
         (false, self.elements.clone())
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, std::option::Option<Vec<gui::MenuItem<T>>>) {
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
         (false, None)
     }
 }
@@ -477,7 +475,7 @@ impl<T: Clone> MathProvider<T> {
 }
 
 impl<T: Clone> ItemProvider<T> for MathProvider<T> {
-    fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<gui::MenuItem<T>>) {
+    fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
         if let Some(search_text) = search {
             let result = match meval::eval_str(search_text) {
                 Ok(result) => result.to_string(),
@@ -501,7 +499,7 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
         }
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, std::option::Option<Vec<gui::MenuItem<T>>>) {
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
         (false, None)
     }
 }
@@ -529,11 +527,11 @@ impl DMenuProvider {
 }
 
 impl ItemProvider<String> for DMenuProvider {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<gui::MenuItem<std::string::String>>) {
+    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<String>>) {
         (false, self.items.clone())
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> (bool, Option<Vec<gui::MenuItem<std::string::String>>>) {
+    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> (bool, Option<Vec<MenuItem<String>>>) {
         (false, None)
     }
 }
@@ -569,7 +567,7 @@ impl AutoItemProvider {
 }
 
 impl ItemProvider<AutoRunType> for AutoItemProvider {
-    fn get_elements(&mut self, search_opt: Option<&str>) -> (bool, Vec<gui::MenuItem<AutoRunType>>) {
+    fn get_elements(&mut self, search_opt: Option<&str>) -> (bool, Vec<MenuItem<AutoRunType>>) {
         if let Some(search) = search_opt {
             let trimmed_search = search.trim();
             if trimmed_search.is_empty() {
@@ -599,7 +597,7 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
     fn get_sub_elements(
         &mut self,
         item: &MenuItem<AutoRunType>,
-    ) -> (bool, std::option::Option<Vec<gui::MenuItem<AutoRunType>>>) {
+    ) -> (bool, Option<Vec<MenuItem<AutoRunType>>>) {
         let (changed, items) = self.get_elements(Some(item.label.as_ref()));
         (changed, Some(items))
     }
@@ -631,7 +629,7 @@ pub fn d_run(config: &Config) -> Result<(), Error> {
 ///
 /// Will return `Err` if it was not able to spawn the process
 pub fn run(config: &Config) -> Result<(), Error> {
-    let provider = RunProvider::new(String::new());
+    let provider = RunProvider::new();
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 
@@ -645,7 +643,6 @@ pub fn run(config: &Config) -> Result<(), Error> {
 
     Ok(())
 }
-
 
 /// Shows the auto mode
 /// # Errors
@@ -809,7 +806,6 @@ fn update_drun_cache_and_run<T: Clone>(
     }
 }
 
-
 fn update_run_cache_and_run<T: Clone>(
     cache_path: Option<PathBuf>,
     cache: &mut HashMap<String, i64>,
@@ -836,14 +832,13 @@ fn update_run_cache_and_run<T: Clone>(
 
 fn load_d_run_cache() -> (Option<PathBuf>, HashMap<String, i64>) {
     let cache_path = dirs::cache_dir().map(|x| x.join("worf-drun"));
-   load_cache(cache_path)
+    load_cache(cache_path)
 }
 
 fn load_run_cache() -> (Option<PathBuf>, HashMap<String, i64>) {
     let cache_path = dirs::cache_dir().map(|x| x.join("worf-run"));
     load_cache(cache_path)
 }
-
 
 fn load_cache(cache_path: Option<PathBuf>) -> (Option<PathBuf>, HashMap<String, i64>) {
     let cache = {

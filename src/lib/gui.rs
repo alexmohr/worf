@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -23,7 +22,7 @@ use gtk4::prelude::{
 use gtk4::{
     Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
     ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry,
-    Widget, gdk,
+    Widget, gdk, glib,
 };
 use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
@@ -217,7 +216,6 @@ fn build_ui<T, P>(
     });
 
     let provider_clone = Arc::clone(&meta.item_provider);
-
     let get_provider_elements = thread::spawn(move || {
         log::debug!("getting items");
         provider_clone.lock().unwrap().get_elements(None)
@@ -239,8 +237,6 @@ fn build_ui<T, P>(
         menu_rows: Arc::new(Mutex::new(HashMap::new())),
     });
 
-    let window_show = Instant::now();
-
     // handle keys as soon as possible
     setup_key_event_handler(&ui_elements, &meta);
 
@@ -259,8 +255,6 @@ fn build_ui<T, P>(
             .set_keyboard_mode(KeyboardMode::Exclusive);
         ui_elements.window.set_namespace(Some("worf"));
     }
-
-    let window_done = Instant::now();
 
     if let Some(location) = config.location() {
         for anchor in location {
@@ -293,26 +287,14 @@ fn build_ui<T, P>(
     let wait_for_items = Instant::now();
     let (_changed, provider_elements) = get_provider_elements.join().unwrap();
     log::debug!("got items after {:?}", wait_for_items.elapsed());
-    {
-        let mut lock = ui_elements.menu_rows.lock().unwrap();
-        build_ui_from_menu_items(&ui_elements, &meta, &provider_elements, lock.deref_mut());
-    }
+    build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
 
-    let items_sort = ArcMenuMap::clone(&ui_elements.menu_rows);
-    ui_elements
-        .main_box
-        .set_sort_func(move |child1, child2| sort_menu_items_by_score(child1, child2, &items_sort));
-
+    let window_start = Instant::now();
     ui_elements.window.show();
-    animate_window_show(config, ui_elements.window.clone());
+    log::debug!("window show took {:?}", window_start.elapsed());
 
-    let animation_done = Instant::now();
-    log::debug!(
-        "Building UI took {:?}, window show {:?}, animation {:?}",
-        start.elapsed(),
-        window_done - window_show,
-        animation_done - window_done
-    );
+    animate_window_show(config, ui_elements.window.clone());
+    log::debug!("Building UI took {:?}", start.elapsed(),);
 }
 
 fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElements<T>>) {
@@ -343,7 +325,7 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
         fb.invalidate_sort();
 
         let lock = ui_clone.menu_rows.lock().unwrap();
-        select_first_visible_child(lock.deref(), &ui_clone.main_box);
+        select_first_visible_child(&*lock, &ui_clone.main_box);
     });
 }
 
@@ -362,37 +344,51 @@ fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>) {
 fn build_ui_from_menu_items<T: Clone + 'static>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
-    items: &Vec<MenuItem<T>>,
-    map: &mut HashMap<FlowBoxChild, MenuItem<T>>,
+    mut items: Vec<MenuItem<T>>,
 ) {
     let start = Instant::now();
     {
-        let got_lock = Instant::now();
-
-        ui.main_box.unset_sort_func();
-
         while let Some(b) = ui.main_box.child_at_index(0) {
             ui.main_box.remove(&b);
             drop(b);
         }
-        map.clear();
+        ui.menu_rows.lock().unwrap().clear();
 
-        let cleared_box = Instant::now();
+        let meta_clone = Rc::<MetaData<T>>::clone(meta);
+        let ui_clone = Rc::<UiElements<T>>::clone(ui);
 
-        for entry in items {
-            if entry.visible {
-                map.insert(add_menu_item(ui, meta, entry), (*entry).clone());
+        glib::idle_add_local(move || {
+            ui_clone.main_box.unset_sort_func();
+            let mut done = false;
+            {
+                let mut lock = ui_clone.menu_rows.lock().unwrap();
+
+                for _ in 0..100 {
+                    if let Some(item) = items.pop() {
+                        lock.insert(add_menu_item(&ui_clone, &meta_clone, &item), item);
+                    } else {
+                        done = true;
+                    }
+                }
+
+                let query = ui_clone.search.text();
+                let menus = &mut *lock;
+                set_menu_visibility_for_search(&query, menus, &meta_clone.config);
+                select_first_visible_child(&*lock, &ui_clone.main_box);
             }
-        }
 
-        let created_ui = Instant::now();
-        log::debug!(
-            "Creating UI took {:?}, got lock after {:?}, cleared box after {:?}, created UI after {:?}",
-            start.elapsed(),
-            got_lock - start,
-            cleared_box - start,
-            created_ui - start
-        );
+            let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
+            ui_clone.main_box.set_sort_func(move |child1, child2| {
+                sort_menu_items_by_score(child1, child2, &items_sort)
+            });
+
+            if done {
+                log::debug!("Created menu items in {:?}", start.elapsed());
+                ControlFlow::Break
+            } else {
+                ControlFlow::Continue
+            }
+        });
     }
 }
 
@@ -419,8 +415,8 @@ fn handle_key_press<T: Clone + 'static>(
 ) -> Propagation {
     let update_view = |query: &String| {
         let mut lock = ui.menu_rows.lock().unwrap();
-        let mut menus = lock.iter_mut().map(|(s, v)| v).collect::<Vec<_>>();
-        set_menu_visibility_for_search(query, menus.as_mut_slice(), &meta.config);
+        let menus = &mut *lock;
+        set_menu_visibility_for_search(query, menus, &meta.config);
         for (fb, item) in lock.iter() {
             fb.set_visible(item.visible);
         }
@@ -431,18 +427,13 @@ fn handle_key_press<T: Clone + 'static>(
     let update_view_from_provider = |query: &String| {
         let (changed, filtered_list) = meta.item_provider.lock().unwrap().get_elements(Some(query));
         if changed {
-
-            let mut lock = ui.menu_rows.lock().unwrap();
-            build_ui_from_menu_items(&ui, &meta, &filtered_list, lock.deref_mut());
+            build_ui_from_menu_items(ui, meta, filtered_list);
         }
 
         update_view(query);
     };
 
     match keyboard_key {
-        Key::Down => {
-            return Propagation::Stop;
-        }
         Key::Escape => {
             if let Err(e) = meta.selected_sender.send(Err(anyhow!("No item selected"))) {
                 log::error!("failed to send message {e}");
@@ -481,8 +472,7 @@ fn handle_key_press<T: Clone + 'static>(
 
                             let items = items.unwrap_or_default();
                             if changed {
-                                let mut lock = ui.menu_rows.lock().unwrap();
-                                build_ui_from_menu_items(ui, meta, &items, &mut *lock);
+                                build_ui_from_menu_items(ui, meta, items);
                             }
 
                             let query = menu_item.label.clone();
@@ -526,16 +516,20 @@ fn sort_menu_items_by_score<T: Clone>(
 
     match (m1, m2) {
         (Some(menu1), Some(menu2)) => {
-            if menu1.search_sort_score > 0.0 || menu2.search_sort_score > 0.0 {
-                if menu1.search_sort_score < menu2.search_sort_score {
+            fn compare(a: f64, b: f64) -> Ordering {
+                if a > b {
                     Ordering::Smaller
-                } else {
+                } else if a < b {
                     Ordering::Larger
+                } else {
+                    Ordering::Equal
                 }
-            } else if menu1.initial_sort_score > menu2.initial_sort_score {
-                Ordering::Smaller
+            }
+
+            if menu1.search_sort_score > 0.0 || menu2.search_sort_score > 0.0 {
+                compare(menu1.search_sort_score, menu2.search_sort_score)
             } else {
-                Ordering::Larger
+                compare(menu1.initial_sort_score, menu2.initial_sort_score)
             }
         }
         (Some(_), None) => Ordering::Larger,
@@ -863,14 +857,15 @@ fn lookup_icon<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Option<Ima
 
 fn set_menu_visibility_for_search<T: Clone>(
     query: &str,
-    items: &mut [&mut MenuItem<T>],
+    items: &mut HashMap<FlowBoxChild, MenuItem<T>>,
     config: &Config,
 ) {
     {
         if query.is_empty() {
-            for menu_item in items.iter_mut() {
-                menu_item.search_sort_score = menu_item.initial_sort_score;
+            for (fb, menu_item) in items.iter_mut() {
+                menu_item.search_sort_score = 0.0;
                 menu_item.visible = true;
+                fb.set_visible(menu_item.visible);
             }
         } else {
             let query = if config.insensitive() {
@@ -878,7 +873,7 @@ fn set_menu_visibility_for_search<T: Clone>(
             } else {
                 query.to_owned()
             };
-            for menu_item in items.iter_mut() {
+            for (fb, menu_item) in items.iter_mut() {
                 let menu_item_search = format!(
                     "{} {}",
                     menu_item
@@ -917,6 +912,7 @@ fn set_menu_visibility_for_search<T: Clone>(
 
                 menu_item.search_sort_score = search_sort_score + menu_item.initial_sort_score;
                 menu_item.visible = visible;
+                fb.set_visible(menu_item.visible);
             }
         }
     }
