@@ -960,7 +960,7 @@ fn percent_or_absolute(value: &str, base_value: i32) -> Option<i32> {
 pub fn sort_menu_items_alphabetically_honor_initial_score<T: Clone>(items: &mut [MenuItem<T>]) {
     let special_score = items.len() as f64;
     let mut regular_score = 0.0;
-    items.sort_by(|l, r| l.label.cmp(&r.label));
+    items.sort_by(|l, r| r.label.cmp(&l.label));
 
     for item in items.iter_mut() {
         if item.initial_sort_score == 0.0 {

@@ -46,3 +46,4 @@ which = "7.0.3"
 meval = "0.2.0"
 tree_magic_mini = "3.1.6"
 rayon = "1.10.0"
+nix = { version = "0.30.0", features = ["process"] }
