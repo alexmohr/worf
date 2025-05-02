@@ -4,9 +4,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::config::{Anchor, Config, MatchMethod, WrapMode};
-use crate::desktop::known_image_extension_regex_pattern;
-use crate::{config, desktop};
 use anyhow::anyhow;
 use crossbeam::channel;
 use crossbeam::channel::Sender;
@@ -28,6 +25,10 @@ use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 use regex::Regex;
+
+use crate::config::{Anchor, Config, MatchMethod, WrapMode};
+use crate::desktop::known_image_extension_regex_pattern;
+use crate::{config, desktop};
 
 type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
@@ -374,7 +375,6 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
                 let query = ui_clone.search.text();
                 let menus = &mut *lock;
                 set_menu_visibility_for_search(&query, menus, &meta_clone.config);
-                select_first_visible_child(&*lock, &ui_clone.main_box);
             }
 
             let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
@@ -383,6 +383,10 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
             });
 
             if done {
+                let mut lock = ui_clone.menu_rows.lock().unwrap();
+                let menus = &mut *lock;
+                select_first_visible_child(menus, &ui_clone.main_box);
+
                 log::debug!("Created menu items in {:?}", start.elapsed());
                 ControlFlow::Break
             } else {
@@ -417,10 +421,6 @@ fn handle_key_press<T: Clone + 'static>(
         let mut lock = ui.menu_rows.lock().unwrap();
         let menus = &mut *lock;
         set_menu_visibility_for_search(query, menus, &meta.config);
-        for (fb, item) in lock.iter() {
-            fb.set_visible(item.visible);
-        }
-
         select_first_visible_child(&*lock, &ui.main_box);
     };
 
@@ -450,9 +450,10 @@ fn handle_key_press<T: Clone + 'static>(
             let mut query = ui.search.text().to_string();
             if !query.is_empty() {
                 query.pop();
+
+                ui.search.set_text(&query);
+                update_view_from_provider(&query);
             }
-            ui.search.set_text(&query);
-            update_view_from_provider(&query);
         }
         Key::Tab => {
             if let Some(fb) = ui.main_box.selected_children().first() {
@@ -461,22 +462,27 @@ fn handle_key_press<T: Clone + 'static>(
                     if let Some(expander) = expander {
                         expander.set_expanded(true);
                     } else {
-                        let lock = ui.menu_rows.lock().unwrap();
-                        let menu_item = lock.get(fb);
-                        if let Some(menu_item) = menu_item {
-                            let (changed, items) = meta
-                                .item_provider
-                                .lock()
-                                .unwrap()
-                                .get_sub_elements(menu_item);
+                        let opt_changed = {
+                            let lock = ui.menu_rows.lock().unwrap();
+                            let menu_item = lock.get(fb);
+                            menu_item.map(|menu_item| {
+                                (
+                                    meta.item_provider
+                                        .lock()
+                                        .unwrap()
+                                        .get_sub_elements(menu_item),
+                                    menu_item.label.clone(),
+                                )
+                            })
+                        };
 
-                            let items = items.unwrap_or_default();
-                            if changed {
+                        if let Some(changed) = opt_changed {
+                            let items = changed.0.1.unwrap_or_default();
+                            if changed.0.0 {
                                 build_ui_from_menu_items(ui, meta, items);
                             }
 
-                            let query = menu_item.label.clone();
-
+                            let query = changed.1;
                             ui.search.set_text(&query);
                             update_view(&query);
                         }
@@ -775,6 +781,7 @@ fn create_menu_row<T: Clone + 'static>(
     element_to_add: &MenuItem<T>,
 ) -> Widget {
     let row = ListBoxRow::new();
+    row.set_focusable(true);
     row.set_hexpand(true);
     row.set_halign(Align::Fill);
     row.set_widget_name("row");
@@ -927,6 +934,8 @@ fn select_first_visible_child<T: Clone>(
         if let Some(child) = flow_box.child_at_index(i_32) {
             if child.is_visible() {
                 flow_box.select_child(&child);
+                child.grab_focus();
+                child.activate();
                 return;
             }
         }

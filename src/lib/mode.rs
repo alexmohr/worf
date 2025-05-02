@@ -553,6 +553,7 @@ struct AutoItemProvider {
     file: FileItemProvider<AutoRunType>,
     math: MathProvider<AutoRunType>,
     ssh: SshProvider<AutoRunType>,
+    last_mode: Option<AutoRunType>,
 }
 
 impl AutoItemProvider {
@@ -562,6 +563,22 @@ impl AutoItemProvider {
             file: FileItemProvider::new(AutoRunType::File),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh),
+            last_mode: None,
+        }
+    }
+
+    fn default_auto_elements(
+        &mut self,
+        search_opt: Option<&str>,
+    ) -> (bool, Vec<MenuItem<AutoRunType>>) {
+        // return ssh and drun items
+        let (changed, mut items) = self.drun.get_elements(search_opt);
+        items.append(&mut self.ssh.get_elements(search_opt).1);
+        if self.last_mode == Some(AutoRunType::DRun) {
+            (changed, items)
+        } else {
+            self.last_mode = Some(AutoRunType::DRun);
+            (true, items)
         }
     }
 }
@@ -571,26 +588,42 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
         if let Some(search) = search_opt {
             let trimmed_search = search.trim();
             if trimmed_search.is_empty() {
-                self.drun.get_elements(search_opt)
+                let (_changed, items) = self.default_auto_elements(search_opt);
+                (true, items)
             } else if MathProvider::<AutoRunType>::contains_math_functions_or_starts_with_number(
                 trimmed_search,
             ) {
-                self.math.get_elements(search_opt)
+                // math mode handling
+                let (changed, items) = self.math.get_elements(search_opt);
+                if self.last_mode == Some(AutoRunType::Math) {
+                    return (changed, items);
+                }
+                self.last_mode = Some(AutoRunType::Math);
+                return (true, items);
             } else if trimmed_search.starts_with('$')
                 || trimmed_search.starts_with('/')
                 || trimmed_search.starts_with('~')
             {
-                self.file.get_elements(search_opt)
+                // file mode handling
+                let (changed, items) = self.file.get_elements(search_opt);
+                if self.last_mode == Some(AutoRunType::File) {
+                    return (changed, items);
+                }
+                self.last_mode = Some(AutoRunType::File);
+                return (true, items);
             } else if trimmed_search.starts_with("ssh") {
-                self.ssh.get_elements(search_opt)
+                // file mode handling
+                let (changed, items) = self.ssh.get_elements(search_opt);
+                if self.last_mode == Some(AutoRunType::Ssh) {
+                    return (changed, items);
+                }
+                self.last_mode = Some(AutoRunType::Ssh);
+                return (true, items);
             } else {
-                // return ssh and drun items
-                let (changed, mut drun) = self.drun.get_elements(search_opt);
-                drun.append(&mut self.ssh.get_elements(search_opt).1);
-                (changed, drun)
+                self.default_auto_elements(search_opt)
             }
         } else {
-            self.drun.get_elements(search_opt)
+            self.default_auto_elements(search_opt)
         }
     }
 
