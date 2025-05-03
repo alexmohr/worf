@@ -191,24 +191,22 @@ impl RunProvider {
                     .filter_map(Result::ok)
                     .filter_map(|entry| {
                         let path = entry.path();
-                        if is_executable(&path) {
-                            let label = path
-                                .file_name()
-                                .and_then(|s| s.to_str())
-                                .map(String::from)?;
-                            let sort_score = *self.cache.get(&label).unwrap_or(&0) as f64;
-                            Some(MenuItem::new(
-                                label,
-                                None,
-                                path.to_str().map(std::string::ToString::to_string),
-                                vec![],
-                                None,
-                                sort_score,
-                                None,
-                            ))
-                        } else {
-                            None
+                        if !is_executable(&path) {
+                            return None;
                         }
+
+                        let label = path.file_name()?.to_str()?.to_string();
+                        let sort_score = *self.cache.get(&label).unwrap_or(&0) as f64;
+
+                        Some(MenuItem::new(
+                            label,
+                            None,
+                            path.to_str().map(ToString::to_string),
+                            vec![],
+                            None,
+                            sort_score,
+                            None,
+                        ))
                     })
             })
             .collect();
@@ -217,15 +215,11 @@ impl RunProvider {
         let mut entries: Vec<MenuItem<i32>> = entries
             .into_iter()
             .filter(|entry| {
-                if let Some(action) = &entry.action {
-                    if let Some(cmd) = action.split('/').last() {
-                        seen_actions.insert(cmd.to_string())
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
+                entry
+                    .action
+                    .as_ref()
+                    .and_then(|action| action.split('/').next_back())
+                    .is_some_and(|cmd| seen_actions.insert(cmd.to_string()))
             })
             .collect();
 
@@ -262,42 +256,47 @@ impl<T: Clone> FileItemProvider<T> {
     }
 
     fn resolve_icon_for_name(path: &Path) -> String {
-        let result = tree_magic_mini::from_filepath(path);
-        if let Some(result) = result {
-            if result.starts_with("image") {
-                "image-x-generic".to_owned()
-            } else if result.starts_with("inode") {
-                return result.replace('/', "-");
-            } else if result.starts_with("text") {
-                if result.contains("plain") {
-                    "text-x-generic".to_owned()
-                } else if result.contains("python") {
-                    "text-x-script".to_owned()
-                } else if result.contains("html") {
-                    return "text-html".to_owned();
-                } else {
-                    "text-x-generic".to_owned()
-                }
-            } else if result.starts_with("application") {
-                if result.contains("octet") {
-                    "application-x-executable".to_owned()
-                } else if result.contains("tar")
-                    || result.contains("lz")
-                    || result.contains("zip")
-                    || result.contains("7z")
-                    || result.contains("xz")
-                {
-                    "package-x-generic".to_owned()
-                } else {
-                    return "text-html".to_owned();
-                }
-            } else {
-                log::debug!("unsupported mime type {result}");
-                return "application-x-generic".to_owned();
-            }
-        } else {
-            "image-not-found".to_string()
+        let Some(mime) = tree_magic_mini::from_filepath(path) else {
+            return "image-not-found".to_string();
+        };
+
+        if mime.starts_with("image") {
+            return "image-x-generic".to_string();
         }
+
+        if mime.starts_with("inode") {
+            return mime.replace('/', "-");
+        }
+
+        if mime.starts_with("text") {
+            return if mime.contains("plain") {
+                "text-x-generic".to_string()
+            } else if mime.contains("python") {
+                "text-x-script".to_string()
+            } else if mime.contains("html") {
+                "text-html".to_string()
+            } else {
+                "text-x-generic".to_string()
+            };
+        }
+
+        if mime.starts_with("application") {
+            return if mime.contains("octet") {
+                "application-x-executable".to_string()
+            } else if mime.contains("tar")
+                || mime.contains("lz")
+                || mime.contains("zip")
+                || mime.contains("7z")
+                || mime.contains("xz")
+            {
+                "package-x-generic".to_string()
+            } else {
+                "text-html".to_string()
+            };
+        }
+
+        log::debug!("unsupported mime type {mime}");
+        "application-x-generic".to_string()
     }
 }
 
@@ -585,45 +584,28 @@ impl AutoItemProvider {
 
 impl ItemProvider<AutoRunType> for AutoItemProvider {
     fn get_elements(&mut self, search_opt: Option<&str>) -> (bool, Vec<MenuItem<AutoRunType>>) {
-        if let Some(search) = search_opt {
-            let trimmed_search = search.trim();
-            if trimmed_search.is_empty() {
-                let (_changed, items) = self.default_auto_elements(search_opt);
-                (true, items)
-            } else if MathProvider::<AutoRunType>::contains_math_functions_or_starts_with_number(
-                trimmed_search,
-            ) {
-                // math mode handling
-                let (changed, items) = self.math.get_elements(search_opt);
-                if self.last_mode == Some(AutoRunType::Math) {
-                    return (changed, items);
-                }
-                self.last_mode = Some(AutoRunType::Math);
-                return (true, items);
-            } else if trimmed_search.starts_with('$')
-                || trimmed_search.starts_with('/')
-                || trimmed_search.starts_with('~')
+        let search = match search_opt {
+            Some(s) if !s.trim().is_empty() => s.trim(),
+            _ => return self.default_auto_elements(search_opt),
+        };
+
+        let (mode, (changed, items)) =
+            if MathProvider::<AutoRunType>::contains_math_functions_or_starts_with_number(search) {
+                (AutoRunType::Math, self.math.get_elements(search_opt))
+            } else if search.starts_with('$') || search.starts_with('/') || search.starts_with('~')
             {
-                // file mode handling
-                let (changed, items) = self.file.get_elements(search_opt);
-                if self.last_mode == Some(AutoRunType::File) {
-                    return (changed, items);
-                }
-                self.last_mode = Some(AutoRunType::File);
-                return (true, items);
-            } else if trimmed_search.starts_with("ssh") {
-                // file mode handling
-                let (changed, items) = self.ssh.get_elements(search_opt);
-                if self.last_mode == Some(AutoRunType::Ssh) {
-                    return (changed, items);
-                }
-                self.last_mode = Some(AutoRunType::Ssh);
-                return (true, items);
+                (AutoRunType::File, self.file.get_elements(search_opt))
+            } else if search.starts_with("ssh") {
+                (AutoRunType::Ssh, self.ssh.get_elements(search_opt))
             } else {
-                self.default_auto_elements(search_opt)
-            }
+                return self.default_auto_elements(search_opt);
+            };
+
+        if self.last_mode.as_ref().is_some_and(|m| m == &mode) {
+            (changed, items)
         } else {
-            self.default_auto_elements(search_opt)
+            self.last_mode = Some(mode);
+            (true, items)
         }
     }
 

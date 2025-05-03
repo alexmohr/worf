@@ -410,8 +410,6 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
 
     ui.window.add_controller(key_controller);
 }
-
-#[allow(clippy::too_many_arguments)] // todo refactor this?
 fn handle_key_press<T: Clone + 'static>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
@@ -874,53 +872,54 @@ fn set_menu_visibility_for_search<T: Clone>(
                 menu_item.visible = true;
                 fb.set_visible(menu_item.visible);
             }
+            return;
+        }
+
+        let query = if config.insensitive() {
+            query.to_owned().to_lowercase()
         } else {
-            let query = if config.insensitive() {
-                query.to_owned().to_lowercase()
-            } else {
-                query.to_owned()
+            query.to_owned()
+        };
+        for (fb, menu_item) in items.iter_mut() {
+            let menu_item_search = format!(
+                "{} {}",
+                menu_item
+                    .action
+                    .as_ref()
+                    .map(|a| a.to_lowercase())
+                    .unwrap_or_default(),
+                &menu_item.label.to_lowercase()
+            );
+
+            let (search_sort_score, visible) = match config.match_method() {
+                MatchMethod::Fuzzy => {
+                    let mut score = strsim::jaro_winkler(&query, &menu_item_search);
+                    if score == 0.0 {
+                        score = -1.0;
+                    }
+
+                    (score, score > config.fuzzy_min_score() && score > 0.0)
+                }
+                MatchMethod::Contains => {
+                    if menu_item_search.contains(&query) {
+                        (1.0, true)
+                    } else {
+                        (0.0, false)
+                    }
+                }
+                MatchMethod::MultiContains => {
+                    let score = query
+                        .split(' ')
+                        .filter(|i| menu_item_search.contains(i))
+                        .map(|_| 1.0)
+                        .sum();
+                    (score, score > 0.0)
+                }
             };
-            for (fb, menu_item) in items.iter_mut() {
-                let menu_item_search = format!(
-                    "{} {}",
-                    menu_item
-                        .action
-                        .as_ref()
-                        .map(|a| a.to_lowercase())
-                        .unwrap_or_default(),
-                    &menu_item.label.to_lowercase()
-                );
 
-                let (search_sort_score, visible) = match config.match_method() {
-                    MatchMethod::Fuzzy => {
-                        let mut score = strsim::jaro_winkler(&query, &menu_item_search);
-                        if score == 0.0 {
-                            score = -1.0;
-                        }
-
-                        (score, score > config.fuzzy_min_score() && score > 0.0)
-                    }
-                    MatchMethod::Contains => {
-                        if menu_item_search.contains(&query) {
-                            (1.0, true)
-                        } else {
-                            (0.0, false)
-                        }
-                    }
-                    MatchMethod::MultiContains => {
-                        let score = query
-                            .split(' ')
-                            .filter(|i| menu_item_search.contains(i))
-                            .map(|_| 1.0)
-                            .sum();
-                        (score, score > 0.0)
-                    }
-                };
-
-                menu_item.search_sort_score = search_sort_score + menu_item.initial_sort_score;
-                menu_item.visible = visible;
-                fb.set_visible(menu_item.visible);
-            }
+            menu_item.search_sort_score = search_sort_score + menu_item.initial_sort_score;
+            menu_item.visible = visible;
+            fb.set_visible(menu_item.visible);
         }
     }
 }
