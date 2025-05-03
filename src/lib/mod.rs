@@ -22,6 +22,12 @@ pub enum Error {
     RunFailed(String),
     /// An IO operation failed
     Io(String),
+    /// An error occurred while accessing the clipboard
+    Clipboard(String),
+    /// Graphical subsystem related error
+    Graphics(String),
+    /// Nothing selected
+    NoSelection,
 }
 
 impl fmt::Display for Error {
@@ -45,6 +51,15 @@ impl fmt::Display for Error {
             }
             Error::Io(s) => {
                 write!(f, "IO {s}")
+            }
+            Error::Clipboard(s) => {
+                write!(f, "Clipboard {s}")
+            }
+            Error::Graphics(s) => {
+                write!(f, "graphics {s}")
+            }
+            Error::NoSelection => {
+                write!(f, "NoSelection")
             }
         }
     }

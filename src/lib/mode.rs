@@ -1,7 +1,7 @@
 use crate::config::{Config, expand_path};
 use crate::desktop::{
-    create_file_if_not_exists, find_desktop_files, get_locale_variants, is_executable,
-    load_cache_file, lookup_name_with_locale, save_cache_file, spawn_fork,
+    copy_to_clipboard, create_file_if_not_exists, find_desktop_files, get_locale_variants,
+    is_executable, load_cache_file, lookup_name_with_locale, save_cache_file, spawn_fork,
 };
 use crate::gui::{ItemProvider, MenuItem};
 use crate::{Error, gui};
@@ -309,7 +309,10 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
         };
 
         let mut trimmed_search = search.unwrap_or(&default_path).to_owned();
-        if !trimmed_search.starts_with('/') && !trimmed_search.starts_with('~') {
+        if !trimmed_search.starts_with('/')
+            && !trimmed_search.starts_with('~')
+            && !trimmed_search.starts_with('$')
+        {
             trimmed_search = format!("{default_path}/{trimmed_search}");
         }
 
@@ -504,6 +507,49 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
 }
 
 #[derive(Clone)]
+struct EmojiProvider<T: Clone> {
+    elements: Vec<MenuItem<T>>,
+    #[allow(dead_code)] // needed for the detection of mode in 'auto'
+    menu_item_data: T,
+}
+
+impl<T: Clone> EmojiProvider<T> {
+    fn new(data: T) -> Self {
+        let emoji = emoji::search::search_annotation_all("");
+        let mut menus = emoji
+            .into_iter()
+            .map(|e| {
+                MenuItem::new(
+                    format!("{} — Category: {} — Name: {}", e.glyph, e.group, e.name),
+                    None,
+                    Some(format!("emoji {}", e.glyph)),
+                    vec![],
+                    None,
+                    0.0,
+                    Some(data.clone()),
+                )
+            })
+            .collect::<Vec<_>>();
+        gui::sort_menu_items_alphabetically_honor_initial_score(&mut menus);
+
+        Self {
+            elements: menus,
+            menu_item_data: data.clone(),
+        }
+    }
+}
+
+impl<T: Clone> ItemProvider<T> for EmojiProvider<T> {
+    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
+        (false, self.elements.clone())
+    }
+
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
+        (false, None)
+    }
+}
+
+#[derive(Clone)]
 struct DMenuProvider {
     items: Vec<MenuItem<String>>,
 }
@@ -541,9 +587,8 @@ enum AutoRunType {
     DRun,
     File,
     Ssh,
+    Emoji,
     // WebSearch,
-    // Emoji,
-    // Run,
 }
 
 #[derive(Clone)]
@@ -552,6 +597,7 @@ struct AutoItemProvider {
     file: FileItemProvider<AutoRunType>,
     math: MathProvider<AutoRunType>,
     ssh: SshProvider<AutoRunType>,
+    emoji: EmojiProvider<AutoRunType>,
     last_mode: Option<AutoRunType>,
 }
 
@@ -562,6 +608,7 @@ impl AutoItemProvider {
             file: FileItemProvider::new(AutoRunType::File),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh),
+            emoji: EmojiProvider::new(AutoRunType::Emoji),
             last_mode: None,
         }
     }
@@ -597,6 +644,8 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
                 (AutoRunType::File, self.file.get_elements(search_opt))
             } else if search.starts_with("ssh") {
                 (AutoRunType::Ssh, self.ssh.get_elements(search_opt))
+            } else if search.starts_with("emoji") {
+                (AutoRunType::Emoji, self.emoji.get_elements(search_opt))
             } else {
                 return self.default_auto_elements(search_opt);
             };
@@ -623,12 +672,12 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
 ///
 /// Will return `Err` if it was not able to spawn the process
 pub fn d_run(config: &Config) -> Result<(), Error> {
-    let provider = DRunProvider::new(String::new());
+    let provider = DRunProvider::new(0);
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 
     // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider, false);
+    let selection_result = gui::show(config.clone(), provider, false, None);
     match selection_result {
         Ok(s) => update_drun_cache_and_run(cache_path, &mut cache, s)?,
         Err(_) => {
@@ -648,7 +697,7 @@ pub fn run(config: &Config) -> Result<(), Error> {
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 
-    let selection_result = gui::show(config.clone(), provider, false);
+    let selection_result = gui::show(config.clone(), provider, false, None);
     match selection_result {
         Ok(s) => update_run_cache_and_run(cache_path, &mut cache, s)?,
         Err(_) => {
@@ -664,6 +713,9 @@ pub fn run(config: &Config) -> Result<(), Error> {
 ///
 /// Will return `Err`
 /// * if it was not able to spawn the process
+///
+/// # Panics
+/// Panics if an internal static regex cannot be passed anymore, should never happen
 pub fn auto(config: &Config) -> Result<(), Error> {
     let mut provider = AutoItemProvider::new();
     let cache_path = provider.drun.cache_path.clone();
@@ -671,7 +723,17 @@ pub fn auto(config: &Config) -> Result<(), Error> {
 
     loop {
         // todo ues a arc instead of cloning the config
-        let selection_result = gui::show(config.clone(), provider.clone(), true);
+        let selection_result = gui::show(
+            config.clone(),
+            provider.clone(),
+            true,
+            Some(
+                vec!["ssh", "emoji", "^\\$\\w+"]
+                    .into_iter()
+                    .map(|s| Regex::new(s).unwrap())
+                    .collect(),
+            ),
+        );
 
         if let Ok(mut selection_result) = selection_result {
             if let Some(data) = &selection_result.data {
@@ -693,6 +755,14 @@ pub fn auto(config: &Config) -> Result<(), Error> {
                         ssh_launch(&selection_result, config)?;
                         break;
                     }
+                    AutoRunType::Emoji => {
+                        if let Some(action) = selection_result.action {
+                            copy_to_clipboard(action)?;
+                        } else {
+                            return Err(Error::MissingAction);
+                        }
+                        break;
+                    }
                 }
             } else if selection_result.label.starts_with("ssh") {
                 selection_result.label = selection_result.label.chars().skip(4).collect();
@@ -712,23 +782,24 @@ pub fn auto(config: &Config) -> Result<(), Error> {
 ///
 /// Will return `Err`
 /// * if it was not able to spawn the process
+///
+/// # Panics
+/// In case an internal regex does not parse anymore, this should never happen
 pub fn file(config: &Config) -> Result<(), Error> {
-    let provider = FileItemProvider::new(String::new());
+    let provider = FileItemProvider::new(0);
 
     // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider, false);
-    match selection_result {
-        Ok(s) => {
-            if let Some(action) = s.action {
-                spawn_fork(&action, s.working_dir.as_ref())?;
-            }
-        }
-        Err(_) => {
-            log::error!("No item selected");
-        }
+    let selection_result = gui::show(
+        config.clone(),
+        provider,
+        false,
+        Some(vec![Regex::new("^\\$\\w+").unwrap()]),
+    )?;
+    if let Some(action) = selection_result.action {
+        spawn_fork(&action, selection_result.working_dir.as_ref())
+    } else {
+        Err(Error::MissingAction)
     }
-
-    Ok(())
 }
 
 fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), Error> {
@@ -759,8 +830,8 @@ fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), 
 /// * if it was not able to spawn the process
 /// * if it didn't find a terminal
 pub fn ssh(config: &Config) -> Result<(), Error> {
-    let provider = SshProvider::new(String::new());
-    let selection_result = gui::show(config.clone(), provider, true);
+    let provider = SshProvider::new(0);
+    let selection_result = gui::show(config.clone(), provider, true, None);
     if let Ok(mi) = selection_result {
         ssh_launch(&mi, config)?;
     } else {
@@ -775,13 +846,26 @@ pub fn math(config: &Config) {
     loop {
         let mut provider = MathProvider::new(String::new());
         provider.add_elements(&mut calc.clone());
-        let selection_result = gui::show(config.clone(), provider, true);
+        let selection_result = gui::show(config.clone(), provider, true, None);
         if let Ok(mi) = selection_result {
             calc.push(mi);
         } else {
             log::error!("No item selected");
             break;
         }
+    }
+}
+
+/// Shows the emoji mode
+/// # Errors
+///
+/// Forwards errors from the gui. See `gui::show` for details.
+pub fn emoji(config: &Config) -> Result<(), Error> {
+    let provider = EmojiProvider::new(0);
+    let selection_result = gui::show(config.clone(), provider, true, None)?;
+    match selection_result.action {
+        None => Err(Error::MissingAction),
+        Some(action) => copy_to_clipboard(action),
     }
 }
 
@@ -792,7 +876,7 @@ pub fn math(config: &Config) {
 pub fn dmenu(config: &Config) -> Result<(), Error> {
     let provider = DMenuProvider::new()?;
 
-    let selection_result = gui::show(config.clone(), provider, true);
+    let selection_result = gui::show(config.clone(), provider, true, None);
     match selection_result {
         Ok(s) => {
             println!("{}", s.label);

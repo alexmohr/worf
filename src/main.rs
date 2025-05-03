@@ -32,6 +32,9 @@ fn main() -> anyhow::Result<()> {
             Mode::Ssh => {
                 mode::ssh(&config).map_err(|e| anyhow!(e))?;
             }
+            Mode::Emoji => {
+                mode::emoji(&config).map_err(|e| anyhow!(e))?;
+            }
             Mode::Auto => {
                 mode::auto(&config).map_err(|e| anyhow!(e))?;
             }

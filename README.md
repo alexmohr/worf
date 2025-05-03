@@ -13,19 +13,24 @@ It supports various modes:
 * File
 * Ssh
 * Run
+* Emoji 
 * // WebSearch
-* // Emoji
+
 * Auto
 
-Auto mode tries to detect the desired mode automatically, i.e. `ssh`, `?` (for web search), `emoji`, `/` or `~` (for file).
+Auto mode tries to detect the desired mode automatically, to achieve this some modes require a prefix in the search.
+The standard view will show `ssh` and `drun`, for other modes the following prefixes are available:
+* `ssh` (optional)
+* `?` web search
+* `/`, `$` or `~` for files
+* `emoji` for emojis
 
-<img src="images/demo.gif" style="width:600px;">
+<img src="images/demo.gif">
 
 ## Not finished
 * [ ] key support
 * [ ] full config support
 * [ ] web search mode
-* [ ] emoji finder
 * [ ] publish library
 
 
