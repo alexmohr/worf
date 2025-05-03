@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::io::Read;
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{env, fs, io};
@@ -256,6 +257,29 @@ impl<T: Clone> FileItemProvider<T> {
     }
 
     fn resolve_icon_for_name(path: &Path) -> String {
+        let type_result = fs::symlink_metadata(path)
+            .map(|meta| meta.file_type())
+            .map(|file_type| {
+                if file_type.is_symlink() {
+                    Some("edit-redo")
+                } else if file_type.is_char_device() {
+                    Some("input-keyboard")
+                } else if file_type.is_block_device() {
+                    Some("drive-harddisk")
+                } else if file_type.is_socket() {
+                    Some("network-transmit-receive")
+                } else if file_type.is_fifo() {
+                    Some("rotation-allowed")
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(Some("system-lock-screen"));
+
+        if let Some(tr) = type_result {
+            return tr.to_owned();
+        }
+
         let Some(mime) = tree_magic_mini::from_filepath(path) else {
             return "image-not-found".to_string();
         };
