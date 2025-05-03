@@ -65,6 +65,9 @@ pub enum Mode {
 
     /// Connect via ssh to a given host
     Ssh,
+
+    /// Emoji browser
+    Emoji,
 }
 
 #[derive(Debug, Error)]
@@ -98,6 +101,7 @@ impl FromStr for Mode {
             "file" => Ok(Mode::File),
             "math" => Ok(Mode::Math),
             "ssh" => Ok(Mode::Ssh),
+            "emoji" => Ok(Mode::Emoji),
             "auto" => Ok(Mode::Auto),
             _ => Err(ArgsError::InvalidParameter(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
@@ -210,11 +214,10 @@ pub struct Config {
     #[clap(short = 'M', long = "matching")]
     matching: Option<MatchMethod>,
 
-    /// Control if search is case insenstive or not.
-    /// Defaults to false
+    /// Control if search is case-insensitive or not.
+    /// Defaults to true
     #[clap(short = 'i', long = "insensitive")]
-    #[serde(default = "default_true")]
-    insensitive: bool,
+    insensitive: Option<bool>,
 
     #[clap(short = 'q', long = "parse-search")]
     parse_search: Option<bool>, // todo support this
@@ -395,6 +398,7 @@ impl Config {
                     Mode::File => "file".to_owned(),
                     Mode::Auto => "auto".to_owned(),
                     Mode::Ssh => "ssh".to_owned(),
+                    Mode::Emoji => "emoji".to_owned(),
                 },
             },
 
@@ -467,7 +471,7 @@ impl Config {
 
     #[must_use]
     pub fn insensitive(&self) -> bool {
-        self.insensitive
+        self.insensitive.unwrap_or(true)
     }
 
     #[must_use]
@@ -490,9 +494,9 @@ fn default_false() -> bool {
     false
 }
 
-fn default_true() -> bool {
-    true
-}
+// fn default_true() -> bool {
+//     true
+// }
 
 //
 // // TODO
@@ -644,7 +648,7 @@ pub fn load_config(args_opt: Option<&Config>) -> Result<Config, Error> {
                 toml::from_str(&toml_content).map_err(|e| Error::ParsingError(format!("{e}")))?;
 
             if let Some(args) = args_opt {
-                let merge_result = merge_config_with_args(&mut config, &args)
+                let merge_result = merge_config_with_args(&mut config, args)
                     .map_err(|e| Error::ParsingError(format!("{e}")))?;
                 Ok(merge_result)
             } else {

@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::anyhow;
 use crossbeam::channel;
 use crossbeam::channel::Sender;
 use gdk4::gio::File;
@@ -28,11 +27,11 @@ use regex::Regex;
 
 use crate::config::{Anchor, Config, MatchMethod, WrapMode};
 use crate::desktop::known_image_extension_regex_pattern;
-use crate::{config, desktop};
+use crate::{Error, config, desktop};
 
 type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
-type MenuItemSender<T> = Sender<Result<MenuItem<T>, anyhow::Error>>;
+type MenuItemSender<T> = Sender<Result<MenuItem<T>, Error>>;
 
 pub trait ItemProvider<T: Clone> {
     fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<MenuItem<T>>);
@@ -141,6 +140,7 @@ struct MetaData<T: Clone> {
     selected_sender: MenuItemSender<T>,
     config: Rc<Config>,
     new_on_empty: bool,
+    search_ignored_words: Option<Vec<Regex>>,
 }
 
 struct UiElements<T: Clone> {
@@ -159,12 +159,13 @@ pub fn show<T, P>(
     config: Config,
     item_provider: P,
     new_on_empty: bool,
-) -> Result<MenuItem<T>, anyhow::Error>
+    search_ignored_words: Option<Vec<Regex>>,
+) -> Result<MenuItem<T>, Error>
 where
     T: Clone + 'static + Send,
     P: ItemProvider<T> + 'static + Clone + Send,
 {
-    gtk4::init()?;
+    gtk4::init().map_err(|e| Error::Graphics(e.to_string()))?;
     log::debug!("Starting GUI");
     if let Some(ref css) = config.style() {
         let provider = CssProvider::new();
@@ -189,20 +190,22 @@ where
             sender.clone(),
             app.clone(),
             new_on_empty,
+            search_ignored_words.clone(),
         );
     });
 
     let gtk_args: [&str; 0] = [];
     app.run_with_args(&gtk_args);
-    receiver.recv()?
+    receiver.recv().map_err(|e| Error::Io(e.to_string()))?
 }
 
 fn build_ui<T, P>(
     config: &Config,
     item_provider: P,
-    sender: Sender<Result<MenuItem<T>, anyhow::Error>>,
+    sender: Sender<Result<MenuItem<T>, Error>>,
     app: Application,
     new_on_empty: bool,
+    search_ignored_words: Option<Vec<Regex>>,
 ) where
     T: Clone + 'static + Send,
     P: ItemProvider<T> + 'static + Send,
@@ -214,6 +217,7 @@ fn build_ui<T, P>(
         selected_sender: sender,
         config: Rc::new(config.clone()),
         new_on_empty,
+        search_ignored_words,
     });
 
     let provider_clone = Arc::clone(&meta.item_provider);
@@ -377,7 +381,12 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
 
                 let query = ui_clone.search.text();
                 let menus = &mut *lock;
-                set_menu_visibility_for_search(&query, menus, &meta_clone.config);
+                set_menu_visibility_for_search(
+                    &query,
+                    menus,
+                    &meta_clone.config,
+                    meta_clone.search_ignored_words.as_ref(),
+                );
             }
 
             let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
@@ -390,7 +399,11 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
                 let menus = &mut *lock;
                 select_first_visible_child(menus, &ui_clone.main_box);
 
-                log::debug!("Created menu items in {:?}", start.elapsed());
+                log::debug!(
+                    "Created {} menu items in {:?}",
+                    menus.len(),
+                    start.elapsed()
+                );
                 ControlFlow::Break
             } else {
                 ControlFlow::Continue
@@ -421,7 +434,12 @@ fn handle_key_press<T: Clone + 'static>(
     let update_view = |query: &String| {
         let mut lock = ui.menu_rows.lock().unwrap();
         let menus = &mut *lock;
-        set_menu_visibility_for_search(query, menus, &meta.config);
+        set_menu_visibility_for_search(
+            query,
+            menus,
+            &meta.config,
+            meta.search_ignored_words.as_ref(),
+        );
         select_first_visible_child(&*lock, &ui.main_box);
     };
 
@@ -436,7 +454,7 @@ fn handle_key_press<T: Clone + 'static>(
 
     match keyboard_key {
         Key::Escape => {
-            if let Err(e) = meta.selected_sender.send(Err(anyhow!("No item selected"))) {
+            if let Err(e) = meta.selected_sender.send(Err(Error::NoSelection)) {
                 log::error!("failed to send message {e}");
             }
             close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
@@ -879,6 +897,8 @@ fn parse_label(label: &str) -> (Option<String>, Option<String>) {
                 // Treat as fallback text if no text tag is present
                 if text.is_none() {
                     text = Some((*other.unwrap_or(&"")).to_string());
+                } else {
+                    text = Some(text.unwrap() + ":" + (*other.unwrap_or(&"")));
                 }
                 i += 1;
             }
@@ -917,6 +937,7 @@ fn set_menu_visibility_for_search<T: Clone>(
     query: &str,
     items: &mut HashMap<FlowBoxChild, MenuItem<T>>,
     config: &Config,
+    search_ignored_words: Option<&Vec<Regex>>,
 ) {
     {
         if query.is_empty() {
@@ -928,20 +949,37 @@ fn set_menu_visibility_for_search<T: Clone>(
             return;
         }
 
-        let query = if config.insensitive() {
+        let mut query = if config.insensitive() {
             query.to_owned().to_lowercase()
         } else {
             query.to_owned()
         };
+
+        if let Some(s) = search_ignored_words.as_ref() {
+            s.iter().for_each(|rgx| {
+                query = rgx.replace_all(&query, "").to_string();
+            });
+        }
+
         for (fb, menu_item) in items.iter_mut() {
             let menu_item_search = format!(
                 "{} {}",
                 menu_item
                     .action
                     .as_ref()
-                    .map(|a| a.to_lowercase())
+                    .map(|a| {
+                        if config.insensitive() {
+                            a.to_lowercase()
+                        } else {
+                            a.clone()
+                        }
+                    })
                     .unwrap_or_default(),
-                &menu_item.label.to_lowercase()
+                if config.insensitive() {
+                    menu_item.label.to_lowercase()
+                } else {
+                    menu_item.label.clone()
+                }
             );
 
             let (search_sort_score, visible) = match config.match_method() {

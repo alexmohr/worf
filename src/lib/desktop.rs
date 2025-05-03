@@ -1,8 +1,3 @@
-use crate::Error;
-use crate::config::expand_path;
-use freedesktop_file_parser::DesktopFile;
-use rayon::prelude::*;
-use regex::Regex;
 use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::prelude::CommandExt;
@@ -11,6 +6,14 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Instant;
 use std::{env, fs, io};
+
+use freedesktop_file_parser::DesktopFile;
+use rayon::prelude::*;
+use regex::Regex;
+use wl_clipboard_rs::copy::{ClipboardType, MimeType, ServeRequests, Source};
+
+use crate::Error;
+use crate::config::expand_path;
 
 /// Returns a regex with supported image extensions
 /// # Panics
@@ -289,5 +292,20 @@ pub fn is_executable(entry: &Path) -> bool {
         metadata.is_file() && (permissions.mode() & 0o111 != 0)
     } else {
         false
+    }
+}
+
+/// Copy the given text into the clipboard.
+/// # Errors
+/// Will return an error if copying to the clipboard failed.
+pub fn copy_to_clipboard(text: String) -> Result<(), Error> {
+    let mut opts = wl_clipboard_rs::copy::Options::new();
+    opts.clipboard(ClipboardType::Regular);
+    opts.serve_requests(ServeRequests::Only(1));
+    let result = opts.copy(Source::Bytes(text.into_bytes().into()), MimeType::Text);
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) => Err(Error::Clipboard(e.to_string())),
     }
 }
