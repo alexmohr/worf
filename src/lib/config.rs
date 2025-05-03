@@ -188,8 +188,9 @@ pub struct Config {
     #[clap(short = 'I', long = "allow-images")]
     allow_images: Option<bool>,
 
+    /// If `true` pango markup is parsed
     #[clap(short = 'm', long = "allow-markup")]
-    allow_markup: Option<bool>, // todo support this
+    allow_markup: Option<bool>,
 
     #[clap(short = 'k', long = "cache-file")]
     cache_file: Option<String>, // todo support this
@@ -223,8 +224,11 @@ pub struct Config {
     #[clap(short = 'M', long = "matching")]
     matching: Option<MatchMethod>,
 
+    /// Control if search is case insenstive or not.
+    /// Defaults to false
     #[clap(short = 'i', long = "insensitive")]
-    insensitive: Option<bool>,
+    #[serde(default = "default_true")]
+    insensitive: bool,
 
     #[clap(short = 'q', long = "parse-search")]
     parse_search: Option<bool>, // todo support this
@@ -249,7 +253,7 @@ pub struct Config {
     sort_order: Option<String>,
 
     #[clap(short = 'Q', long = "search")]
-    search: Option<String>, // todo support this
+    search: Option<String>,
 
     #[clap(short = 'o', long = "monitor")]
     monitor: Option<String>, // todo support this
@@ -477,22 +481,31 @@ impl Config {
 
     #[must_use]
     pub fn insensitive(&self) -> bool {
-        self.insensitive.unwrap_or(true)
+        self.insensitive
     }
 
     #[must_use]
     pub fn hide_search(&self) -> bool {
         self.hide_search.unwrap_or(false)
     }
-    
+
     #[must_use]
     pub fn search(&self) -> Option<String> {
         self.search.clone()
+    }
+
+    #[must_use]
+    pub fn allow_markup(&self) -> bool {
+        self.allow_markup.unwrap_or(false)
     }
 }
 
 fn default_false() -> bool {
     false
+}
+
+fn default_true() -> bool {
+    true
 }
 
 //
@@ -508,7 +521,6 @@ fn default_false() -> bool {
 // // GtkAlign valign = config_get_mnemonic(config, "valign", default_valign, 4, "fill", "start", "end", "center");
 // // char* prompt = config_get(config, "prompt", mode);
 // // uint64_t filter_rate = strtol(config_get(config, "filter_rate", "100"), NULL, 10);
-// // allow_images = strcmp(config_get(config, "allow_images", "false"), "true") == 0;
 // // allow_markup = strcmp(config_get(config, "allow_markup", "false"), "true") == 0;
 // // image_size = strtol(config_get(config, "image_size", "32"), NULL, 10);
 // // cache_file = map_get(config, "cache_file");
