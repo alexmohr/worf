@@ -484,6 +484,11 @@ impl Config {
     pub fn hide_search(&self) -> bool {
         self.hide_search.unwrap_or(false)
     }
+    
+    #[must_use]
+    pub fn search(&self) -> Option<String> {
+        self.search.clone()
+    }
 }
 
 fn default_false() -> bool {
