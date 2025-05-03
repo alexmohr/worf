@@ -340,6 +340,9 @@ fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>) {
     if config.hide_search() {
         ui_elements.search.set_visible(false);
     }
+    if let Some(search)= config.search() {
+        ui_elements.search.set_text(&search);
+    }
 }
 
 fn build_ui_from_menu_items<T: Clone + 'static>(
