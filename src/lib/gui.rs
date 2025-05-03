@@ -801,6 +801,7 @@ fn create_menu_row<T: Clone + 'static>(
     }
 
     let label = Label::new(Some(element_to_add.label.as_str()));
+    label.set_use_markup(meta.config.allow_markup());
 
     label.set_natural_wrap_mode(meta.config.line_wrap().into());
     label.set_hexpand(true);
