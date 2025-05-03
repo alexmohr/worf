@@ -1,26 +1,12 @@
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::{env, fmt, fs};
+use std::{env, fs};
 
-use anyhow::anyhow;
+use crate::Error;
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
-
-#[derive(Debug)]
-pub enum ConfigurationError {
-    Open(String),
-    Parse(String),
-}
-
-impl fmt::Display for ConfigurationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ConfigurationError::Open(e) | ConfigurationError::Parse(e) => write!(f, "{e}"),
-        }
-    }
-}
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub enum Anchor {
@@ -593,7 +579,7 @@ pub fn parse_args() -> Config {
 /// # Errors
 ///
 /// Will return Err when it cannot resolve any path or no style is found
-fn style_path(full_path: Option<String>) -> Result<PathBuf, anyhow::Error> {
+fn style_path(full_path: Option<String>) -> Result<PathBuf, Error> {
     let alternative_paths = path_alternatives(
         vec![dirs::config_dir()],
         &PathBuf::from("worf").join("style.css"),
@@ -604,7 +590,7 @@ fn style_path(full_path: Option<String>) -> Result<PathBuf, anyhow::Error> {
 /// # Errors
 ///
 /// Will return Err when it cannot resolve any path or no style is found
-pub fn conf_path(full_path: Option<String>) -> Result<PathBuf, anyhow::Error> {
+pub fn conf_path(full_path: Option<String>) -> Result<PathBuf, Error> {
     let alternative_paths = path_alternatives(
         vec![dirs::config_dir()],
         &PathBuf::from("worf").join("config"),
@@ -629,7 +615,7 @@ pub fn path_alternatives(base_paths: Vec<Option<PathBuf>>, sub_path: &PathBuf) -
 pub fn resolve_path(
     full_path: Option<String>,
     alternatives: Vec<PathBuf>,
-) -> Result<PathBuf, anyhow::Error> {
+) -> Result<PathBuf, Error> {
     full_path
         .map(PathBuf::from)
         .and_then(|p| p.canonicalize().ok().filter(|c| c.exists()))
@@ -639,7 +625,7 @@ pub fn resolve_path(
                 .filter(|p| p.exists())
                 .find_map(|pb| pb.canonicalize().ok().filter(|c| c.exists()))
         })
-        .ok_or_else(|| anyhow!("Could not find a valid file."))
+        .ok_or(Error::MissingFile)
 }
 
 /// # Errors
@@ -649,25 +635,24 @@ pub fn resolve_path(
 /// * cannot parse the config file
 /// * no config file exists
 /// * config file and args cannot be merged
-pub fn load_config(args_opt: Option<Config>) -> Result<Config, ConfigurationError> {
+pub fn load_config(args_opt: Option<&Config>) -> Result<Config, Error> {
     let config_path = conf_path(args_opt.as_ref().and_then(|c| c.config.clone()));
     match config_path {
         Ok(path) => {
-            let toml_content =
-                fs::read_to_string(path).map_err(|e| ConfigurationError::Open(format!("{e}")))?;
-            let mut config: Config = toml::from_str(&toml_content)
-                .map_err(|e| ConfigurationError::Parse(format!("{e}")))?;
+            let toml_content = fs::read_to_string(path).map_err(|e| Error::Io(format!("{e}")))?;
+            let mut config: Config =
+                toml::from_str(&toml_content).map_err(|e| Error::ParsingError(format!("{e}")))?;
 
             if let Some(args) = args_opt {
                 let merge_result = merge_config_with_args(&mut config, &args)
-                    .map_err(|e| ConfigurationError::Parse(format!("{e}")))?;
+                    .map_err(|e| Error::ParsingError(format!("{e}")))?;
                 Ok(merge_result)
             } else {
                 Ok(config)
             }
         }
 
-        Err(e) => Err(ConfigurationError::Open(format!("{e}"))),
+        Err(e) => Err(Error::Io(format!("{e}"))),
     }
 }
 

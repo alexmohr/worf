@@ -10,7 +10,7 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let args = config::parse_args();
-    let config = config::load_config(Some(args)).map_err(|e| anyhow!(e))?;
+    let config = config::load_config(Some(&args)).unwrap_or(args);
 
     if let Some(show) = &config.show() {
         match show {
