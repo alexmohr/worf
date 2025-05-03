@@ -340,7 +340,7 @@ fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>) {
     if config.hide_search() {
         ui_elements.search.set_visible(false);
     }
-    if let Some(search)= config.search() {
+    if let Some(search) = config.search() {
         ui_elements.search.set_text(&search);
     }
 }
@@ -793,16 +793,27 @@ fn create_menu_row<T: Clone + 'static>(
     row_box.set_halign(Align::Fill);
 
     row.set_child(Some(&row_box));
+
+    let (label_img, label_text) = parse_label(&element_to_add.label);
+
     if meta.config.allow_images() {
-        if let Some(image) = lookup_icon(element_to_add, &meta.config) {
+        let img = lookup_icon(
+            element_to_add.icon_path.as_ref().map(AsRef::as_ref),
+            &meta.config,
+        )
+        .or(lookup_icon(
+            label_img.as_ref().map(AsRef::as_ref),
+            &meta.config,
+        ));
+
+        if let Some(image) = img {
             image.set_widget_name("img");
             row_box.append(&image);
         }
     }
 
-    let label = Label::new(Some(element_to_add.label.as_str()));
+    let label = Label::new(label_text.as_ref().map(AsRef::as_ref));
     label.set_use_markup(meta.config.allow_markup());
-
     label.set_natural_wrap_mode(meta.config.line_wrap().into());
     label.set_hexpand(true);
     label.set_widget_name("text");
@@ -838,9 +849,48 @@ fn create_menu_row<T: Clone + 'static>(
 
     row.upcast()
 }
+fn parse_label(label: &str) -> (Option<String>, Option<String>) {
+    let mut img = None;
+    let mut text = None;
 
-fn lookup_icon<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Option<Image> {
-    if let Some(image_path) = &menu_item.icon_path {
+    let parts: Vec<&str> = label.split(':').collect();
+    let mut i = 0;
+
+    while i < parts.len() {
+        match parts.get(i) {
+            Some(&"img") => {
+                if i + 1 < parts.len() {
+                    img = Some(parts[i + 1].to_string());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            Some(&"text") => {
+                i += 1;
+                let mut text_parts = Vec::new();
+                while i < parts.len() && parts[i] != "img" && parts[i] != "text" {
+                    text_parts.push(parts[i]);
+                    i += 1;
+                }
+                text = Some(text_parts.join(":").trim().to_string());
+            }
+            other => {
+                // Treat as fallback text if no text tag is present
+                if text.is_none() {
+                    text = Some((*other.unwrap_or(&"")).to_string());
+                }
+                i += 1;
+            }
+        }
+    }
+
+    (img, text)
+}
+
+
+fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
+    if let Some(image_path) = icon_path {
         let img_regex = Regex::new(&format!(
             r"((?i).*{})",
             known_image_extension_regex_pattern()
