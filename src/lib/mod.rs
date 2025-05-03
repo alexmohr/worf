@@ -1,7 +1,7 @@
 use std::fmt;
 
 /// Defines error the lib can encounter
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
     /// Failed to update a cache file with the given reason.
     UpdateCacheError(String),
