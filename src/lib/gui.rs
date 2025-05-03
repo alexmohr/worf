@@ -888,7 +888,6 @@ fn parse_label(label: &str) -> (Option<String>, Option<String>) {
     (img, text)
 }
 
-
 fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
     if let Some(image_path) = icon_path {
         let img_regex = Regex::new(&format!(
