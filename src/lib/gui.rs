@@ -149,6 +149,7 @@ struct UiElements<T: Clone> {
     search: SearchEntry,
     main_box: FlowBox,
     menu_rows: ArcMenuMap<T>,
+    search_text: Arc<Mutex<String>>,
 }
 
 /// Shows the user interface and **blocks** until the user selected an entry
@@ -240,6 +241,7 @@ fn build_ui<T, P>(
         search: SearchEntry::new(),
         main_box: FlowBox::new(),
         menu_rows: Arc::new(Mutex::new(HashMap::new())),
+        search_text: Arc::new(Mutex::new(String::new())),
     });
 
     // handle keys as soon as possible
@@ -283,7 +285,7 @@ fn build_ui<T, P>(
     outer_box.append(&scroll);
 
     build_main_box(config, &ui_elements);
-    build_search_entry(config, &ui_elements);
+    build_search_entry(config, &ui_elements, &meta);
 
     let wrapper_box = gtk4::Box::new(Orientation::Vertical, 0);
     wrapper_box.append(&ui_elements.main_box);
@@ -334,7 +336,7 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
     });
 }
 
-fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>) {
+fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>, meta: &MetaData<T>) {
     ui_elements.search.set_widget_name("input");
     ui_elements.search.set_css_classes(&["input"]);
     ui_elements
@@ -345,7 +347,21 @@ fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>) {
         ui_elements.search.set_visible(false);
     }
     if let Some(search) = config.search() {
-        ui_elements.search.set_text(&search);
+        set_search_text(&search, ui_elements, meta);
+    }
+}
+
+fn set_search_text<T: Clone>(text: &str, ui: &UiElements<T>, meta: &MetaData<T>) {
+    let mut lock = ui.search_text.lock().unwrap();
+    text.clone_into(&mut lock);
+    if let Some(pw) = meta.config.password() {
+        let mut ui_text = String::new();
+        for _ in 0..text.len() {
+            ui_text += &pw;
+        }
+        ui.search.set_text(&ui_text);
+    } else {
+        ui.search.set_text(text);
     }
 }
 
@@ -379,10 +395,10 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
                     }
                 }
 
-                let query = ui_clone.search.text();
+                let search_lock = ui_clone.search_text.lock().unwrap();
                 let menus = &mut *lock;
                 set_menu_visibility_for_search(
-                    &query,
+                    &search_lock,
                     menus,
                     &meta_clone.config,
                     meta_clone.search_ignored_words.as_ref(),
@@ -460,17 +476,19 @@ fn handle_key_press<T: Clone + 'static>(
             close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
         }
         Key::Return => {
-            let query = ui.search.text().to_string();
-            if let Err(e) = handle_selected_item(ui, meta, Some(&query), None, meta.new_on_empty) {
+            let search_lock = ui.search_text.lock().unwrap();
+            if let Err(e) =
+                handle_selected_item(ui, meta, Some(&search_lock), None, meta.new_on_empty)
+            {
                 log::error!("{e}");
             }
         }
         Key::BackSpace => {
-            let mut query = ui.search.text().to_string();
+            let mut query = ui.search_text.lock().unwrap().to_string();
             if !query.is_empty() {
                 query.pop();
 
-                ui.search.set_text(&query);
+                set_search_text(&query, ui, meta);
                 update_view_from_provider(&query);
             }
         }
@@ -502,7 +520,7 @@ fn handle_key_press<T: Clone + 'static>(
                             }
 
                             let query = changed.1;
-                            ui.search.set_text(&query);
+                            set_search_text(&query, ui, meta);
                             update_view(&query);
                         }
                     }
@@ -512,9 +530,8 @@ fn handle_key_press<T: Clone + 'static>(
         }
         _ => {
             if let Some(c) = keyboard_key.to_unicode() {
-                let current = ui.search.text().to_string();
-                let query = format!("{current}{c}");
-                ui.search.set_text(&query);
+                let query = format!("{}{c}", ui.search_text.lock().unwrap());
+                set_search_text(&query, ui, meta);
                 update_view_from_provider(&query);
             }
         }

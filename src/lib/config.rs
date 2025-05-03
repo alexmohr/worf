@@ -488,6 +488,11 @@ impl Config {
     pub fn allow_markup(&self) -> bool {
         self.allow_markup.unwrap_or(false)
     }
+
+    #[must_use]
+    pub fn password(&self) -> Option<String> {
+        self.password.clone()
+    }
 }
 
 fn default_false() -> bool {
