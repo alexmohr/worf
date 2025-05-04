@@ -1,4 +1,4 @@
-use crate::config::{Config, expand_path};
+use crate::config::{Config, expand_path, SortOrder};
 use crate::desktop::{
     copy_to_clipboard, create_file_if_not_exists, find_desktop_files, get_locale_variants,
     is_executable, load_cache_file, lookup_name_with_locale, save_cache_file, spawn_fork,
@@ -30,10 +30,11 @@ struct DRunProvider<T: Clone> {
     cache: HashMap<String, i64>,
     data: T,
     no_actions: bool,
+    sort_order: SortOrder,
 }
 
 impl<T: Clone + Send + Sync> DRunProvider<T> {
-    fn new(menu_item_data: T, no_actions: bool) -> Self {
+    fn new(menu_item_data: T, no_actions: bool, sort_order: SortOrder) -> Self {
         let (cache_path, d_run_cache) = load_d_run_cache();
         DRunProvider {
             items: None,
@@ -41,6 +42,7 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
             cache: d_run_cache,
             data: menu_item_data,
             no_actions,
+            sort_order,
         }
     }
 
@@ -144,7 +146,7 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
             start.elapsed().as_millis()
         );
 
-        gui::sort_menu_items_alphabetically_honor_initial_score(&mut entries);
+        gui::apply_sort(&mut entries, &self.sort_order);
         entries
     }
 }
@@ -167,15 +169,17 @@ struct RunProvider {
     items: Option<Vec<MenuItem<i32>>>,
     cache_path: Option<PathBuf>,
     cache: HashMap<String, i64>,
+    sort_order: SortOrder,
 }
 
 impl RunProvider {
-    fn new() -> Self {
+    fn new(sort_order: SortOrder) -> Self {
         let (cache_path, d_run_cache) = load_run_cache();
         RunProvider {
             items: None,
             cache_path,
             cache: d_run_cache,
+            sort_order,
         }
     }
 
@@ -226,7 +230,7 @@ impl RunProvider {
             })
             .collect();
 
-        gui::sort_menu_items_alphabetically_honor_initial_score(&mut entries);
+        gui::apply_sort(&mut entries, &self.sort_order);
         entries
     }
 }
@@ -248,13 +252,15 @@ impl<T: Clone + Send + Sync> ItemProvider<T> for DRunProvider<T> {
 struct FileItemProvider<T: Clone> {
     last_result: Option<Vec<MenuItem<T>>>,
     menu_item_data: T,
+    sort_order: SortOrder,
 }
 
 impl<T: Clone> FileItemProvider<T> {
-    fn new(menu_item_data: T) -> Self {
+    fn new(menu_item_data: T, sort_order: SortOrder) -> Self {
         FileItemProvider {
             last_result: None,
             menu_item_data,
+            sort_order,
         }
     }
 
@@ -409,7 +415,7 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
             });
         }
 
-        gui::sort_menu_items_alphabetically_honor_initial_score(&mut items);
+        gui::apply_sort(&mut items, &self.sort_order);
 
         self.last_result = Some(items.clone());
         (true, items)
@@ -426,9 +432,9 @@ struct SshProvider<T: Clone> {
 }
 
 impl<T: Clone> SshProvider<T> {
-    fn new(menu_item_data: T) -> Self {
+    fn new(menu_item_data: T, order: SortOrder) -> Self {
         let re = Regex::new(r"(?m)^\s*Host\s+(.+)$").unwrap();
-        let items: Vec<_> = dirs::home_dir()
+        let mut items: Vec<_> = dirs::home_dir()
             .map(|home| home.join(".ssh").join("config"))
             .filter(|path| path.exists())
             .map(|path| fs::read_to_string(&path).unwrap_or_default())
@@ -456,6 +462,7 @@ impl<T: Clone> SshProvider<T> {
             })
             .collect();
 
+        gui::apply_sort(&mut items, &order);
         Self { elements: items }
     }
 }
@@ -540,7 +547,7 @@ struct EmojiProvider<T: Clone> {
 }
 
 impl<T: Clone> EmojiProvider<T> {
-    fn new(data: T) -> Self {
+    fn new(data: T, sort_order: SortOrder) -> Self {
         let emoji = emoji::search::search_annotation_all("");
         let mut menus = emoji
             .into_iter()
@@ -556,7 +563,7 @@ impl<T: Clone> EmojiProvider<T> {
                 )
             })
             .collect::<Vec<_>>();
-        gui::sort_menu_items_alphabetically_honor_initial_score(&mut menus);
+        gui::apply_sort(&mut menus, &sort_order);
 
         Self {
             elements: menus,
@@ -581,17 +588,19 @@ struct DMenuProvider {
 }
 
 impl DMenuProvider {
-    fn new() -> Result<DMenuProvider, Error> {
+    fn new(sort_order: SortOrder) -> Result<DMenuProvider, Error> {
         let mut input = String::new();
         io::stdin()
             .read_to_string(&mut input)
             .map_err(|_| Error::StdInReadFail)?;
 
-        let items: Vec<MenuItem<String>> = input
+        let mut items: Vec<MenuItem<String>> = input
             .lines()
             .map(String::from)
             .map(|s| MenuItem::new(s.clone(), None, None, vec![], None, 0.0, None))
             .collect();
+
+        gui::apply_sort(&mut items, &sort_order);
 
         Ok(Self { items })
     }
@@ -630,11 +639,11 @@ struct AutoItemProvider {
 impl AutoItemProvider {
     fn new(config: &Config) -> Self {
         AutoItemProvider {
-            drun: DRunProvider::new(AutoRunType::DRun, config.no_actions()),
-            file: FileItemProvider::new(AutoRunType::File),
+            drun: DRunProvider::new(AutoRunType::DRun, config.no_actions(), config.sort_order()),
+            file: FileItemProvider::new(AutoRunType::File, config.sort_order()),
             math: MathProvider::new(AutoRunType::Math),
-            ssh: SshProvider::new(AutoRunType::Ssh),
-            emoji: EmojiProvider::new(AutoRunType::Emoji),
+            ssh: SshProvider::new(AutoRunType::Ssh, config.sort_order()),
+            emoji: EmojiProvider::new(AutoRunType::Emoji, config.sort_order()),
             last_mode: None,
         }
     }
@@ -698,7 +707,7 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
 ///
 /// Will return `Err` if it was not able to spawn the process
 pub fn d_run(config: &Config) -> Result<(), Error> {
-    let provider = DRunProvider::new(0, config.no_actions());
+    let provider = DRunProvider::new(0, config.no_actions(), config.sort_order());
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 
@@ -719,7 +728,7 @@ pub fn d_run(config: &Config) -> Result<(), Error> {
 ///
 /// Will return `Err` if it was not able to spawn the process
 pub fn run(config: &Config) -> Result<(), Error> {
-    let provider = RunProvider::new();
+    let provider = RunProvider::new(config.sort_order());
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 
@@ -812,7 +821,7 @@ pub fn auto(config: &Config) -> Result<(), Error> {
 /// # Panics
 /// In case an internal regex does not parse anymore, this should never happen
 pub fn file(config: &Config) -> Result<(), Error> {
-    let provider = FileItemProvider::new(0);
+    let provider = FileItemProvider::new(0, config.sort_order());
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(
@@ -856,7 +865,7 @@ fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), 
 /// * if it was not able to spawn the process
 /// * if it didn't find a terminal
 pub fn ssh(config: &Config) -> Result<(), Error> {
-    let provider = SshProvider::new(0);
+    let provider = SshProvider::new(0,config.sort_order() );
     let selection_result = gui::show(config.clone(), provider, true, None);
     if let Ok(mi) = selection_result {
         ssh_launch(&mi, config)?;
@@ -887,7 +896,7 @@ pub fn math(config: &Config) {
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
 pub fn emoji(config: &Config) -> Result<(), Error> {
-    let provider = EmojiProvider::new(0);
+    let provider = EmojiProvider::new(0, config.sort_order());
     let selection_result = gui::show(config.clone(), provider, true, None)?;
     match selection_result.action {
         None => Err(Error::MissingAction),
@@ -900,7 +909,7 @@ pub fn emoji(config: &Config) -> Result<(), Error> {
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
 pub fn dmenu(config: &Config) -> Result<(), Error> {
-    let provider = DMenuProvider::new()?;
+    let provider = DMenuProvider::new(config.sort_order())?;
 
     let selection_result = gui::show(config.clone(), provider, true, None);
     match selection_result {

@@ -25,7 +25,7 @@ use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 use regex::Regex;
 
-use crate::config::{Anchor, Config, MatchMethod, WrapMode};
+use crate::config::{Anchor, Config, MatchMethod, SortOrder, WrapMode};
 use crate::desktop::known_image_extension_regex_pattern;
 use crate::{Error, config, desktop};
 
@@ -1069,17 +1069,22 @@ fn percent_or_absolute(value: &str, base_value: i32) -> Option<i32> {
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_precision_loss)]
-pub fn sort_menu_items_alphabetically_honor_initial_score<T: Clone>(items: &mut [MenuItem<T>]) {
-    let special_score = items.len() as f64;
-    let mut regular_score = 0.0;
-    items.sort_by(|l, r| r.label.cmp(&l.label));
+pub fn apply_sort<T: Clone>(items: &mut [MenuItem<T>], order: &SortOrder) {
+    match order {
+        SortOrder::Default => {}
+        SortOrder::Alphabetical => {
+            let special_score = items.len() as f64;
+            let mut regular_score = 0.0;
+            items.sort_by(|l, r| r.label.cmp(&l.label));
 
-    for item in items.iter_mut() {
-        if item.initial_sort_score == 0.0 {
-            item.initial_sort_score += regular_score;
-            regular_score += 1.0;
-        } else {
-            item.initial_sort_score += special_score;
+            for item in items.iter_mut() {
+                if item.initial_sort_score == 0.0 {
+                    item.initial_sort_score += regular_score;
+                    regular_score += 1.0;
+                } else {
+                    item.initial_sort_score += special_score;
+                }
+            }
         }
     }
 }
