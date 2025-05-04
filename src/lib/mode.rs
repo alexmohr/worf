@@ -1,4 +1,4 @@
-use crate::config::{Config, expand_path, SortOrder};
+use crate::config::{Config, SortOrder, expand_path};
 use crate::desktop::{
     copy_to_clipboard, create_file_if_not_exists, find_desktop_files, get_locale_variants,
     is_executable, load_cache_file, lookup_name_with_locale, save_cache_file, spawn_fork,
@@ -432,7 +432,7 @@ struct SshProvider<T: Clone> {
 }
 
 impl<T: Clone> SshProvider<T> {
-    fn new(menu_item_data: T, order: SortOrder) -> Self {
+    fn new(menu_item_data: T, order: &SortOrder) -> Self {
         let re = Regex::new(r"(?m)^\s*Host\s+(.+)$").unwrap();
         let mut items: Vec<_> = dirs::home_dir()
             .map(|home| home.join(".ssh").join("config"))
@@ -462,7 +462,7 @@ impl<T: Clone> SshProvider<T> {
             })
             .collect();
 
-        gui::apply_sort(&mut items, &order);
+        gui::apply_sort(&mut items, order);
         Self { elements: items }
     }
 }
@@ -547,7 +547,7 @@ struct EmojiProvider<T: Clone> {
 }
 
 impl<T: Clone> EmojiProvider<T> {
-    fn new(data: T, sort_order: SortOrder) -> Self {
+    fn new(data: T, sort_order: &SortOrder) -> Self {
         let emoji = emoji::search::search_annotation_all("");
         let mut menus = emoji
             .into_iter()
@@ -563,7 +563,7 @@ impl<T: Clone> EmojiProvider<T> {
                 )
             })
             .collect::<Vec<_>>();
-        gui::apply_sort(&mut menus, &sort_order);
+        gui::apply_sort(&mut menus, sort_order);
 
         Self {
             elements: menus,
@@ -588,7 +588,7 @@ struct DMenuProvider {
 }
 
 impl DMenuProvider {
-    fn new(sort_order: SortOrder) -> Result<DMenuProvider, Error> {
+    fn new(sort_order: &SortOrder) -> Result<DMenuProvider, Error> {
         let mut input = String::new();
         io::stdin()
             .read_to_string(&mut input)
@@ -600,7 +600,7 @@ impl DMenuProvider {
             .map(|s| MenuItem::new(s.clone(), None, None, vec![], None, 0.0, None))
             .collect();
 
-        gui::apply_sort(&mut items, &sort_order);
+        gui::apply_sort(&mut items, sort_order);
 
         Ok(Self { items })
     }
@@ -642,8 +642,8 @@ impl AutoItemProvider {
             drun: DRunProvider::new(AutoRunType::DRun, config.no_actions(), config.sort_order()),
             file: FileItemProvider::new(AutoRunType::File, config.sort_order()),
             math: MathProvider::new(AutoRunType::Math),
-            ssh: SshProvider::new(AutoRunType::Ssh, config.sort_order()),
-            emoji: EmojiProvider::new(AutoRunType::Emoji, config.sort_order()),
+            ssh: SshProvider::new(AutoRunType::Ssh, &config.sort_order()),
+            emoji: EmojiProvider::new(AutoRunType::Emoji, &config.sort_order()),
             last_mode: None,
         }
     }
@@ -865,7 +865,7 @@ fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), 
 /// * if it was not able to spawn the process
 /// * if it didn't find a terminal
 pub fn ssh(config: &Config) -> Result<(), Error> {
-    let provider = SshProvider::new(0,config.sort_order() );
+    let provider = SshProvider::new(0, &config.sort_order());
     let selection_result = gui::show(config.clone(), provider, true, None);
     if let Ok(mi) = selection_result {
         ssh_launch(&mi, config)?;
@@ -896,7 +896,7 @@ pub fn math(config: &Config) {
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
 pub fn emoji(config: &Config) -> Result<(), Error> {
-    let provider = EmojiProvider::new(0, config.sort_order());
+    let provider = EmojiProvider::new(0, &config.sort_order());
     let selection_result = gui::show(config.clone(), provider, true, None)?;
     match selection_result.action {
         None => Err(Error::MissingAction),
@@ -909,7 +909,7 @@ pub fn emoji(config: &Config) -> Result<(), Error> {
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
 pub fn dmenu(config: &Config) -> Result<(), Error> {
-    let provider = DMenuProvider::new(config.sort_order())?;
+    let provider = DMenuProvider::new(&config.sort_order())?;
 
     let selection_result = gui::show(config.clone(), provider, true, None);
     match selection_result {
