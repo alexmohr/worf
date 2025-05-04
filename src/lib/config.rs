@@ -44,6 +44,13 @@ pub enum WrapMode {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum SortOrder {
+    Default,
+    Alphabetical
+}
+
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mode {
     /// searches `$PATH` for executables and allows them to be run by selecting them.
     Run,
@@ -118,6 +125,22 @@ impl FromStr for WrapMode {
             "none" => Ok(WrapMode::None),
             "word" => Ok(WrapMode::Word),
             "inherit" => Ok(WrapMode::Inherit),
+            _ => Err(ArgsError::InvalidParameter(
+                format!("{s} is not a valid argument, see help for details").to_owned(),
+            )),
+        }
+    }
+}
+
+
+
+impl FromStr for SortOrder {
+    type Err = ArgsError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "alphabetical" => Ok(SortOrder::Alphabetical),
+            "default" => Ok(SortOrder::Default),
             _ => Err(ArgsError::InvalidParameter(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
             )),
@@ -238,8 +261,8 @@ pub struct Config {
     #[clap(short = 'w', long = "columns")]
     columns: Option<u32>,
 
-    #[clap(short = 'O', long = "sort-order")] // todo support this
-    sort_order: Option<String>,
+    #[clap(short = 'O', long = "sort-order")]
+    sort_order: Option<SortOrder>,
 
     #[clap(short = 'Q', long = "search")]
     search: Option<String>,
@@ -497,6 +520,11 @@ impl Config {
     #[must_use]
     pub fn no_actions(&self) -> bool {
         self.no_actions.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn sort_order(&self) -> SortOrder {
+        self.sort_order.clone().unwrap_or(SortOrder::Alphabetical)
     }
 }
 
