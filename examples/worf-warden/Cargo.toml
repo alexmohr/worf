@@ -1,0 +1,9 @@
+[package]
+name = "worf-warden"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gdk4 = "0.9.6"
+worf = {path = "../.."}
+enigo = "0.1.3"

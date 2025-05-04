@@ -712,9 +712,9 @@ pub fn d_run(config: &Config) -> Result<(), Error> {
     let mut cache = provider.cache.clone();
 
     // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider, false, None);
+    let selection_result = gui::show(config.clone(), provider, false, None, None);
     match selection_result {
-        Ok(s) => update_drun_cache_and_run(cache_path, &mut cache, s)?,
+        Ok(s) => update_drun_cache_and_run(cache_path, &mut cache, s.menu)?,
         Err(_) => {
             log::error!("No item selected");
         }
@@ -732,9 +732,9 @@ pub fn run(config: &Config) -> Result<(), Error> {
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 
-    let selection_result = gui::show(config.clone(), provider, false, None);
+    let selection_result = gui::show(config.clone(), provider, false, None, None);
     match selection_result {
-        Ok(s) => update_run_cache_and_run(cache_path, &mut cache, s)?,
+        Ok(s) => update_run_cache_and_run(cache_path, &mut cache, s.menu)?,
         Err(_) => {
             log::error!("No item selected");
         }
@@ -768,9 +768,11 @@ pub fn auto(config: &Config) -> Result<(), Error> {
                     .map(|s| Regex::new(s).unwrap())
                     .collect(),
             ),
+            None,
         );
 
         if let Ok(mut selection_result) = selection_result {
+            let mut selection_result = selection_result.menu;
             if let Some(data) = &selection_result.data {
                 match data {
                     AutoRunType::Math => {
@@ -829,9 +831,10 @@ pub fn file(config: &Config) -> Result<(), Error> {
         provider,
         false,
         Some(vec![Regex::new("^\\$\\w+").unwrap()]),
+        None,
     )?;
-    if let Some(action) = selection_result.action {
-        spawn_fork(&action, selection_result.working_dir.as_ref())
+    if let Some(action) = selection_result.menu.action {
+        spawn_fork(&action, selection_result.menu.working_dir.as_ref())
     } else {
         Err(Error::MissingAction)
     }
@@ -866,9 +869,9 @@ fn ssh_launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), 
 /// * if it didn't find a terminal
 pub fn ssh(config: &Config) -> Result<(), Error> {
     let provider = SshProvider::new(0, &config.sort_order());
-    let selection_result = gui::show(config.clone(), provider, true, None);
+    let selection_result = gui::show(config.clone(), provider, true, None, None);
     if let Ok(mi) = selection_result {
-        ssh_launch(&mi, config)?;
+        ssh_launch(&mi.menu, config)?;
     } else {
         log::error!("No item selected");
     }
@@ -881,9 +884,9 @@ pub fn math(config: &Config) {
     loop {
         let mut provider = MathProvider::new(String::new());
         provider.add_elements(&mut calc.clone());
-        let selection_result = gui::show(config.clone(), provider, true, None);
+        let selection_result = gui::show(config.clone(), provider, true, None, None);
         if let Ok(mi) = selection_result {
-            calc.push(mi);
+            calc.push(mi.menu);
         } else {
             log::error!("No item selected");
             break;
@@ -897,8 +900,8 @@ pub fn math(config: &Config) {
 /// Forwards errors from the gui. See `gui::show` for details.
 pub fn emoji(config: &Config) -> Result<(), Error> {
     let provider = EmojiProvider::new(0, &config.sort_order());
-    let selection_result = gui::show(config.clone(), provider, true, None)?;
-    match selection_result.action {
+    let selection_result = gui::show(config.clone(), provider, true, None, None)?;
+    match selection_result.menu.action {
         None => Err(Error::MissingAction),
         Some(action) => copy_to_clipboard(action),
     }
@@ -911,10 +914,10 @@ pub fn emoji(config: &Config) -> Result<(), Error> {
 pub fn dmenu(config: &Config) -> Result<(), Error> {
     let provider = DMenuProvider::new(&config.sort_order())?;
 
-    let selection_result = gui::show(config.clone(), provider, true, None);
+    let selection_result = gui::show(config.clone(), provider, true, None, None);
     match selection_result {
         Ok(s) => {
-            println!("{}", s.label);
+            println!("{}", s.menu.label);
             Ok(())
         }
         Err(_) => Err(Error::InvalidSelection),

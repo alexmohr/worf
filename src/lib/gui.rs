@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use crossbeam::channel;
@@ -9,7 +10,7 @@ use crossbeam::channel::Sender;
 use gdk4::gio::File;
 use gdk4::glib::{Propagation, timeout_add_local};
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt};
-use gdk4::{Display, Key};
+use gdk4::{Display, Key, ModifierType};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
@@ -31,7 +32,12 @@ use crate::{Error, config, desktop};
 
 type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
-type MenuItemSender<T> = Sender<Result<MenuItem<T>, Error>>;
+
+pub struct Selection<T: Clone + Send> {
+    pub menu: MenuItem<T>,
+    pub custom_key: Option<CustomKey>,
+}
+type SelectionSender<T> = Sender<Result<Selection<T>, Error>>;
 
 pub trait ItemProvider<T: Clone> {
     fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<MenuItem<T>>);
@@ -104,6 +110,13 @@ pub struct MenuItem<T: Clone> {
     visible: bool,
 }
 
+#[derive(Clone, PartialEq)]
+pub struct CustomKey {
+    pub key: Key,
+    pub modifiers: ModifierType, // acts as a mask, so multiple things can be set.
+    pub label: String,
+}
+
 impl<T: Clone> MenuItem<T> {
     #[must_use]
     pub fn new(
@@ -135,9 +148,9 @@ impl<T: Clone> AsRef<MenuItem<T>> for MenuItem<T> {
     }
 }
 
-struct MetaData<T: Clone> {
+struct MetaData<T: Clone + Send> {
     item_provider: ArcProvider<T>,
-    selected_sender: MenuItemSender<T>,
+    selected_sender: SelectionSender<T>,
     config: Rc<Config>,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
@@ -161,7 +174,8 @@ pub fn show<T, P>(
     item_provider: P,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
-) -> Result<MenuItem<T>, Error>
+    custom_keys: Option<Vec<CustomKey>>,
+) -> Result<Selection<T>, Error>
 where
     T: Clone + 'static + Send,
     P: ItemProvider<T> + 'static + Clone + Send,
@@ -192,6 +206,7 @@ where
             app.clone(),
             new_on_empty,
             search_ignored_words.clone(),
+            custom_keys.clone(),
         );
     });
 
@@ -203,10 +218,11 @@ where
 fn build_ui<T, P>(
     config: &Config,
     item_provider: P,
-    sender: Sender<Result<MenuItem<T>, Error>>,
+    sender: Sender<Result<Selection<T>, Error>>,
     app: Application,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
+    custom_keys: Option<Vec<CustomKey>>,
 ) where
     T: Clone + 'static + Send,
     P: ItemProvider<T> + 'static + Send,
@@ -245,7 +261,7 @@ fn build_ui<T, P>(
     });
 
     // handle keys as soon as possible
-    setup_key_event_handler(&ui_elements, &meta);
+    setup_key_event_handler(&ui_elements, &meta, &custom_keys);
 
     log::debug!("keyboard ready after {:?}", start.elapsed());
 
@@ -272,6 +288,8 @@ fn build_ui<T, P>(
     let outer_box = gtk4::Box::new(config.orientation().into(), 0);
     outer_box.set_widget_name("outer-box");
     outer_box.append(&ui_elements.search);
+    build_custom_key_view(config, &ui_elements, &custom_keys, &outer_box);
+
     ui_elements.window.set_child(Some(&outer_box));
 
     let scroll = ScrolledWindow::new();
@@ -315,7 +333,6 @@ fn build_ui<T, P>(
 
     log::debug!("Building UI took {:?}", start.elapsed(),);
 }
-
 fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElements<T>>) {
     ui_elements.main_box.set_widget_name("inner-box");
     ui_elements.main_box.set_css_classes(&["inner-box"]);
@@ -348,7 +365,11 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
     });
 }
 
-fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>, meta: &MetaData<T>) {
+fn build_search_entry<T: Clone + Send>(
+    config: &Config,
+    ui_elements: &UiElements<T>,
+    meta: &MetaData<T>,
+) {
     ui_elements.search.set_widget_name("input");
     ui_elements.search.set_css_classes(&["input"]);
     ui_elements
@@ -363,7 +384,35 @@ fn build_search_entry<T: Clone>(config: &Config, ui_elements: &UiElements<T>, me
     }
 }
 
-fn set_search_text<T: Clone>(text: &str, ui: &UiElements<T>, meta: &MetaData<T>) {
+fn build_custom_key_view<T>(
+    config: &Config,
+    ui: &Rc<UiElements<T>>,
+    custom_keys: &Option<Vec<CustomKey>>,
+    outer_box: &gtk4::Box,
+) where
+    T: 'static + Clone + Send,
+{
+    let inner_box = gtk4::Box::new(Orientation::Horizontal, 0);
+    inner_box.set_halign(Align::Start);
+    inner_box.set_widget_name("custom-key-box");
+    if let Some(custom_keys) = custom_keys {
+        for key in custom_keys {
+            let label_box = gtk4::Box::new(Orientation::Horizontal, 0);
+            label_box.set_halign(Align::Start);
+            label_box.set_widget_name("custom-key-label-box");
+            inner_box.append(&label_box);
+            let label = Label::new(Some(&key.label));
+            label.set_use_markup(true);
+            label.set_hexpand(true);
+            label.set_widget_name("custom-key-label-text");
+            label.set_wrap(true);
+            label_box.append(&label);
+        }
+    }
+    outer_box.append(&inner_box);
+}
+
+fn set_search_text<T: Clone + Send>(text: &str, ui: &UiElements<T>, meta: &MetaData<T>) {
     let mut lock = ui.search_text.lock().unwrap();
     text.clone_into(&mut lock);
     if let Some(pw) = meta.config.password() {
@@ -377,7 +426,7 @@ fn set_search_text<T: Clone>(text: &str, ui: &UiElements<T>, meta: &MetaData<T>)
     }
 }
 
-fn build_ui_from_menu_items<T: Clone + 'static>(
+fn build_ui_from_menu_items<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     mut items: Vec<MenuItem<T>>,
@@ -443,21 +492,31 @@ fn build_ui_from_menu_items<T: Clone + 'static>(
 fn setup_key_event_handler<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
+    custom_keys: &Option<Vec<CustomKey>>,
 ) {
     let key_controller = EventControllerKey::new();
 
     let ui_clone = Rc::clone(ui);
     let meta_clone = Rc::clone(meta);
-    key_controller.connect_key_pressed(move |_, key_value, _, _| {
-        handle_key_press(&ui_clone, &meta_clone, key_value)
+    let keys_clone = custom_keys.clone();
+    key_controller.connect_key_pressed(move |_, key_value, _, modifier| {
+        handle_key_press(
+            &ui_clone,
+            &meta_clone,
+            key_value,
+            modifier,
+            keys_clone.as_ref(),
+        )
     });
 
     ui.window.add_controller(key_controller);
 }
-fn handle_key_press<T: Clone + 'static>(
+fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     keyboard_key: Key,
+    modifier_type: ModifierType,
+    custom_keys: Option<&Vec<CustomKey>>,
 ) -> Propagation {
     let update_view = |query: &String| {
         let mut lock = ui.menu_rows.lock().unwrap();
@@ -480,6 +539,24 @@ fn handle_key_press<T: Clone + 'static>(
         update_view(query);
     };
 
+    if let Some(custom_keys) = custom_keys {
+        for custom_key in custom_keys {
+            if custom_key.key == keyboard_key && custom_key.modifiers == modifier_type {
+                let search_lock = ui.search_text.lock().unwrap();
+                if let Err(e) = handle_selected_item(
+                    ui,
+                    meta,
+                    Some(&search_lock),
+                    None,
+                    meta.new_on_empty,
+                    Some(&custom_key),
+                ) {
+                    log::error!("{e}");
+                }
+            }
+        }
+    }
+
     match keyboard_key {
         Key::Escape => {
             if let Err(e) = meta.selected_sender.send(Err(Error::NoSelection)) {
@@ -490,7 +567,7 @@ fn handle_key_press<T: Clone + 'static>(
         Key::Return => {
             let search_lock = ui.search_text.lock().unwrap();
             if let Err(e) =
-                handle_selected_item(ui, meta, Some(&search_lock), None, meta.new_on_empty)
+                handle_selected_item(ui, meta, Some(&search_lock), None, meta.new_on_empty, None)
             {
                 log::error!("{e}");
             }
@@ -627,12 +704,17 @@ fn handle_selected_item<T>(
     query: Option<&str>,
     item: Option<MenuItem<T>>,
     new_on_empty: bool,
+    custom_key: Option<&CustomKey>,
 ) -> Result<(), String>
 where
-    T: Clone,
+    T: Clone + Send,
 {
     if let Some(selected_item) = item {
-        if let Err(e) = meta.selected_sender.send(Ok(selected_item.clone())) {
+        close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
+        if let Err(e) = meta.selected_sender.send(Ok(Selection {
+            menu: selected_item.clone(),
+            custom_key: custom_key.map(|k| k.clone()),
+        })) {
             log::error!("failed to send message {e}");
         }
 
@@ -663,7 +745,10 @@ where
             visible: true,
         };
 
-        if let Err(e) = meta.selected_sender.send(Ok(item.clone())) {
+        if let Err(e) = meta.selected_sender.send(Ok(Selection {
+            menu: item.clone(),
+            custom_key: custom_key.map(|k| k.clone()),
+        })) {
             log::error!("failed to send message {e}");
         }
         close_gui(&ui.app);
@@ -673,7 +758,7 @@ where
     }
 }
 
-fn add_menu_item<T: Clone + 'static>(
+fn add_menu_item<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     element_to_add: &MenuItem<T>,
@@ -718,7 +803,7 @@ fn add_menu_item<T: Clone + 'static>(
     child
 }
 
-fn create_menu_row<T: Clone + 'static>(
+fn create_menu_row<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     element_to_add: &MenuItem<T>,
@@ -782,6 +867,7 @@ fn create_menu_row<T: Clone + 'static>(
                 None,
                 Some(element_clone.clone()),
                 false,
+                None,
             ) {
                 log::error!("{e}");
             }
