@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use crossbeam::channel;
@@ -10,7 +9,7 @@ use crossbeam::channel::Sender;
 use gdk4::gio::File;
 use gdk4::glib::{Propagation, timeout_add_local};
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt};
-use gdk4::{Display, Key, ModifierType};
+use gdk4::{Display, ModifierType};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
@@ -35,7 +34,7 @@ type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
 
 pub struct Selection<T: Clone + Send> {
     pub menu: MenuItem<T>,
-    pub custom_key: Option<CustomKey>,
+    pub custom_key: Option<KeyBinding>,
 }
 type SelectionSender<T> = Sender<Result<Selection<T>, Error>>;
 
@@ -110,10 +109,253 @@ pub struct MenuItem<T: Clone> {
     visible: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Key {
+    None,
+
+    // Letters
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    M,
+    N,
+    O,
+    P,
+    Q,
+    R,
+    S,
+    T,
+    U,
+    V,
+    W,
+    X,
+    Y,
+    Z,
+
+    // Numbers
+    Num0,
+    Num1,
+    Num2,
+    Num3,
+    Num4,
+    Num5,
+    Num6,
+    Num7,
+    Num8,
+    Num9,
+
+    // Function Keys
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+
+    // Navigation / Editing
+    Escape,
+    Enter,
+    Space,
+    Tab,
+    Backspace,
+    Insert,
+    Delete,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Left,
+    Right,
+    Up,
+    Down,
+
+    // Special characters
+    Exclamation,  // !
+    At,           // @
+    Hash,         // #
+    Dollar,       // $
+    Percent,      // %
+    Caret,        // ^
+    Ampersand,    // &
+    Asterisk,     // *
+    LeftParen,    // (
+    RightParen,   // )
+    Minus,        // -
+    Underscore,   // _
+    Equal,        // =
+    Plus,         // +
+    LeftBracket,  // [
+    RightBracket, // ]
+    LeftBrace,    // {
+    RightBrace,   // }
+    Backslash,    // \
+    Pipe,         // |
+    Semicolon,    // ;
+    Colon,        // :
+    Apostrophe,   // '
+    Quote,        // "
+    Comma,        // ,
+    Period,       // .
+    Slash,        // /
+    Question,     // ?
+    Grave,        // `
+    Tilde,        // ~
+}
+
+impl Into<Key> for gdk::Key {
+    fn into(self) -> Key {
+        match self {
+            // Letters
+            gdk4::Key::A => Key::A,
+            gdk4::Key::B => Key::B,
+            gdk4::Key::C => Key::C,
+            gdk4::Key::D => Key::D,
+            gdk4::Key::E => Key::E,
+            gdk4::Key::F => Key::F,
+            gdk4::Key::G => Key::G,
+            gdk4::Key::H => Key::H,
+            gdk4::Key::I => Key::I,
+            gdk4::Key::J => Key::J,
+            gdk4::Key::K => Key::K,
+            gdk4::Key::L => Key::L,
+            gdk4::Key::M => Key::M,
+            gdk4::Key::N => Key::N,
+            gdk4::Key::O => Key::O,
+            gdk4::Key::P => Key::P,
+            gdk4::Key::Q => Key::Q,
+            gdk4::Key::R => Key::R,
+            gdk4::Key::S => Key::S,
+            gdk4::Key::T => Key::T,
+            gdk4::Key::U => Key::U,
+            gdk4::Key::V => Key::V,
+            gdk4::Key::W => Key::W,
+            gdk4::Key::X => Key::X,
+            gdk4::Key::Y => Key::Y,
+            gdk4::Key::Z => Key::Z,
+
+            // Numbers
+            gdk4::Key::_0 => Key::Num0,
+            gdk4::Key::_1 => Key::Num1,
+            gdk4::Key::_2 => Key::Num2,
+            gdk4::Key::_3 => Key::Num3,
+            gdk4::Key::_4 => Key::Num4,
+            gdk4::Key::_5 => Key::Num5,
+            gdk4::Key::_6 => Key::Num6,
+            gdk4::Key::_7 => Key::Num7,
+            gdk4::Key::_8 => Key::Num8,
+            gdk4::Key::_9 => Key::Num9,
+
+            // Function Keys
+            gdk4::Key::F1 => Key::F1,
+            gdk4::Key::F2 => Key::F2,
+            gdk4::Key::F3 => Key::F3,
+            gdk4::Key::F4 => Key::F4,
+            gdk4::Key::F5 => Key::F5,
+            gdk4::Key::F6 => Key::F6,
+            gdk4::Key::F7 => Key::F7,
+            gdk4::Key::F8 => Key::F8,
+            gdk4::Key::F9 => Key::F9,
+            gdk4::Key::F10 => Key::F10,
+            gdk4::Key::F11 => Key::F11,
+            gdk4::Key::F12 => Key::F12,
+
+            // Navigation / Editing
+            gdk4::Key::Escape => Key::Escape,
+            gdk4::Key::Return => Key::Enter,
+            gdk4::Key::space => Key::Space,
+            gdk4::Key::Tab => Key::Tab,
+            gdk4::Key::BackSpace => Key::Backspace,
+            gdk4::Key::Insert => Key::Insert,
+            gdk4::Key::Delete => Key::Delete,
+            gdk4::Key::Home => Key::Home,
+            gdk4::Key::End => Key::End,
+            gdk4::Key::Page_Up => Key::PageUp,
+            gdk4::Key::Page_Down => Key::PageDown,
+            gdk4::Key::Left => Key::Left,
+            gdk4::Key::Right => Key::Right,
+            gdk4::Key::Up => Key::Up,
+            gdk4::Key::Down => Key::Down,
+
+            // Special characters
+            gdk4::Key::exclam => Key::Exclamation,
+            gdk4::Key::at => Key::At,
+            gdk4::Key::numbersign => Key::Hash,
+            gdk4::Key::dollar => Key::Dollar,
+            gdk4::Key::percent => Key::Percent,
+            gdk4::Key::asciicircum => Key::Caret,
+            gdk4::Key::ampersand => Key::Ampersand,
+            gdk4::Key::asterisk => Key::Asterisk,
+            gdk4::Key::parenleft => Key::LeftParen,
+            gdk4::Key::parenright => Key::RightParen,
+            gdk4::Key::minus => Key::Minus,
+            gdk4::Key::underscore => Key::Underscore,
+            gdk4::Key::equal => Key::Equal,
+            gdk4::Key::plus => Key::Plus,
+            gdk4::Key::bracketleft => Key::LeftBracket,
+            gdk4::Key::bracketright => Key::RightBracket,
+            gdk4::Key::braceleft => Key::LeftBrace,
+            gdk4::Key::braceright => Key::RightBrace,
+            gdk4::Key::backslash => Key::Backslash,
+            gdk4::Key::bar => Key::Pipe,
+            gdk4::Key::semicolon => Key::Semicolon,
+            gdk4::Key::colon => Key::Colon,
+            gdk4::Key::apostrophe => Key::Apostrophe,
+            gdk4::Key::quotedbl => Key::Quote,
+            gdk4::Key::comma => Key::Comma,
+            gdk4::Key::period => Key::Period,
+            gdk4::Key::slash => Key::Slash,
+            gdk4::Key::question => Key::Question,
+            gdk4::Key::grave => Key::Grave,
+            gdk4::Key::asciitilde => Key::Tilde,
+            _ => Key::None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Modifier {
+    Shift,
+    Control,
+    Alt,
+    Super,
+    Meta,
+    CapsLock,
+    None,
+}
+
+impl Into<Modifier> for gdk::ModifierType {
+    fn into(self) -> Modifier {
+        match self {
+            ModifierType::SHIFT_MASK => Modifier::Shift,
+            ModifierType::CONTROL_MASK => Modifier::Control,
+            ModifierType::ALT_MASK => Modifier::Alt,
+            ModifierType::SUPER_MASK => Modifier::Super,
+            ModifierType::META_MASK => Modifier::Meta,
+            ModifierType::LOCK_MASK => Modifier::CapsLock,
+            _ => Modifier::None,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq)]
-pub struct CustomKey {
+pub struct KeyBinding {
     pub key: Key,
-    pub modifiers: ModifierType, // acts as a mask, so multiple things can be set.
+    pub modifiers: Modifier, // todo support masks
     pub label: String,
 }
 
@@ -174,7 +416,7 @@ pub fn show<T, P>(
     item_provider: P,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
-    custom_keys: Option<Vec<CustomKey>>,
+    custom_keys: Option<Vec<KeyBinding>>,
 ) -> Result<Selection<T>, Error>
 where
     T: Clone + 'static + Send,
@@ -222,7 +464,7 @@ fn build_ui<T, P>(
     app: Application,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
-    custom_keys: Option<Vec<CustomKey>>,
+    custom_keys: Option<Vec<KeyBinding>>,
 ) where
     T: Clone + 'static + Send,
     P: ItemProvider<T> + 'static + Send,
@@ -261,7 +503,7 @@ fn build_ui<T, P>(
     });
 
     // handle keys as soon as possible
-    setup_key_event_handler(&ui_elements, &meta, &custom_keys);
+    setup_key_event_handler(&ui_elements, &meta, custom_keys.as_ref());
 
     log::debug!("keyboard ready after {:?}", start.elapsed());
 
@@ -387,7 +629,7 @@ fn build_search_entry<T: Clone + Send>(
 fn build_custom_key_view<T>(
     config: &Config,
     ui: &Rc<UiElements<T>>,
-    custom_keys: &Option<Vec<CustomKey>>,
+    custom_keys: &Option<Vec<KeyBinding>>,
     outer_box: &gtk4::Box,
 ) where
     T: 'static + Clone + Send,
@@ -492,13 +734,13 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
 fn setup_key_event_handler<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
-    custom_keys: &Option<Vec<CustomKey>>,
+    custom_keys: Option<&Vec<KeyBinding>>,
 ) {
     let key_controller = EventControllerKey::new();
 
     let ui_clone = Rc::clone(ui);
     let meta_clone = Rc::clone(meta);
-    let keys_clone = custom_keys.clone();
+    let keys_clone = custom_keys.map(|s| s.clone());
     key_controller.connect_key_pressed(move |_, key_value, _, modifier| {
         handle_key_press(
             &ui_clone,
@@ -511,12 +753,14 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
 
     ui.window.add_controller(key_controller);
 }
+
+#[allow(clippy::too_many_lines)] // todo fix this.
 fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
-    keyboard_key: Key,
+    keyboard_key: gdk4::Key,
     modifier_type: ModifierType,
-    custom_keys: Option<&Vec<CustomKey>>,
+    custom_keys: Option<&Vec<KeyBinding>>,
 ) -> Propagation {
     let update_view = |query: &String| {
         let mut lock = ui.menu_rows.lock().unwrap();
@@ -535,13 +779,13 @@ fn handle_key_press<T: Clone + 'static + Send>(
         if changed {
             build_ui_from_menu_items(ui, meta, filtered_list);
         }
-
         update_view(query);
     };
 
     if let Some(custom_keys) = custom_keys {
         for custom_key in custom_keys {
-            if custom_key.key == keyboard_key && custom_key.modifiers == modifier_type {
+            if custom_key.key == keyboard_key.into() && custom_key.modifiers == modifier_type.into()
+            {
                 let search_lock = ui.search_text.lock().unwrap();
                 if let Err(e) = handle_selected_item(
                     ui,
@@ -558,13 +802,13 @@ fn handle_key_press<T: Clone + 'static + Send>(
     }
 
     match keyboard_key {
-        Key::Escape => {
+        gdk4::Key::Escape => {
             if let Err(e) = meta.selected_sender.send(Err(Error::NoSelection)) {
                 log::error!("failed to send message {e}");
             }
             close_gui(&ui.app);
         }
-        Key::Return => {
+        gdk4::Key::Return => {
             let search_lock = ui.search_text.lock().unwrap();
             if let Err(e) =
                 handle_selected_item(ui, meta, Some(&search_lock), None, meta.new_on_empty, None)
@@ -572,7 +816,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
                 log::error!("{e}");
             }
         }
-        Key::BackSpace => {
+        gdk4::Key::BackSpace => {
             let mut query = ui.search_text.lock().unwrap().to_string();
             if !query.is_empty() {
                 query.pop();
@@ -581,7 +825,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
                 update_view_from_provider(&query);
             }
         }
-        Key::Tab => {
+        gdk4::Key::Tab => {
             if let Some(fb) = ui.main_box.selected_children().first() {
                 if let Some(child) = fb.child() {
                     let expander = child.downcast::<Expander>().ok();
@@ -625,7 +869,6 @@ fn handle_key_press<T: Clone + 'static + Send>(
             }
         }
     }
-
     Propagation::Proceed
 }
 
@@ -704,7 +947,7 @@ fn handle_selected_item<T>(
     query: Option<&str>,
     item: Option<MenuItem<T>>,
     new_on_empty: bool,
-    custom_key: Option<&CustomKey>,
+    custom_key: Option<&KeyBinding>,
 ) -> Result<(), String>
 where
     T: Clone + Send,
