@@ -2,11 +2,11 @@ use std::process::Command;
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
-use enigo::{Enigo, Key, KeyboardControllable};
+use enigo::{Enigo, Keyboard};
 
 use worf_lib::{config, gui, Error};
 use worf_lib::config::Config;
-use worf_lib::gui::{CustomKey, ItemProvider, MenuItem};
+use worf_lib::gui::{KeyBinding, ItemProvider, MenuItem, Modifier, Key};
 
 #[derive(Clone)]
 struct PasswordProvider {
@@ -64,43 +64,84 @@ fn rbw_get_password(name: &str) -> String {
     rbw_get(name, "password")
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = config::parse_args();
     let config = config::load_config(Some(&args)).unwrap_or(args);
 
     // todo eventually use a propper rust client for this, for now rbw is good enough
     let provider = PasswordProvider::new(&config);
 
-    let type_all = CustomKey {
-        key: gdk4::Key::_1, // todo do not expose gdk4
-        modifiers: gdk4::ModifierType::ALT_MASK,
+    let type_all = KeyBinding {
+        key: Key::Num1,
+        modifiers: Modifier::Alt,
         label: "<b>Alt+1</b> Type All".to_string(),
     };
 
-    let type_user = CustomKey {
-        key: gdk4::Key::_2, // todo do not expose gdk4
-        modifiers: gdk4::ModifierType::ALT_MASK,
+    let type_user = KeyBinding {
+        key: Key::Num2, 
+        modifiers: Modifier::Alt,
         label: "<b>Alt+2</b> Type All".to_string(),
     };
 
-    match gui::show(config, provider, false, None, Some(vec![type_all.clone(), type_user])) {
+    let type_totp = KeyBinding {
+        key: Key::Num3,
+        modifiers: Modifier::Alt,
+        label: "<b>Alt+3</b> Sync".to_string(),
+    };
+
+    let reload = KeyBinding {
+        key: Key::R, 
+        modifiers: Modifier::Alt,
+        label: "<b>Alt+r</b> Sync".to_string(),
+    };
+
+    let urls = KeyBinding {
+        key: Key::U,  // switch view to urls
+        modifiers: Modifier::Alt,
+        label: "<b>Alt+u</b> Sync".to_string(),
+    };
+
+    let names = KeyBinding {
+        key: Key::N,  // switch view to names
+        modifiers: Modifier::Alt,
+        label: "<b>Alt+n</b> Sync".to_string(),
+    };
+
+    let folders = KeyBinding {
+        key: Key::C,  // switch view to folders
+        modifiers: Modifier::Alt,
+        label: "<b>Alt+c</b> Sync".to_string(),
+    };
+
+    let totp = KeyBinding {
+        key: Key::T,
+        modifiers: Modifier::Alt, // switch view to totp
+        label: "<b>Alt+t</b> Sync".to_string(),
+    };
+
+    let lock = KeyBinding {
+        key: Key::L,
+        modifiers: Modifier::Alt,
+        label: "<b>Alt+l</b> Sync".to_string(),
+    };
+
+    match gui::show(config, provider, false, None, Some(vec![type_all.clone(), type_user, type_totp, reload, urls, names, folders, totp, lock])) {
         Ok(selection) => {
-            let mut enigo = Enigo::new();
+            let mut enigo = Enigo::new(&enigo::Settings::default())?;
             let id = selection.menu.label.replace("\n", "");
             sleep(Duration::from_millis(250));
                 if let Some(key) = selection.custom_key {
                     if key.label == type_all.label {
-                        enigo.key_sequence(&rbw_get_user(&id));
-                        enigo.key_down(Key::Tab);
-                        enigo.key_up(Key::Tab);
-                        enigo.key_sequence(&rbw_get_password(&id));
+                        enigo.text(&rbw_get_user(&id))?;
+                        enigo.key(enigo::Key::Tab, enigo::Direction::Press)?;
+                        enigo.key(enigo::Key::Tab, enigo::Direction::Release)?;
+                        enigo.text(&rbw_get_password(&id))?;
                     }
                 }
         }
         Err(e) => {
-            if e.ne(&Error::NoSelection) {
-                println!("Error occurred: {e}")
-            }
+            return Err(anyhow::anyhow!(e))
         }
     }
+    Ok(())
 }
