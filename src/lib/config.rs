@@ -201,7 +201,7 @@ pub struct Config {
     term: Option<String>,
 
     #[clap(short = 'P', long = "password")]
-    password: Option<String>, // todo support this
+    password: Option<String>,
 
     #[clap(short = 'e', long = "exec-search")]
     exec_search: Option<bool>, // todo support this
@@ -230,7 +230,7 @@ pub struct Config {
     location: Option<Vec<Anchor>>,
 
     #[clap(short = 'a', long = "no-actions")]
-    no_actions: Option<bool>, // todo support this
+    no_actions: Option<bool>,
 
     #[clap(short = 'L', long = "lines")]
     lines: Option<u32>, // todo support this
@@ -492,6 +492,11 @@ impl Config {
     #[must_use]
     pub fn password(&self) -> Option<String> {
         self.password.clone()
+    }
+
+    #[must_use]
+    pub fn no_actions(&self) -> bool {
+        self.no_actions.unwrap_or(false)
     }
 }
 

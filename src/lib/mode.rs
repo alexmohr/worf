@@ -29,16 +29,18 @@ struct DRunProvider<T: Clone> {
     cache_path: Option<PathBuf>,
     cache: HashMap<String, i64>,
     data: T,
+    no_actions: bool,
 }
 
 impl<T: Clone + Send + Sync> DRunProvider<T> {
-    fn new(menu_item_data: T) -> Self {
+    fn new(menu_item_data: T, no_actions: bool) -> Self {
         let (cache_path, d_run_cache) = load_d_run_cache();
         DRunProvider {
             items: None,
             cache_path,
             cache: d_run_cache,
             data: menu_item_data,
+            no_actions,
         }
     }
 
@@ -100,33 +102,33 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                      sort_score,
                      Some(self.data.clone()),
                      );
+                if !self.no_actions {
+                    for action in file.actions.values() {
+                        if let Some(action_name) = lookup_name_with_locale(
+                            &locale_variants,
+                            &action.name.variants,
+                            &action.name.default,
+                        ) {
+                            let action_icon = action
+                                .icon
+                                .as_ref()
+                                .map(|s| s.content.clone())
+                                .or(icon.clone())
+                                .unwrap_or("application-x-executable".to_string());
 
-                for action in file.actions.values() {
-                    if let Some(action_name) = lookup_name_with_locale(
-                        &locale_variants,
-                        &action.name.variants,
-                        &action.name.default,
-                    ) {
-                        let action_icon = action
-                            .icon
-                            .as_ref()
-                            .map(|s| s.content.clone())
-                            .or(icon.clone())
-                            .unwrap_or("application-x-executable".to_string());
 
-
-                        entry.sub_elements.push(MenuItem::new(
-                            action_name,
-                            Some(action_icon),
-                            action.exec.clone(),
-                            Vec::new(),
-                            working_dir.clone(),
-                            0.0,
-                            Some(self.data.clone()),
-                        ));
+                            entry.sub_elements.push(MenuItem::new(
+                                action_name,
+                                Some(action_icon),
+                                action.exec.clone(),
+                                Vec::new(),
+                                working_dir.clone(),
+                                0.0,
+                                Some(self.data.clone()),
+                            ));
+                        }
                     }
                 }
-
                 Some(entry)
             })
             .collect();
@@ -626,9 +628,9 @@ struct AutoItemProvider {
 }
 
 impl AutoItemProvider {
-    fn new() -> Self {
+    fn new(config: &Config) -> Self {
         AutoItemProvider {
-            drun: DRunProvider::new(AutoRunType::DRun),
+            drun: DRunProvider::new(AutoRunType::DRun, config.no_actions()),
             file: FileItemProvider::new(AutoRunType::File),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh),
@@ -696,7 +698,7 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
 ///
 /// Will return `Err` if it was not able to spawn the process
 pub fn d_run(config: &Config) -> Result<(), Error> {
-    let provider = DRunProvider::new(0);
+    let provider = DRunProvider::new(0, config.no_actions());
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 
@@ -741,7 +743,7 @@ pub fn run(config: &Config) -> Result<(), Error> {
 /// # Panics
 /// Panics if an internal static regex cannot be passed anymore, should never happen
 pub fn auto(config: &Config) -> Result<(), Error> {
-    let mut provider = AutoItemProvider::new();
+    let mut provider = AutoItemProvider::new(config);
     let cache_path = provider.drun.cache_path.clone();
     let mut cache = provider.drun.cache.clone();
 
