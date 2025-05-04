@@ -46,9 +46,8 @@ pub enum WrapMode {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum SortOrder {
     Default,
-    Alphabetical
+    Alphabetical,
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mode {
@@ -131,8 +130,6 @@ impl FromStr for WrapMode {
         }
     }
 }
-
-
 
 impl FromStr for SortOrder {
     type Err = ArgsError;
