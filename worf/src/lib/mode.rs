@@ -771,7 +771,7 @@ pub fn auto(config: &Config) -> Result<(), Error> {
             None,
         );
 
-        if let Ok(mut selection_result) = selection_result {
+        if let Ok(selection_result) = selection_result {
             let mut selection_result = selection_result.menu;
             if let Some(data) = &selection_result.data {
                 match data {

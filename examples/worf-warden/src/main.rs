@@ -1,5 +1,4 @@
 use std::process::Command;
-use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 use enigo::{Enigo, Keyboard};
