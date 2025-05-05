@@ -6,10 +6,10 @@ use std::time::{Duration, Instant};
 
 use crossbeam::channel;
 use crossbeam::channel::Sender;
+use gdk4::Display;
 use gdk4::gio::File;
 use gdk4::glib::{Propagation, timeout_add_local};
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt};
-use gdk4::{Display, ModifierType};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
     ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
@@ -217,9 +217,9 @@ pub enum Key {
     Tilde,        // ~
 }
 
-impl Into<Key> for gdk::Key {
-    fn into(self) -> Key {
-        match self {
+impl From<gdk::Key> for Key {
+    fn from(value: gdk4::Key) -> Self {
+        match value {
             // Letters
             gdk4::Key::A => Key::A,
             gdk4::Key::B => Key::B,
@@ -338,15 +338,15 @@ pub enum Modifier {
     None,
 }
 
-impl Into<Modifier> for gdk::ModifierType {
-    fn into(self) -> Modifier {
-        match self {
-            ModifierType::SHIFT_MASK => Modifier::Shift,
-            ModifierType::CONTROL_MASK => Modifier::Control,
-            ModifierType::ALT_MASK => Modifier::Alt,
-            ModifierType::SUPER_MASK => Modifier::Super,
-            ModifierType::META_MASK => Modifier::Meta,
-            ModifierType::LOCK_MASK => Modifier::CapsLock,
+impl From<gdk4::ModifierType> for Modifier {
+    fn from(value: gdk4::ModifierType) -> Self {
+        match value {
+            gdk4::ModifierType::SHIFT_MASK => Modifier::Shift,
+            gdk4::ModifierType::CONTROL_MASK => Modifier::Control,
+            gdk4::ModifierType::ALT_MASK => Modifier::Alt,
+            gdk4::ModifierType::SUPER_MASK => Modifier::Super,
+            gdk4::ModifierType::META_MASK => Modifier::Meta,
+            gdk4::ModifierType::LOCK_MASK => Modifier::CapsLock,
             _ => Modifier::None,
         }
     }
@@ -448,7 +448,7 @@ where
             app.clone(),
             new_on_empty,
             search_ignored_words.clone(),
-            custom_keys.clone(),
+            custom_keys.as_ref(),
         );
     });
 
@@ -464,7 +464,7 @@ fn build_ui<T, P>(
     app: Application,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
-    custom_keys: Option<Vec<KeyBinding>>,
+    custom_keys: Option<&Vec<KeyBinding>>,
 ) where
     T: Clone + 'static + Send,
     P: ItemProvider<T> + 'static + Send,
@@ -503,7 +503,7 @@ fn build_ui<T, P>(
     });
 
     // handle keys as soon as possible
-    setup_key_event_handler(&ui_elements, &meta, custom_keys.as_ref());
+    setup_key_event_handler(&ui_elements, &meta, custom_keys);
 
     log::debug!("keyboard ready after {:?}", start.elapsed());
 
@@ -530,7 +530,7 @@ fn build_ui<T, P>(
     let outer_box = gtk4::Box::new(config.orientation().into(), 0);
     outer_box.set_widget_name("outer-box");
     outer_box.append(&ui_elements.search);
-    build_custom_key_view(config, &ui_elements, &custom_keys, &outer_box);
+    build_custom_key_view(custom_keys, &outer_box);
 
     ui_elements.window.set_child(Some(&outer_box));
 
@@ -626,29 +626,29 @@ fn build_search_entry<T: Clone + Send>(
     }
 }
 
-fn build_custom_key_view<T>(
-    config: &Config,
-    ui: &Rc<UiElements<T>>,
-    custom_keys: &Option<Vec<KeyBinding>>,
-    outer_box: &gtk4::Box,
-) where
-    T: 'static + Clone + Send,
-{
-    let inner_box = gtk4::Box::new(Orientation::Horizontal, 0);
-    inner_box.set_halign(Align::Start);
+fn build_custom_key_view(custom_keys: Option<&Vec<KeyBinding>>, outer_box: &gtk4::Box) {
+    let inner_box = FlowBox::new();
+    inner_box.set_halign(Align::Fill);
     inner_box.set_widget_name("custom-key-box");
     if let Some(custom_keys) = custom_keys {
         for key in custom_keys {
-            let label_box = gtk4::Box::new(Orientation::Horizontal, 0);
-            label_box.set_halign(Align::Start);
+            let label_box = FlowBoxChild::new();
+            label_box.set_halign(Align::Fill);
+            inner_box.set_valign(Align::Start);
             label_box.set_widget_name("custom-key-label-box");
             inner_box.append(&label_box);
+            inner_box.set_vexpand(false);
+            inner_box.set_hexpand(false);
             let label = Label::new(Some(&key.label));
+            label.set_halign(Align::Fill);
+            label.set_valign(Align::Start);
             label.set_use_markup(true);
             label.set_hexpand(true);
+            label.set_vexpand(false);
             label.set_widget_name("custom-key-label-text");
-            label.set_wrap(true);
-            label_box.append(&label);
+            label.set_wrap(false);
+            label.set_xalign(0.0);
+            label_box.set_child(Some(&label));
         }
     }
     outer_box.append(&inner_box);
@@ -740,7 +740,7 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
 
     let ui_clone = Rc::clone(ui);
     let meta_clone = Rc::clone(meta);
-    let keys_clone = custom_keys.map(|s| s.clone());
+    let keys_clone = custom_keys.cloned();
     key_controller.connect_key_pressed(move |_, key_value, _, modifier| {
         handle_key_press(
             &ui_clone,
@@ -759,7 +759,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     keyboard_key: gdk4::Key,
-    modifier_type: ModifierType,
+    modifier_type: gdk4::ModifierType,
     custom_keys: Option<&Vec<KeyBinding>>,
 ) -> Propagation {
     let update_view = |query: &String| {
@@ -979,7 +979,7 @@ where
             visible: true,
         };
 
-        send_selected_item(&ui, meta, custom_key, &item);
+        send_selected_item(ui, meta, custom_key, &item);
         Ok(())
     } else {
         Err("selected item cannot be resolved".to_owned())
@@ -994,13 +994,14 @@ fn send_selected_item<T>(
 ) where
     T: Clone + Send,
 {
-    close_gui(&ui.app);
+    ui.window.close();
     if let Err(e) = meta.selected_sender.send(Ok(Selection {
         menu: selected_item.clone(),
         custom_key: custom_key.cloned(),
     })) {
         log::error!("failed to send message {e}");
     }
+    close_gui(&ui.app);
 }
 
 fn add_menu_item<T: Clone + 'static + Send>(
