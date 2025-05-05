@@ -793,7 +793,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
                     Some(&search_lock),
                     None,
                     meta.new_on_empty,
-                    Some(&custom_key),
+                    Some(custom_key),
                 ) {
                     log::error!("{e}");
                 }
@@ -953,14 +953,16 @@ where
     T: Clone + Send,
 {
     if let Some(selected_item) = item {
-        send_selected_item(&ui, meta, custom_key, &selected_item);
+        send_selected_item(ui, meta, custom_key, &selected_item);
         return Ok(());
     } else if let Some(s) = ui.main_box.selected_children().into_iter().next() {
         let list_items = ui.menu_rows.lock().unwrap();
         let item = list_items.get(&s);
         if let Some(selected_item) = item {
-            send_selected_item(&ui, meta, custom_key, selected_item);
-            return Ok(());
+            if selected_item.visible {
+                send_selected_item(ui, meta, custom_key, selected_item);
+                return Ok(());
+            }
         }
     }
 
@@ -984,9 +986,13 @@ where
     }
 }
 
-fn send_selected_item<T>(ui: &&UiElements<T>, meta: &MetaData<T>, custom_key: Option<&KeyBinding>, selected_item: &MenuItem<T>)
-where
-    T: Clone + Send
+fn send_selected_item<T>(
+    ui: &UiElements<T>,
+    meta: &MetaData<T>,
+    custom_key: Option<&KeyBinding>,
+    selected_item: &MenuItem<T>,
+) where
+    T: Clone + Send,
 {
     close_gui(&ui.app);
     if let Err(e) = meta.selected_sender.send(Ok(Selection {

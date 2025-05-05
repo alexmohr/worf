@@ -38,6 +38,7 @@ fn main() -> anyhow::Result<()> {
 
         Ok(())
     } else {
-        Err(anyhow!("No mode provided"))
+        log::error!("No mode provided");
+        Ok(())
     }
 }
