@@ -1,11 +1,11 @@
-use enigo::{Enigo, Keyboard};
 use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
 
 use worf_lib::config::Config;
+use worf_lib::desktop::spawn_fork;
 use worf_lib::gui::{ItemProvider, Key, KeyBinding, MenuItem, Modifier};
-use worf_lib::{Error, config, gui};
+use worf_lib::{config, gui};
 
 #[derive(Clone)]
 struct PasswordProvider {
@@ -52,6 +52,34 @@ impl ItemProvider<String> for PasswordProvider {
     }
 }
 
+fn groups() -> String {
+    let output = Command::new("groups")
+        .output()
+        .expect("Failed to get groups");
+    String::from_utf8_lossy(&output.stdout)
+        .trim_end()
+        .to_string()
+}
+
+fn keyboard_type(text: &str) {
+    Command::new("ydotool")
+        .arg("type")
+        .arg(text)
+        .output()
+        .expect("Failed to execute ydotool");
+}
+
+fn keyboard_tab() {
+    Command::new("ydotool")
+        .arg("key")
+        .arg("-d")
+        .arg("10")
+        .arg("15:1")
+        .arg("15:0")
+        .output()
+        .expect("Failed to execute ydotool");
+}
+
 fn rbw_get(name: &str, field: &str) -> String {
     let output = Command::new("rbw")
         .arg("get")
@@ -74,9 +102,22 @@ fn rbw_get_password(name: &str) -> String {
     rbw_get(name, "password")
 }
 
+fn rbw_get_totp(name: &str) -> String {
+    rbw_get(name, "totp")
+}
+
 fn main() -> anyhow::Result<()> {
+
     let args = config::parse_args();
     let config = config::load_config(Some(&args)).unwrap_or(args);
+    
+    if !groups().contains("input") {
+        eprintln!("User must be in input group. 'sudo usermod -aG input $USER', then login again");
+        std::process::exit(1)
+    }
+
+    // will exit if there is a daemon running already, so it's fine to call this everytime.
+    spawn_fork("ydotoold", None).expect("failed to spawn ydotoold");
 
     // todo eventually use a propper rust client for this, for now rbw is good enough
     let provider = PasswordProvider::new(&config);
@@ -90,13 +131,19 @@ fn main() -> anyhow::Result<()> {
     let type_user = KeyBinding {
         key: Key::Num2,
         modifiers: Modifier::Alt,
-        label: "<b>Alt+2</b> Type All".to_string(),
+        label: "<b>Alt+2</b> Type User".to_string(),
+    };
+
+    let type_password = KeyBinding {
+        key: Key::Num3,
+        modifiers: Modifier::Alt,
+        label: "<b>Alt+3</b> Type Password".to_string(),
     };
 
     let type_totp = KeyBinding {
-        key: Key::Num3,
+        key: Key::Num4,
         modifiers: Modifier::Alt,
-        label: "<b>Alt+3</b> Sync".to_string(),
+        label: "<b>Alt+3</b> Type Totp".to_string(),
     };
 
     let reload = KeyBinding {
@@ -142,26 +189,31 @@ fn main() -> anyhow::Result<()> {
         None,
         Some(vec![
             type_all.clone(),
-            type_user,
-            type_totp,
-            reload,
-            urls,
-            names,
-            folders,
-            totp,
-            lock,
+            type_user.clone(),
+            type_password.clone(),
+            type_totp.clone(),
+            reload.clone(),
+            urls.clone(),
+            names.clone(),
+            folders.clone(),
+            totp.clone(),
+            lock.clone(),
         ]),
     ) {
         Ok(selection) => {
-            let mut enigo = Enigo::new(&enigo::Settings::default())?;
             let id = selection.menu.label.replace("\n", "");
             sleep(Duration::from_millis(250));
             if let Some(key) = selection.custom_key {
-                if key.label == type_all.label {
-                    enigo.text(&rbw_get_user(&id))?;
-                    enigo.key(enigo::Key::Tab, enigo::Direction::Press)?;
-                    enigo.key(enigo::Key::Tab, enigo::Direction::Release)?;
-                    enigo.text(&rbw_get_password(&id))?;
+                if key == type_all {
+                    keyboard_type(&rbw_get_user(&id));
+                    keyboard_tab();
+                    keyboard_type(&rbw_get_password(&id));
+                } else if key == type_user {
+                    keyboard_type(&rbw_get_user(&id));
+                } else if key == type_password {
+                    keyboard_type(&rbw_get_password(&id));
+                } else if key == type_totp {
+                    keyboard_type(&rbw_get_totp(&id));
                 }
             }
         }
