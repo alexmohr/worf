@@ -953,24 +953,13 @@ where
     T: Clone + Send,
 {
     if let Some(selected_item) = item {
-        close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
-        if let Err(e) = meta.selected_sender.send(Ok(Selection {
-            menu: selected_item.clone(),
-            custom_key: custom_key.map(|k| k.clone()),
-        })) {
-            log::error!("failed to send message {e}");
-        }
-
-        close_gui(&ui.app);
+        send_selected_item(&ui, meta, custom_key, &selected_item);
         return Ok(());
     } else if let Some(s) = ui.main_box.selected_children().into_iter().next() {
         let list_items = ui.menu_rows.lock().unwrap();
         let item = list_items.get(&s);
-        if let Some(item) = item {
-            if let Err(e) = meta.selected_sender.send(Ok(item.clone())) {
-                log::error!("failed to send message {e}");
-            }
-            close_gui(&ui.app);
+        if let Some(selected_item) = item {
+            send_selected_item(&ui, meta, custom_key, selected_item);
             return Ok(());
         }
     }
@@ -988,16 +977,23 @@ where
             visible: true,
         };
 
-        if let Err(e) = meta.selected_sender.send(Ok(Selection {
-            menu: item.clone(),
-            custom_key: custom_key.map(|k| k.clone()),
-        })) {
-            log::error!("failed to send message {e}");
-        }
-        close_gui(&ui.app);
+        send_selected_item(&ui, meta, custom_key, &item);
         Ok(())
     } else {
         Err("selected item cannot be resolved".to_owned())
+    }
+}
+
+fn send_selected_item<T>(ui: &&UiElements<T>, meta: &MetaData<T>, custom_key: Option<&KeyBinding>, selected_item: &MenuItem<T>)
+where
+    T: Clone + Send
+{
+    close_gui(&ui.app);
+    if let Err(e) = meta.selected_sender.send(Ok(Selection {
+        menu: selected_item.clone(),
+        custom_key: custom_key.cloned(),
+    })) {
+        log::error!("failed to send message {e}");
     }
 }
 

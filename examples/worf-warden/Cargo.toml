@@ -7,3 +7,8 @@ edition = "2024"
 worf = {path = "../../worf"}
 enigo = "0.3.0"
 anyhow = "1.0.98"
+
+# todo re-add this
+#[features]
+#default = []  # nothing enabled by default
+#warden = ["worf-warden"]
