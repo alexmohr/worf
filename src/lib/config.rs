@@ -325,16 +325,6 @@ pub struct Config {
     #[clap(long = "row-box-orientation")]
     row_bow_orientation: Option<Orientation>,
 
-    /// Defines how long it takes for the show animation to finish
-    /// Defaults to 70ms
-    #[clap(long = "show-animation-time")]
-    show_animation_time: Option<u64>,
-
-    /// Defines how long it takes for the hide animation to finish
-    /// Defaults to 100ms
-    #[clap(long = "hide-animation-time")]
-    hide_animation_time: Option<u64>,
-
     #[clap(long = "line-wrap")]
     line_wrap: Option<WrapMode>,
 }
@@ -436,15 +426,6 @@ impl Config {
         self.width.clone().unwrap_or("50%".to_owned())
     }
 
-    #[must_use]
-    pub fn show_animation_time(&self) -> u64 {
-        self.show_animation_time.unwrap_or(10)
-    }
-
-    #[must_use]
-    pub fn hide_animation_time(&self) -> u64 {
-        self.hide_animation_time.unwrap_or(10)
-    }
     #[must_use]
     pub fn row_bow_orientation(&self) -> Orientation {
         self.row_bow_orientation.unwrap_or(Orientation::Horizontal)
