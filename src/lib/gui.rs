@@ -8,7 +8,7 @@ use crossbeam::channel;
 use crossbeam::channel::Sender;
 use gdk4::gio::File;
 use gdk4::glib::{Propagation, timeout_add_local};
-use gdk4::prelude::{Cast, DisplayExt, MonitorExt};
+use gdk4::prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt};
 use gdk4::{Display, Key};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
@@ -296,11 +296,23 @@ fn build_ui<T, P>(
     log::debug!("got items after {:?}", wait_for_items.elapsed());
     build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
 
+    let animate_cfg = config.clone();
+    let animate_window = ui_elements.window.clone();
+    timeout_add_local(Duration::from_millis(5), move || {
+        if !animate_window.is_active() {
+            return ControlFlow::Continue;
+        }
+        animate_window.set_opacity(1.0);
+        window_show_resize(&animate_cfg.clone(), &animate_window);
+        ControlFlow::Break
+    });
+
+    // hide the fact that we are starting with a small window
+    ui_elements.window.set_opacity(0.01);
     let window_start = Instant::now();
-    ui_elements.window.show();
+    ui_elements.window.present();
     log::debug!("window show took {:?}", window_start.elapsed());
 
-    animate_window_show(config, ui_elements.window.clone());
     log::debug!("Building UI took {:?}", start.elapsed(),);
 }
 
@@ -473,7 +485,7 @@ fn handle_key_press<T: Clone + 'static>(
             if let Err(e) = meta.selected_sender.send(Err(Error::NoSelection)) {
                 log::error!("failed to send message {e}");
             }
-            close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
+            close_gui(&ui.app);
         }
         Key::Return => {
             let search_lock = ui.search_text.lock().unwrap();
@@ -580,11 +592,9 @@ fn sort_menu_items_by_score<T: Clone>(
     }
 }
 
-fn animate_window_show(config: &Config, window: ApplicationWindow) {
+fn window_show_resize(config: &Config, window: &ApplicationWindow) {
     if let Some(surface) = window.surface() {
-        let display = window.display();
-
-        // todo this does not work for multi monitor systems
+        let display = surface.display();
         let monitor = display.monitor_at_surface(&surface);
         if let Some(monitor) = monitor {
             let geometry = monitor.geometry();
@@ -601,117 +611,14 @@ fn animate_window_show(config: &Config, window: ApplicationWindow) {
                 "monitor geometry: {geometry:?}, target_height {target_height}, target_width {target_width}"
             );
 
-            let animation_start = Instant::now();
-            animate_window(
-                window,
-                config.show_animation_time(),
-                target_height,
-                target_width,
-                move || {
-                    log::debug!("animation done after {:?}", animation_start.elapsed());
-                },
-            );
-        }
-    }
-}
-fn animate_window_close<Func>(config: &Config, window: ApplicationWindow, on_done_func: Func)
-where
-    Func: Fn() + 'static,
-{
-    // todo the target size might not work for higher dpi displays or bigger resolutions
-    window.set_child(Widget::NONE);
-
-    animate_window(window, config.hide_animation_time(), 10, 10, on_done_func);
-}
-
-fn ease_in_out_cubic(t: f32) -> f32 {
-    if t < 0.7 {
-        10.0 * t * t * t
-    } else {
-        1.0 - (-2.0 * t + 2.0).powi(3)
-    }
-}
-
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_precision_loss)]
-fn animate_window<Func>(
-    window: ApplicationWindow,
-    animation_time: u64,
-    target_height: i32,
-    target_width: i32,
-    on_done_func: Func,
-) where
-    Func: Fn() + 'static,
-{
-    if animation_time == 0 {
-        window.set_width_request(target_width);
-        window.set_height_request(target_height);
-        on_done_func();
-        return;
-    }
-
-    let allocation = window.allocation();
-
-    // Define animation parameters
-    let animation_step_length = Duration::from_millis(20);
-
-    // Start positions (initial window dimensions)
-    let start_width = allocation.width() as f32;
-    let start_height = allocation.height() as f32;
-
-    // Calculate the change in width and height
-    let delta_width = target_width as f32 - start_width;
-    let delta_height = target_height as f32 - start_height;
-
-    // Animation time starts when the timeout is ran for the first time
-    let mut start_time: Option<Instant> = None;
-
-    let mut last_t = 0.0;
-
-    let before_animation = Instant::now();
-    timeout_add_local(animation_step_length, move || {
-        if !window.is_visible() {
-            return ControlFlow::Continue;
-        }
-        let start_time = start_time.unwrap_or_else(|| {
-            let now = Instant::now();
-            start_time = Some(now);
-            log::debug!("animation started after {:?}", before_animation.elapsed());
-            now
-        });
-
-        let elapsed_us = start_time.elapsed().as_micros() as f32;
-        let t = (elapsed_us / (animation_time * 1000) as f32).min(1.0);
-
-        // Skip if there's no meaningful change in progress
-        if (t - last_t).abs() < 0.001 && t < 1.0 {
-            return ControlFlow::Continue;
-        }
-        last_t = t;
-
-        let eased_t = ease_in_out_cubic(t);
-
-        let current_width = start_width + delta_width * eased_t;
-        let current_height = start_height + delta_height * eased_t;
-
-        let rounded_width = current_width.round() as i32;
-        let rounded_height = current_height.round() as i32;
-
-        if t >= 1.0 || rounded_height > target_height || rounded_width > target_width {
             window.set_width_request(target_width);
             window.set_height_request(target_height);
-            on_done_func();
-            ControlFlow::Break
-        } else {
-            window.set_width_request(rounded_width);
-            window.set_height_request(rounded_height);
-            ControlFlow::Continue
         }
-    });
+    }
 }
 
-fn close_gui(app: Application, window: ApplicationWindow, config: &Config) {
-    animate_window_close(config, window, move || app.quit());
+fn close_gui(app: &Application) {
+    app.quit();
 }
 
 fn handle_selected_item<T>(
@@ -729,7 +636,7 @@ where
             log::error!("failed to send message {e}");
         }
 
-        close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
+        close_gui(&ui.app);
         return Ok(());
     } else if let Some(s) = ui.main_box.selected_children().into_iter().next() {
         let list_items = ui.menu_rows.lock().unwrap();
@@ -738,7 +645,7 @@ where
             if let Err(e) = meta.selected_sender.send(Ok(item.clone())) {
                 log::error!("failed to send message {e}");
             }
-            close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
+            close_gui(&ui.app);
             return Ok(());
         }
     }
@@ -759,7 +666,7 @@ where
         if let Err(e) = meta.selected_sender.send(Ok(item.clone())) {
             log::error!("failed to send message {e}");
         }
-        close_gui(ui.app.clone(), ui.window.clone(), &meta.config);
+        close_gui(&ui.app);
         Ok(())
     } else {
         Err("selected item cannot be resolved".to_owned())
