@@ -1917,6 +1917,7 @@ name = "worf-warden"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "env_logger",
  "worf",
 ]
 
