@@ -8,7 +8,7 @@ use crossbeam::channel;
 use crossbeam::channel::Sender;
 use gdk4::Display;
 use gdk4::gio::File;
-use gdk4::glib::{Propagation, timeout_add_local};
+use gdk4::glib::{Propagation, timeout_add_local, MainContext};
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
@@ -454,7 +454,15 @@ where
 
     let gtk_args: [&str; 0] = [];
     app.run_with_args(&gtk_args);
-    receiver.recv().map_err(|e| Error::Io(e.to_string()))?
+    // Use glib's MainContext to handle the receiver asynchronously
+    let main_context = MainContext::default();
+    let receiver_result = main_context.block_on(async {
+        MainContext::default().spawn_local(async move {
+            receiver.recv().map_err(|e| Error::Io(e.to_string()))
+        }).await.unwrap_or_else(|e| Err(Error::Io(e.to_string())))
+    });
+
+    receiver_result?
 }
 
 fn build_ui<T, P>(
@@ -788,8 +796,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
             {
                 let search_lock = ui.search_text.lock().unwrap();
                 if let Err(e) = handle_selected_item(
-                    ui,
-                    meta,
+                    ui.clone(),
+                    meta.clone(),
                     Some(&search_lock),
                     None,
                     meta.new_on_empty,
@@ -811,7 +819,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
         gdk4::Key::Return => {
             let search_lock = ui.search_text.lock().unwrap();
             if let Err(e) =
-                handle_selected_item(ui, meta, Some(&search_lock), None, meta.new_on_empty, None)
+                handle_selected_item(ui.clone(), meta.clone(), Some(&search_lock), None, meta.new_on_empty, None)
             {
                 log::error!("{e}");
             }
@@ -942,25 +950,25 @@ fn close_gui(app: &Application) {
 }
 
 fn handle_selected_item<T>(
-    ui: &UiElements<T>,
-    meta: &MetaData<T>,
+    ui: Rc<UiElements<T>>,
+    meta: Rc<MetaData<T>>,
     query: Option<&str>,
     item: Option<MenuItem<T>>,
     new_on_empty: bool,
     custom_key: Option<&KeyBinding>,
 ) -> Result<(), String>
 where
-    T: Clone + Send,
+    T: Clone + Send +'static,
 {
     if let Some(selected_item) = item {
-        send_selected_item(ui, meta, custom_key, &selected_item);
+        send_selected_item(ui, meta, custom_key.map(|c| c.clone()), selected_item);
         return Ok(());
     } else if let Some(s) = ui.main_box.selected_children().into_iter().next() {
         let list_items = ui.menu_rows.lock().unwrap();
         let item = list_items.get(&s);
         if let Some(selected_item) = item {
             if selected_item.visible {
-                send_selected_item(ui, meta, custom_key, selected_item);
+                send_selected_item(ui.clone(), meta, custom_key.map(|c| c.clone()), selected_item.clone());
                 return Ok(());
             }
         }
@@ -979,7 +987,7 @@ where
             visible: true,
         };
 
-        send_selected_item(ui, meta, custom_key, &item);
+        send_selected_item(ui, meta, custom_key.map(|c| c.clone()), item);
         Ok(())
     } else {
         Err("selected item cannot be resolved".to_owned())
@@ -987,21 +995,24 @@ where
 }
 
 fn send_selected_item<T>(
-    ui: &UiElements<T>,
-    meta: &MetaData<T>,
-    custom_key: Option<&KeyBinding>,
-    selected_item: &MenuItem<T>,
+    ui: Rc<UiElements<T>>,
+    meta: Rc<MetaData<T>>,
+    custom_key: Option<KeyBinding>,
+    selected_item: MenuItem<T>,
 ) where
-    T: Clone + Send,
+    T: Clone + Send + 'static,
 {
-    ui.window.close();
-    if let Err(e) = meta.selected_sender.send(Ok(Selection {
-        menu: selected_item.clone(),
-        custom_key: custom_key.cloned(),
-    })) {
-        log::error!("failed to send message {e}");
-    }
-    close_gui(&ui.app);
+    let ui_clone = Rc::clone(&ui);
+    ui.window.connect_hide(move |w| {
+        if let Err(e) = meta.selected_sender.send(Ok(Selection {
+            menu: selected_item.clone(),
+            custom_key: custom_key.clone(),
+        })) {
+            log::error!("failed to send message {e}");
+        }
+    });
+    ui.window.hide();
+    close_gui(&ui_clone.app);
 }
 
 fn add_menu_item<T: Clone + 'static + Send>(
@@ -1108,8 +1119,8 @@ fn create_menu_row<T: Clone + 'static + Send>(
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
         if n_press == 2 {
             if let Err(e) = handle_selected_item(
-                click_ui.as_ref(),
-                click_meta.as_ref(),
+                click_ui.clone(),
+                click_meta.clone(),
                 None,
                 Some(element_clone.clone()),
                 false,
