@@ -1,12 +1,13 @@
 #!/bin/bash
 
 # A list of options, one per line
-options="Option 1
-Option 2
-Option 3"
+options=""
+for i in $(seq 1 2000); do
+  options+="Option $i"$'\n'
+done
 
 # Pipe options to wofi and capture the selection
-selection=$(echo "$options" | cargo run -- --show dmenu)
+selection=$(echo "$options" | cargo run --bin worf -- --show dmenu --sort-order default)
 #selection=$(echo "$options" | wofi --show dmenu)
 
 # Do something with the selection

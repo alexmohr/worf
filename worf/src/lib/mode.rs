@@ -598,6 +598,7 @@ impl DMenuProvider {
             .lines()
             .map(String::from)
             .map(|s| MenuItem::new(s.clone(), None, None, vec![], None, 0.0, None))
+            .rev()
             .collect();
 
         gui::apply_sort(&mut items, sort_order);
