@@ -8,7 +8,7 @@ use crossbeam::channel;
 use crossbeam::channel::Sender;
 use gdk4::Display;
 use gdk4::gio::File;
-use gdk4::glib::{Propagation, timeout_add_local, MainContext};
+use gdk4::glib::{MainContext, Propagation, timeout_add_local};
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
@@ -457,9 +457,10 @@ where
     // Use glib's MainContext to handle the receiver asynchronously
     let main_context = MainContext::default();
     let receiver_result = main_context.block_on(async {
-        MainContext::default().spawn_local(async move {
-            receiver.recv().map_err(|e| Error::Io(e.to_string()))
-        }).await.unwrap_or_else(|e| Err(Error::Io(e.to_string())))
+        MainContext::default()
+            .spawn_local(async move { receiver.recv().map_err(|e| Error::Io(e.to_string())) })
+            .await
+            .unwrap_or_else(|e| Err(Error::Io(e.to_string())))
     });
 
     receiver_result?
@@ -566,14 +567,7 @@ fn build_ui<T, P>(
 
     let animate_cfg = config.clone();
     let animate_window = ui_elements.window.clone();
-    // timeout_add_local(Duration::from_millis(1), move || {
-    //     if !animate_window.is_active() {
-    //         return ControlFlow::Continue;
-    //     }
-    //     animate_window.set_opacity(1.0);
-    //     window_show_resize(&animate_cfg.clone(), &animate_window);
-    //     ControlFlow::Break
-    // });
+
     animate_window.connect_is_active_notify(move |w| {
         w.set_opacity(1.0);
         window_show_resize(&animate_cfg.clone(), w);
@@ -822,9 +816,14 @@ fn handle_key_press<T: Clone + 'static + Send>(
         }
         gdk4::Key::Return => {
             let search_lock = ui.search_text.lock().unwrap();
-            if let Err(e) =
-                handle_selected_item(ui.clone(), meta.clone(), Some(&search_lock), None, meta.new_on_empty, None)
-            {
+            if let Err(e) = handle_selected_item(
+                ui.clone(),
+                meta.clone(),
+                Some(&search_lock),
+                None,
+                meta.new_on_empty,
+                None,
+            ) {
                 log::error!("{e}");
             }
         }
@@ -962,7 +961,7 @@ fn handle_selected_item<T>(
     custom_key: Option<&KeyBinding>,
 ) -> Result<(), String>
 where
-    T: Clone + Send +'static,
+    T: Clone + Send + 'static,
 {
     if let Some(selected_item) = item {
         send_selected_item(ui, meta, custom_key.map(|c| c.clone()), selected_item);
@@ -972,7 +971,12 @@ where
         let item = list_items.get(&s);
         if let Some(selected_item) = item {
             if selected_item.visible {
-                send_selected_item(ui.clone(), meta, custom_key.map(|c| c.clone()), selected_item.clone());
+                send_selected_item(
+                    ui.clone(),
+                    meta,
+                    custom_key.map(|c| c.clone()),
+                    selected_item.clone(),
+                );
                 return Ok(());
             }
         }
@@ -1213,7 +1217,7 @@ fn set_menu_visibility_for_search<T: Clone>(
     if config.sort_order() == SortOrder::Default {
         return;
     }
-    
+
     {
         if query.is_empty() {
             for (fb, menu_item) in items.iter_mut() {

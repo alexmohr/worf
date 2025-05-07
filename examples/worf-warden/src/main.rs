@@ -1,5 +1,4 @@
-use anyhow::anyhow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
 use std::process::Command;
 use std::thread::sleep;
@@ -26,65 +25,71 @@ fn split_at_tab(input: &str) -> Option<(&str, &str)> {
 
 impl PasswordProvider {
     fn new(config: &Config) -> Self {
-        let output = Command::new("rbw")
-            .arg("list")
-            .arg("--fields")
-            .arg("id,name")
-            .output()
-            .expect("Failed to execute command");
+        let output = rbw("list", Some(vec!["--fields", "id,name"]));
+        let items = match output {
+            Ok(output) => {
+                let mut items = output
+                    .lines()
+                    .filter_map(|s| split_at_tab(s))
+                    .fold(
+                        HashMap::new(),
+                        |mut acc: HashMap<String, Vec<String>>, (id, name)| {
+                            acc.entry(name.to_owned()).or_default().push(id.to_owned());
+                            acc
+                        },
+                    )
+                    .iter()
+                    .map(|(key, value)| {
+                        MenuItem::new(
+                            key.clone(),
+                            None,
+                            None,
+                            vec![],
+                            None,
+                            0.0,
+                            Some(MenuItemMetaData { ids: value.clone() }),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                gui::apply_sort(&mut items, &config.sort_order());
+                items
+            }
+            Err(error) => {
+                let item = MenuItem::new(
+                    format!("Error from rbw: {error}"),
+                    None,
+                    None,
+                    vec![],
+                    None,
+                    0.0,
+                    None,
+                );
+                vec![item]
+            }
+        };
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        Self { items }
+    }
 
-        let mut items = stdout
-            .lines()
-            .filter_map(|s| split_at_tab(s))
-            .fold(
-                HashMap::new(),
-                |mut acc: HashMap<String, Vec<String>>, (id, name)| {
-                    acc.entry(name.to_owned()).or_default().push(id.to_owned());
-                    acc
-                },
-            )
+    fn sub_provider(ids: Vec<String>) -> Result<Self, String> {
+        let items = ids
             .iter()
-            .map(|(key, value)| {
-                MenuItem::new(
-                    key.clone(),
+            .map(|id| {
+                Ok(MenuItem::new(
+                    rbw_get_user(id, false)?,
                     None,
                     None,
                     vec![],
                     None,
                     0.0,
                     Some(MenuItemMetaData {
-                        ids: value.clone(),
+                        ids: vec![id.clone()],
                     }),
-                )
+                ))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, String>>()?;
 
-        gui::apply_sort(&mut items, &config.sort_order());
-
-        Self { items }
-    }
-
-    fn sub_provider(ids: Vec<String>) -> Self {
-        Self {
-            items: ids
-                .iter()
-                .map(|id| {
-                    MenuItem::new(
-                        rbw_get_user(id),
-                        None,
-                        None,
-                        vec![],
-                        None,
-                        0.0,
-                        Some(MenuItemMetaData {
-                            ids: vec![id.clone()],
-                        }),
-                    )
-                })
-                .collect::<Vec<_>>(),
-        }
+        Ok(Self { items })
     }
 }
 
@@ -122,44 +127,63 @@ fn keyboard_tab() {
     Command::new("ydotool")
         .arg("key")
         .arg("-d")
-        .arg("10")
+        .arg("50")
         .arg("15:1")
         .arg("15:0")
         .output()
         .expect("Failed to execute ydotool");
 }
 
-fn rbw_get(id: &str, field: &str) -> String {
-    let output = Command::new("rbw")
-        .arg("get")
-        .arg(id)
-        .arg("--field")
-        .arg(field)
+fn rbw(cmd: &str, args: Option<Vec<&str>>) -> Result<String, String> {
+    let mut command = Command::new("rbw");
+    command.arg(cmd);
+
+    if let Some(args) = args {
+        for arg in args {
+            command.arg(arg);
+        }
+    }
+
+    let output = command
         .output()
-        .expect("Failed to execute command");
+        .map_err(|e| format!("Failed to execute command: {}", e))?;
 
-    String::from_utf8_lossy(&output.stdout)
-        .trim_end()
-        .to_string()
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("rbw command failed: {}", stderr.trim()));
+    }
+
+    let stdout =
+        String::from_utf8(output.stdout).map_err(|e| format!("Invalid UTF-8 output: {}", e))?;
+
+    Ok(stdout.trim().to_string())
 }
 
-fn rbw_get_user(id: &str) -> String {
-    rbw_get(id, "user")
+fn rbw_get(id: &str, field: &str, copy: bool) -> Result<String, String> {
+    let mut args = vec![id, "--field", field];
+    if copy {
+        args.push("--clipboard");
+    }
+    rbw("get", Some(args))
 }
 
-fn rbw_get_password(id: &str) -> String {
-    rbw_get(id, "password")
+fn rbw_get_user(id: &str, copy: bool) -> Result<String, String> {
+    rbw_get(id, "user", copy)
 }
 
-fn rbw_get_totp(id: &str) -> String {
-    rbw_get(id, "totp")
+fn rbw_get_password(id: &str, copy: bool) -> Result<String, String> {
+    rbw_get(id, "password", copy)
+}
+
+fn rbw_get_totp(id: &str, copy: bool) -> Result<String, String> {
+    rbw_get(id, "totp", copy)
 }
 
 fn key_type_all() -> KeyBinding {
     KeyBinding {
         key: Key::Num1,
         modifiers: Modifier::Alt,
-        label: "<b>Alt+1</b> Type User".to_string(),
+        label: "<b>Alt+1</b> Type All".to_string(),
     }
 }
 
@@ -183,11 +207,11 @@ fn key_type_totp() -> KeyBinding {
     KeyBinding {
         key: Key::Num4,
         modifiers: Modifier::Alt,
-        label: "<b>Alt+3</b> Type Totp".to_string(),
+        label: "<b>Alt+4</b> Type Totp".to_string(),
     }
 }
 
-fn key_reload() -> KeyBinding {
+fn key_sync() -> KeyBinding {
     KeyBinding {
         key: Key::R,
         modifiers: Modifier::Alt,
@@ -199,7 +223,7 @@ fn key_urls() -> KeyBinding {
     KeyBinding {
         key: Key::U,
         modifiers: Modifier::Alt,
-        label: "<b>Alt+u</b> Sync".to_string(),
+        label: "<b>Alt+u</b> Urls".to_string(),
     }
 }
 
@@ -207,7 +231,7 @@ fn key_names() -> KeyBinding {
     KeyBinding {
         key: Key::N,
         modifiers: Modifier::Alt,
-        label: "<b>Alt+n</b> Sync".to_string(),
+        label: "<b>Alt+n</b> NAmes".to_string(),
     }
 }
 
@@ -215,15 +239,16 @@ fn key_folders() -> KeyBinding {
     KeyBinding {
         key: Key::C,
         modifiers: Modifier::Alt,
-        label: "<b>Alt+c</b> Sync".to_string(),
+        label: "<b>Alt+c</b> Folders".to_string(),
     }
 }
 
+/// copies totp to clipboard
 fn key_totp() -> KeyBinding {
     KeyBinding {
         key: Key::T,
         modifiers: Modifier::Alt,
-        label: "<b>Alt+t</b> Sync".to_string(),
+        label: "<b>Alt+t</b> Totp".to_string(),
     }
 }
 
@@ -231,11 +256,11 @@ fn key_lock() -> KeyBinding {
     KeyBinding {
         key: Key::L,
         modifiers: Modifier::Alt,
-        label: "<b>Alt+l</b> Sync".to_string(),
+        label: "<b>Alt+l</b> Lock".to_string(),
     }
 }
 
-fn show(config: Config, provider: PasswordProvider) -> anyhow::Result<()> {
+fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
     match gui::show(
         config.clone(),
         provider,
@@ -246,7 +271,7 @@ fn show(config: Config, provider: PasswordProvider) -> anyhow::Result<()> {
             key_type_user(),
             key_type_password(),
             key_type_totp(),
-            key_reload(),
+            key_sync(),
             key_urls(),
             key_names(),
             key_folders(),
@@ -257,35 +282,49 @@ fn show(config: Config, provider: PasswordProvider) -> anyhow::Result<()> {
         Ok(selection) => {
             if let Some(meta) = selection.menu.data {
                 if meta.ids.len() > 1 {
-                    return show(config, PasswordProvider::sub_provider(meta.ids));
+                    return show(config, PasswordProvider::sub_provider(meta.ids)?);
                 }
 
-                let id = meta.ids.iter().next().unwrap_or(&selection.menu.label);
+                let id = meta.ids.first().unwrap_or(&selection.menu.label);
 
                 sleep(Duration::from_millis(250));
                 if let Some(key) = selection.custom_key {
                     if key == key_type_all() {
-                        keyboard_type(&rbw_get_user(&id));
+                        keyboard_type(&rbw_get_user(id, false)?);
                         keyboard_tab();
-                        keyboard_type(&rbw_get_password(&id));
+                        keyboard_type(&rbw_get_password(id, false)?);
                     } else if key == key_type_user() {
-                        keyboard_type(&rbw_get_user(&id));
+                        keyboard_type(&rbw_get_user(id, false)?);
                     } else if key == key_type_password() {
-                        keyboard_type(&rbw_get_password(&id));
+                        keyboard_type(&rbw_get_password(id, false)?);
                     } else if key == key_type_totp() {
-                        keyboard_type(&rbw_get_totp(&id));
+                        keyboard_type(&rbw_get_totp(id, false)?);
+                    } else if key == key_lock() {
+                        rbw("lock", None)?;
+                    } else if key == key_sync() {
+                        rbw("sync", None)?;
+                    } else if key == key_urls() {
+                        todo!("key urls");
+                    } else if key == key_names() {
+                        todo!("key names");
+                    } else if key == key_folders() {
+                        todo!("key folders");
+                    } else if key == key_totp() {
+                        rbw_get_totp(id, true)?;
                     }
+                } else {
+                    rbw_get_password(id, true)?;
                 }
                 Ok(())
             } else {
-                Err(anyhow!("missing meta data"))
+                Err("missing meta data".to_owned())
             }
         }
-        Err(e) => return Err(anyhow::anyhow!(e)),
+        Err(e) => Err(e.to_string()),
     }
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), String> {
     env_logger::Builder::new()
         .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
         .format_timestamp_micros()
