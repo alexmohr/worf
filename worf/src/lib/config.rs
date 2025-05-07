@@ -43,7 +43,7 @@ pub enum WrapMode {
     Inherit,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum SortOrder {
     Default,
     Alphabetical,

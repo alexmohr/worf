@@ -589,20 +589,19 @@ struct DMenuProvider {
 
 impl DMenuProvider {
     fn new(sort_order: &SortOrder) -> Result<DMenuProvider, Error> {
+        log::debug!("parsing stdin");
         let mut input = String::new();
         io::stdin()
             .read_to_string(&mut input)
-            .map_err(|_| Error::StdInReadFail)?;
+            .expect("Failed to read from stdin");
 
         let mut items: Vec<MenuItem<String>> = input
             .lines()
-            .map(String::from)
-            .map(|s| MenuItem::new(s.clone(), None, None, vec![], None, 0.0, None))
             .rev()
+            .map(|s| MenuItem::new(s.to_string(), None, None, vec![], None, 0.0, None))
             .collect();
-
+        log::debug!("parsed stdin");
         gui::apply_sort(&mut items, sort_order);
-
         Ok(Self { items })
     }
 }

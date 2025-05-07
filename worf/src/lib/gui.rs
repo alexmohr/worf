@@ -566,13 +566,17 @@ fn build_ui<T, P>(
 
     let animate_cfg = config.clone();
     let animate_window = ui_elements.window.clone();
-    timeout_add_local(Duration::from_millis(5), move || {
-        if !animate_window.is_active() {
-            return ControlFlow::Continue;
-        }
-        animate_window.set_opacity(1.0);
-        window_show_resize(&animate_cfg.clone(), &animate_window);
-        ControlFlow::Break
+    // timeout_add_local(Duration::from_millis(1), move || {
+    //     if !animate_window.is_active() {
+    //         return ControlFlow::Continue;
+    //     }
+    //     animate_window.set_opacity(1.0);
+    //     window_show_resize(&animate_cfg.clone(), &animate_window);
+    //     ControlFlow::Break
+    // });
+    animate_window.connect_is_active_notify(move |w| {
+        w.set_opacity(1.0);
+        window_show_resize(&animate_cfg.clone(), w);
     });
 
     // hide the fact that we are starting with a small window
@@ -1206,6 +1210,10 @@ fn set_menu_visibility_for_search<T: Clone>(
     config: &Config,
     search_ignored_words: Option<&Vec<Regex>>,
 ) {
+    if config.sort_order() == SortOrder::Default {
+        return;
+    }
+    
     {
         if query.is_empty() {
             for (fb, menu_item) in items.iter_mut() {
