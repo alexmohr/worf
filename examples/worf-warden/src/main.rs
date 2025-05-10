@@ -125,11 +125,7 @@ fn keyboard_type(text: &str) {
 
 fn keyboard_tab() {
     Command::new("ydotool")
-        .arg("key")
-        .arg("-d")
-        .arg("50")
-        .arg("15:1")
-        .arg("15:0")
+        .arg("TAB")
         .output()
         .expect("Failed to execute ydotool");
 }
@@ -334,7 +330,7 @@ fn main() -> Result<(), String> {
     let config = config::load_config(Some(&args)).unwrap_or(args);
 
     if !groups().contains("input") {
-        eprintln!("User must be in input group. 'sudo usermod -aG input $USER', then login again");
+        log::error!("User must be in input group. 'sudo usermod -aG input $USER', then login again");
         std::process::exit(1)
     }
 

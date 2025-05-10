@@ -1,5 +1,15 @@
 use std::fmt;
 
+/// Configuration and command line parsing
+pub mod config;
+/// Desktop action like parsing desktop files and launching programs
+pub mod desktop;
+/// All things related to the user interface
+pub mod gui;
+/// Out of the box supported modes, like drun, dmenu, etc...
+pub mod modes;
+
+
 /// Defines error the lib can encounter
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -64,12 +74,3 @@ impl fmt::Display for Error {
         }
     }
 }
-
-/// Configuration and command line parsing
-pub mod config;
-/// Desktop action like parsing desktop files and launching programs
-pub mod desktop;
-/// All things related to the user interface
-pub mod gui;
-/// Out of the box supported modes, like drun, dmenu, etc...
-pub mod mode;
