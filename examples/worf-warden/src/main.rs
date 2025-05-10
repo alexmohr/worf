@@ -4,7 +4,7 @@ use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
 use worf_lib::config::Config;
-use worf_lib::desktop::spawn_fork;
+use worf_lib::desktop::{copy_to_clipboard, spawn_fork};
 use worf_lib::gui::{ItemProvider, Key, KeyBinding, MenuItem, Modifier};
 use worf_lib::{config, gui};
 
@@ -215,30 +215,6 @@ fn key_sync() -> KeyBinding {
     }
 }
 
-fn key_urls() -> KeyBinding {
-    KeyBinding {
-        key: Key::U,
-        modifiers: Modifier::Alt,
-        label: "<b>Alt+u</b> Urls".to_string(),
-    }
-}
-
-fn key_names() -> KeyBinding {
-    KeyBinding {
-        key: Key::N,
-        modifiers: Modifier::Alt,
-        label: "<b>Alt+n</b> NAmes".to_string(),
-    }
-}
-
-fn key_folders() -> KeyBinding {
-    KeyBinding {
-        key: Key::C,
-        modifiers: Modifier::Alt,
-        label: "<b>Alt+c</b> Folders".to_string(),
-    }
-}
-
 /// copies totp to clipboard
 fn key_totp() -> KeyBinding {
     KeyBinding {
@@ -268,9 +244,6 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
             key_type_password(),
             key_type_totp(),
             key_sync(),
-            key_urls(),
-            key_names(),
-            key_folders(),
             key_totp(),
             key_lock(),
         ]),
@@ -299,17 +272,14 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
                         rbw("lock", None)?;
                     } else if key == key_sync() {
                         rbw("sync", None)?;
-                    } else if key == key_urls() {
-                        todo!("key urls");
-                    } else if key == key_names() {
-                        todo!("key names");
-                    } else if key == key_folders() {
-                        todo!("key folders");
                     } else if key == key_totp() {
                         rbw_get_totp(id, true)?;
                     }
                 } else {
-                    rbw_get_password(id, true)?;
+                    let pw = rbw_get_password(id, true)?;
+                    if let Err(e) = copy_to_clipboard(pw, None) {
+                        log::error!("failed to copy to clipboard: {e}");
+                    }
                 }
                 Ok(())
             } else {
@@ -330,7 +300,9 @@ fn main() -> Result<(), String> {
     let config = config::load_config(Some(&args)).unwrap_or(args);
 
     if !groups().contains("input") {
-        log::error!("User must be in input group. 'sudo usermod -aG input $USER', then login again");
+        log::error!(
+            "User must be in input group. 'sudo usermod -aG input $USER', then login again"
+        );
         std::process::exit(1)
     }
 

@@ -1,14 +1,14 @@
-use regex::Regex;
 use crate::config::Config;
 use crate::desktop::{copy_to_clipboard, spawn_fork};
-use crate::{gui, Error};
 use crate::gui::{ItemProvider, MenuItem};
-use crate::modes::math::MathProvider;
-use crate::modes::drun::{update_drun_cache_and_run, DRunProvider};
+use crate::modes::drun::{DRunProvider, update_drun_cache_and_run};
 use crate::modes::emoji::EmojiProvider;
 use crate::modes::file::FileItemProvider;
+use crate::modes::math::MathProvider;
 use crate::modes::ssh;
 use crate::modes::ssh::SshProvider;
+use crate::{Error, gui};
+use regex::Regex;
 
 #[derive(Debug, Clone, PartialEq)]
 enum AutoRunType {
@@ -78,19 +78,17 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
             _ => return self.default_auto_elements(search_opt),
         };
 
-        let (mode, (changed, items)) =
-            if contains_math_functions_or_starts_with_number(search) {
-                (AutoRunType::Math, self.math.get_elements(search_opt))
-            } else if search.starts_with('$') || search.starts_with('/') || search.starts_with('~')
-            {
-                (AutoRunType::File, self.file.get_elements(search_opt))
-            } else if search.starts_with("ssh") {
-                (AutoRunType::Ssh, self.ssh.get_elements(search_opt))
-            } else if search.starts_with("emoji") {
-                (AutoRunType::Emoji, self.emoji.get_elements(search_opt))
-            } else {
-                return self.default_auto_elements(search_opt);
-            };
+        let (mode, (changed, items)) = if contains_math_functions_or_starts_with_number(search) {
+            (AutoRunType::Math, self.math.get_elements(search_opt))
+        } else if search.starts_with('$') || search.starts_with('/') || search.starts_with('~') {
+            (AutoRunType::File, self.file.get_elements(search_opt))
+        } else if search.starts_with("ssh") {
+            (AutoRunType::Ssh, self.ssh.get_elements(search_opt))
+        } else if search.starts_with("emoji") {
+            (AutoRunType::Emoji, self.emoji.get_elements(search_opt))
+        } else {
+            return self.default_auto_elements(search_opt);
+        };
 
         if self.last_mode.as_ref().is_some_and(|m| m == &mode) {
             (changed, items)
@@ -108,7 +106,6 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
         (changed, Some(items))
     }
 }
-
 
 /// Shows the auto mode
 /// # Errors
@@ -161,7 +158,7 @@ pub fn show(config: &Config) -> Result<(), Error> {
                     }
                     AutoRunType::Emoji => {
                         if let Some(action) = selection_result.action {
-                            copy_to_clipboard(action)?;
+                            copy_to_clipboard(action, None)?;
                         } else {
                             return Err(Error::MissingAction);
                         }

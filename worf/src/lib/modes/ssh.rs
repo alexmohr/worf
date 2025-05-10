@@ -1,9 +1,9 @@
-use std::fs;
-use regex::Regex;
 use crate::config::{Config, SortOrder};
-use crate::{gui, Error};
 use crate::desktop::spawn_fork;
 use crate::gui::{ItemProvider, MenuItem};
+use crate::{Error, gui};
+use regex::Regex;
+use std::fs;
 
 #[derive(Clone)]
 pub(crate) struct SshProvider<T: Clone> {
@@ -12,7 +12,7 @@ pub(crate) struct SshProvider<T: Clone> {
 
 impl<T: Clone> SshProvider<T> {
     pub(crate) fn new(menu_item_data: T, order: &SortOrder) -> Self {
-        let re =  Regex::new(r"(?m)^\s*Host\s+(.+)$").unwrap();
+        let re = Regex::new(r"(?m)^\s*Host\s+(.+)$").unwrap();
         let mut items: Vec<_> = dirs::home_dir()
             .map(|home| home.join(".ssh").join("config"))
             .filter(|path| path.exists())

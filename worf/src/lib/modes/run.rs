@@ -1,12 +1,12 @@
-use std::collections::{HashMap, HashSet};
-use std::{env, fs};
-use std::ffi::CString;
-use std::path::PathBuf;
 use crate::config::{Config, SortOrder};
 use crate::desktop::{is_executable, save_cache_file};
-use crate::{gui, Error};
 use crate::gui::{ItemProvider, MenuItem};
 use crate::modes::load_cache;
+use crate::{Error, gui};
+use std::collections::{HashMap, HashSet};
+use std::ffi::CString;
+use std::path::PathBuf;
+use std::{env, fs};
 
 impl ItemProvider<i32> for RunProvider {
     fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<i32>>) {
@@ -92,7 +92,6 @@ impl RunProvider {
     }
 }
 
-
 fn load_run_cache() -> (Option<PathBuf>, HashMap<String, i64>) {
     let cache_path = dirs::cache_dir().map(|x| x.join("worf-run"));
     load_cache(cache_path)
@@ -121,7 +120,6 @@ fn update_run_cache_and_run<T: Clone>(
         Err(Error::MissingAction)
     }
 }
-
 
 /// Shows the run mode
 /// # Errors

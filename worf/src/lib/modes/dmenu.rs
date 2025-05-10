@@ -1,8 +1,8 @@
+use crate::config::{Config, SortOrder};
+use crate::gui::{ItemProvider, MenuItem};
+use crate::{Error, gui};
 use std::io;
 use std::io::Read;
-use crate::config::{Config, SortOrder};
-use crate::{gui, Error};
-use crate::gui::{ItemProvider, MenuItem};
 
 #[derive(Clone)]
 struct DMenuProvider {
@@ -36,7 +36,6 @@ impl ItemProvider<String> for DMenuProvider {
         (false, None)
     }
 }
-
 
 /// Shows the dmenu mode
 /// # Errors

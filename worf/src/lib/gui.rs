@@ -794,8 +794,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
             {
                 let search_lock = ui.search_text.lock().unwrap();
                 if let Err(e) = handle_selected_item(
-                    ui.clone(),
-                    meta.clone(),
+                    ui,
+                    Rc::<MetaData<T>>::clone(meta),
                     Some(&search_lock),
                     None,
                     meta.new_on_empty,
@@ -817,8 +817,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
         gdk4::Key::Return => {
             let search_lock = ui.search_text.lock().unwrap();
             if let Err(e) = handle_selected_item(
-                ui.clone(),
-                meta.clone(),
+                ui,
+                Rc::<MetaData<T>>::clone(meta),
                 Some(&search_lock),
                 None,
                 meta.new_on_empty,
@@ -953,7 +953,7 @@ fn close_gui(app: &Application) {
 }
 
 fn handle_selected_item<T>(
-    ui: Rc<UiElements<T>>,
+    ui: &Rc<UiElements<T>>,
     meta: Rc<MetaData<T>>,
     query: Option<&str>,
     item: Option<MenuItem<T>>,
@@ -964,19 +964,14 @@ where
     T: Clone + Send + 'static,
 {
     if let Some(selected_item) = item {
-        send_selected_item(ui, meta, custom_key.map(|c| c.clone()), selected_item);
+        send_selected_item(ui, meta, custom_key.cloned(), selected_item);
         return Ok(());
     } else if let Some(s) = ui.main_box.selected_children().into_iter().next() {
         let list_items = ui.menu_rows.lock().unwrap();
         let item = list_items.get(&s);
         if let Some(selected_item) = item {
             if selected_item.visible {
-                send_selected_item(
-                    ui.clone(),
-                    meta,
-                    custom_key.map(|c| c.clone()),
-                    selected_item.clone(),
-                );
+                send_selected_item(ui, meta, custom_key.cloned(), selected_item.clone());
                 return Ok(());
             }
         }
@@ -995,7 +990,7 @@ where
             visible: true,
         };
 
-        send_selected_item(ui, meta, custom_key.map(|c| c.clone()), item);
+        send_selected_item(ui, meta, custom_key.cloned(), item);
         Ok(())
     } else {
         Err("selected item cannot be resolved".to_owned())
@@ -1003,14 +998,14 @@ where
 }
 
 fn send_selected_item<T>(
-    ui: Rc<UiElements<T>>,
+    ui: &Rc<UiElements<T>>,
     meta: Rc<MetaData<T>>,
     custom_key: Option<KeyBinding>,
     selected_item: MenuItem<T>,
 ) where
     T: Clone + Send + 'static,
 {
-    let ui_clone = Rc::clone(&ui);
+    let ui_clone = Rc::clone(ui);
     ui.window.connect_hide(move |_| {
         if let Err(e) = meta.selected_sender.send(Ok(Selection {
             menu: selected_item.clone(),
@@ -1127,8 +1122,8 @@ fn create_menu_row<T: Clone + 'static + Send>(
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
         if n_press == 2 {
             if let Err(e) = handle_selected_item(
-                click_ui.clone(),
-                click_meta.clone(),
+                &click_ui,
+                Rc::<MetaData<T>>::clone(&click_meta),
                 None,
                 Some(element_clone.clone()),
                 false,
@@ -1278,12 +1273,8 @@ fn set_menu_visibility_for_search<T: Clone>(
                     }
                 }
                 MatchMethod::MultiContains => {
-                    let score = query
-                        .split(' ')
-                        .filter(|i| menu_item_search.contains(i))
-                        .map(|_| 1.0)
-                        .sum();
-                    (score, score > 0.0)
+                    let contains = query.split(' ').all(|x| menu_item_search.contains(x));
+                    (if contains { 1.0 } else { 0.0 }, contains)
                 }
             };
 

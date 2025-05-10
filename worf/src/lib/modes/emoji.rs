@@ -1,7 +1,7 @@
 use crate::config::{Config, SortOrder};
-use crate::{gui, Error};
 use crate::desktop::copy_to_clipboard;
 use crate::gui::{ItemProvider, MenuItem};
+use crate::{Error, gui};
 
 #[derive(Clone)]
 pub(crate) struct EmojiProvider<T: Clone> {
@@ -55,6 +55,6 @@ pub fn show(config: &Config) -> Result<(), Error> {
     let selection_result = gui::show(config.clone(), provider, true, None, None)?;
     match selection_result.menu.action {
         None => Err(Error::MissingAction),
-        Some(action) => copy_to_clipboard(action),
+        Some(action) => copy_to_clipboard(action, None),
     }
 }

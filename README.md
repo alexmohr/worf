@@ -53,18 +53,21 @@ Styling names and classes are inspired by wofi, so most of the documentation and
 
 ### Selectors
 
-|name|description|
-window|Entire main window|
-|outer-box|A box that everything else sits inside of|
-|input|Text box for filtering items|
-|scroll|Scroll window containing inner-box|
-|inner-box|Box containing the menu entries|
-|entry|Box containing the text and optionally the image of an entry|
-|text|Name of the program/option inserted|
-|img|Images displayed in entries|
-|row|The row containing the entry, i.e. used to control hover effects|
+| name                    | description                                                   |
+|-------------------------|---------------------------------------------------------------|
+| `window`                | Entire main window.                                           |
+| `outer-box`             | A box that everything else sits inside of.                    |
+| `input`                 | Text box for filtering items.                                 |
+| `scroll`                | Scrollable container that holds the `inner-box`.              |
+| `inner-box`             | Box containing the menu entries.                              |
+| `entry`                 | Box containing the text and optionally the image of an entry. |
+| `text`                  | Name of the program/option displayed in an entry.             |
+| `img`                   | Image displayed in an entry (optional).                       |
+| `row`                   | Row containing the entry, used to control hover effects.      |
+| `custom-key-label-text` | The label for custom keys                                     |
+| `custom-key-label-box`  | Box containing the label, can be used for borders etc.        |
 
-Checkout more showcases in the styles directory of this repo.
+Checkout more showcases in the [styles directory of this repo](styles).
 
 ![](styles/compact/example.png)
 

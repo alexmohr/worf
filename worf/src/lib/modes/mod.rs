@@ -1,16 +1,15 @@
+use crate::desktop::{create_file_if_not_exists, load_cache_file};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use crate::desktop::{create_file_if_not_exists, load_cache_file};
 
+pub mod auto;
 pub mod dmenu;
+pub mod drun;
+pub mod emoji;
 pub mod file;
 pub mod math;
-pub mod auto;
-pub mod drun;
 pub mod run;
 pub mod ssh;
-pub mod emoji;
-
 
 pub(crate) fn load_cache(cache_path: Option<PathBuf>) -> (Option<PathBuf>, HashMap<String, i64>) {
     let cache = {
