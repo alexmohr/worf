@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crossbeam::channel;
 use crossbeam::channel::Sender;
 use gdk4::Display;
 use gdk4::gio::File;
-use gdk4::glib::{MainContext, Propagation, timeout_add_local};
+use gdk4::glib::{MainContext, Propagation};
 use gdk4::prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt};
 use gtk4::glib::ControlFlow;
 use gtk4::prelude::{
@@ -1011,7 +1011,7 @@ fn send_selected_item<T>(
     T: Clone + Send + 'static,
 {
     let ui_clone = Rc::clone(&ui);
-    ui.window.connect_hide(move |w| {
+    ui.window.connect_hide(move |_| {
         if let Err(e) = meta.selected_sender.send(Ok(Selection {
             menu: selected_item.clone(),
             custom_key: custom_key.clone(),

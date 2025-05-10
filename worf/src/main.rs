@@ -2,7 +2,7 @@ use std::env;
 
 use anyhow::anyhow;
 use worf_lib::config::Mode;
-use worf_lib::{Error, config, mode};
+use worf_lib::{Error, config, mode, modes};
 fn main() -> anyhow::Result<()> {
     env_logger::Builder::new()
         .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
@@ -14,17 +14,17 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(show) = &config.show() {
         let result = match show {
-            Mode::Run => mode::run(&config),
-            Mode::Drun => mode::d_run(&config),
-            Mode::Dmenu => mode::dmenu(&config),
-            Mode::File => mode::file(&config),
+            Mode::Run => modes::run::show(&config),
+            Mode::Drun => modes::drun::show(&config),
+            Mode::Dmenu => modes::dmenu::show(&config),
+            Mode::File => modes::file::show(&config),
             Mode::Math => {
-                mode::math(&config);
+                modes::math::show(&config);
                 Ok(())
             }
-            Mode::Ssh => mode::ssh(&config),
-            Mode::Emoji => mode::emoji(&config),
-            Mode::Auto => mode::auto(&config),
+            Mode::Ssh => modes::ssh::show(&config),
+            Mode::Emoji => modes::emoji::show(&config),
+            Mode::Auto => modes::auto::show(&config),
         };
 
         if let Err(err) = result {
