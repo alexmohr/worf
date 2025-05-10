@@ -1,5 +1,6 @@
 * {
 font-family: DejaVu;
+    transition: opacity 500ms ease;
 }
 
 #window { 
@@ -28,12 +29,13 @@ font-family: DejaVu;
   background-color: rgba(32, 32, 32, 0.6);
   color: #f2f2f2;
   border-bottom: 2px solid rgba(214, 174, 2, 1);
-  padding: 1.2rem 1.2rem 1.2rem 1rem;
+  padding: 1.2rem;
+  padding-left: 1rem;
   font-size: 1rem;
 }
 
 #window #outer-box #scroll {
-  /* The name of the box containing all of the entries */
+  border-top: 2px solid rgba(214, 174, 0, 1);
 }
 #window #outer-box #scroll #inner-box {
   /* The name of all entries */
@@ -48,7 +50,6 @@ font-family: DejaVu;
   /* The name of all the text in entries */
 }
 #window #outer-box #scroll #inner-box #entry #img {
-  width: 1rem;
   margin-right: 0.5rem;
 }
 #window #outer-box #scroll #inner-box #entry:selected {
@@ -58,7 +59,7 @@ font-family: DejaVu;
 }
 
 #row:hover {
-  background-color:  rgba(255, 255, 255, 0);;
+  background-color:  rgba(255, 255, 255, 0);
   outline: inherit;
   outline-color: inherit;
 }
@@ -67,3 +68,14 @@ font-family: DejaVu;
   outline: inherit;
   outline-color: inherit;
 }
+
+#custom-key-label-box {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+  border-right: 1px solid rgba(214, 174, 0, 1);
+  border-left: 1px solid rgba(214, 174, 0, 1);
+  padding-left: 1em;
+}
+
+#custom-key-label-text {
+  }
