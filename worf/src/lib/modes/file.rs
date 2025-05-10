@@ -1,11 +1,11 @@
+use crate::config::{Config, SortOrder, expand_path};
+use crate::desktop::spawn_fork;
+use crate::gui::{ItemProvider, MenuItem};
+use crate::{Error, gui};
+use regex::Regex;
 use std::fs;
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
-use regex::Regex;
-use crate::config::{expand_path, Config, SortOrder};
-use crate::{gui, Error};
-use crate::desktop::spawn_fork;
-use crate::gui::{ItemProvider, MenuItem};
 
 #[derive(Clone)]
 pub(crate) struct FileItemProvider<T: Clone> {
@@ -184,8 +184,6 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
         (false, self.last_result.clone())
     }
 }
-
-
 
 /// Shows the file browser mode
 /// # Errors

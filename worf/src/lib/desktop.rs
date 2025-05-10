@@ -8,6 +8,7 @@ use std::time::Instant;
 use std::{env, fs, io};
 
 use freedesktop_file_parser::DesktopFile;
+use notify_rust::Notification;
 use rayon::prelude::*;
 use regex::Regex;
 use wl_clipboard_rs::copy::{ClipboardType, MimeType, ServeRequests, Source};
@@ -298,14 +299,29 @@ pub fn is_executable(entry: &Path) -> bool {
 /// Copy the given text into the clipboard.
 /// # Errors
 /// Will return an error if copying to the clipboard failed.
-pub fn copy_to_clipboard(text: String) -> Result<(), Error> {
+pub fn copy_to_clipboard(text: String, notify_body: Option<&str>) -> Result<(), Error> {
     let mut opts = wl_clipboard_rs::copy::Options::new();
     opts.clipboard(ClipboardType::Regular);
     opts.serve_requests(ServeRequests::Only(1));
     let result = opts.copy(Source::Bytes(text.into_bytes().into()), MimeType::Text);
 
     match result {
-        Ok(()) => Ok(()),
-        Err(e) => Err(Error::Clipboard(e.to_string())),
+        Ok(()) => {
+            let mut notification = Notification::new();
+            notification.summary("Copied to clipboard");
+            if let Some(notify_body) = notify_body {
+                notification.body(notify_body);
+            }
+
+            notification.show().map_err(|e| Error::Io(e.to_string()))?;
+            Ok(())
+        }
+        Err(e) => {
+            Notification::new()
+                .summary("Failed to copy to clipboard")
+                .show()
+                .map_err(|e| Error::Io(e.to_string()))?;
+            Err(Error::Clipboard(e.to_string()))
+        }
     }
 }

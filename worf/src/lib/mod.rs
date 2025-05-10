@@ -9,7 +9,6 @@ pub mod gui;
 /// Out of the box supported modes, like drun, dmenu, etc...
 pub mod modes;
 
-
 /// Defines error the lib can encounter
 #[derive(Debug, PartialEq)]
 pub enum Error {
