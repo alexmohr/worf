@@ -25,7 +25,6 @@ The standard view will show `ssh` and `drun`, for other modes the following pref
 * `ssh` (optional)
 * `?` web search
 * `/`, `$` or `~` for files
-* `emoji` for emojis
 
 <img src="images/demo.gif">
 
