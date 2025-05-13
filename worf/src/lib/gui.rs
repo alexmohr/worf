@@ -425,6 +425,7 @@ where
     gtk4::init().map_err(|e| Error::Graphics(e.to_string()))?;
     log::debug!("Starting GUI");
     if let Some(ref css) = config.style() {
+        log::debug!("loading css from {css}");
         let provider = CssProvider::new();
         let css_file_path = File::for_path(css);
         provider.load_from_file(&css_file_path);
@@ -498,8 +499,8 @@ fn build_ui<T, P>(
         .application(&app)
         .decorated(false)
         .resizable(false)
-        .default_width(100)
-        .default_height(100)
+        .default_width(1)
+        .default_height(1)
         .build();
 
     let ui_elements = Rc::new(UiElements {
@@ -563,7 +564,7 @@ fn build_ui<T, P>(
     let wait_for_items = Instant::now();
     let (_changed, provider_elements) = get_provider_elements.join().unwrap();
     log::debug!("got items after {:?}", wait_for_items.elapsed());
-    build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
+
 
     let animate_cfg = config.clone();
     let animate_window = ui_elements.window.clone();
@@ -572,6 +573,8 @@ fn build_ui<T, P>(
         w.set_opacity(1.0);
         window_show_resize(&animate_cfg.clone(), w);
     });
+
+    build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
 
     // hide the fact that we are starting with a small window
     ui_elements.window.set_opacity(0.01);

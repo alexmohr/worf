@@ -26,7 +26,6 @@ struct AutoItemProvider {
     file: FileItemProvider<AutoRunType>,
     math: MathProvider<AutoRunType>,
     ssh: SshProvider<AutoRunType>,
-    emoji: EmojiProvider<AutoRunType>,
     last_mode: Option<AutoRunType>,
 }
 
@@ -37,7 +36,6 @@ impl AutoItemProvider {
             file: FileItemProvider::new(AutoRunType::File, config.sort_order()),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh, &config.sort_order()),
-            emoji: EmojiProvider::new(AutoRunType::Emoji, &config.sort_order()),
             last_mode: None,
         }
     }
@@ -84,8 +82,6 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
             (AutoRunType::File, self.file.get_elements(search_opt))
         } else if search.starts_with("ssh") {
             (AutoRunType::Ssh, self.ssh.get_elements(search_opt))
-        } else if search.starts_with("emoji") {
-            (AutoRunType::Emoji, self.emoji.get_elements(search_opt))
         } else {
             return self.default_auto_elements(search_opt);
         };
