@@ -347,7 +347,7 @@ impl Config {
 
     #[must_use]
     pub fn style(&self) -> Option<String> {
-        style_path(None)
+        style_path(self.style.as_ref())
             .ok()
             .map(|pb| pb.display().to_string())
             .or_else(|| {
@@ -599,7 +599,7 @@ pub fn parse_args() -> Config {
 /// # Errors
 ///
 /// Will return Err when it cannot resolve any path or no style is found
-fn style_path(full_path: Option<String>) -> Result<PathBuf, Error> {
+fn style_path(full_path: Option<&String>) -> Result<PathBuf, Error> {
     let alternative_paths = path_alternatives(
         vec![dirs::config_dir()],
         &PathBuf::from("worf").join("style.css"),
@@ -610,7 +610,7 @@ fn style_path(full_path: Option<String>) -> Result<PathBuf, Error> {
 /// # Errors
 ///
 /// Will return Err when it cannot resolve any path or no style is found
-pub fn conf_path(full_path: Option<String>) -> Result<PathBuf, Error> {
+pub fn conf_path(full_path: Option<&String>) -> Result<PathBuf, Error> {
     let alternative_paths = path_alternatives(
         vec![dirs::config_dir()],
         &PathBuf::from("worf").join("config"),
@@ -633,9 +633,10 @@ pub fn path_alternatives(base_paths: Vec<Option<PathBuf>>, sub_path: &PathBuf) -
 ///
 /// Will return `Err` if it is not able to find any valid path
 pub fn resolve_path(
-    full_path: Option<String>,
+    full_path: Option<&String>,
     alternatives: Vec<PathBuf>,
 ) -> Result<PathBuf, Error> {
+    log::debug!("resolving path for {full_path:?}, with alternatives: {alternatives:?}");
     full_path
         .map(PathBuf::from)
         .and_then(|p| p.canonicalize().ok().filter(|c| c.exists()))
@@ -656,7 +657,7 @@ pub fn resolve_path(
 /// * no config file exists
 /// * config file and args cannot be merged
 pub fn load_config(args_opt: Option<&Config>) -> Result<Config, Error> {
-    let config_path = conf_path(args_opt.as_ref().and_then(|c| c.config.clone()));
+    let config_path = conf_path(args_opt.as_ref().and_then(|c| c.config.as_ref()));
     match config_path {
         Ok(path) => {
             let toml_content = fs::read_to_string(path).map_err(|e| Error::Io(format!("{e}")))?;
