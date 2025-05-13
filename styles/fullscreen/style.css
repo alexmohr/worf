@@ -29,15 +29,15 @@
 }
 
 #window #outer-box #scroll #inner-box {
-  padding: 0 25rem;
+  padding: 0 20rem;
 
 }
 
 #window #outer-box #scroll #inner-box #entry {
   color: #fff;
   background-color: rgba(32, 32, 32, 0.1);
-  padding: 1rem;
-  margin: 1rem;
+  margin: 2em;
+  padding: 1em;
   border-radius: 0.5rem;
   border-bottom: 5px solid rgba(32, 32, 32, 0.1);
 
