@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crossbeam::channel;
 use crossbeam::channel::Sender;
+use crossbeam::channel::internal::SelectHandle;
 use gdk4::Display;
 use gdk4::gio::File;
 use gdk4::glib::{MainContext, Propagation};
@@ -565,16 +566,19 @@ fn build_ui<T, P>(
     let (_changed, provider_elements) = get_provider_elements.join().unwrap();
     log::debug!("got items after {:?}", wait_for_items.elapsed());
 
-
     let animate_cfg = config.clone();
     let animate_window = ui_elements.window.clone();
 
+    let (sender, receiver) = channel::bounded(1);
     animate_window.connect_is_active_notify(move |w| {
         w.set_opacity(1.0);
         window_show_resize(&animate_cfg.clone(), w);
+        if let Err(e) = sender.send(()) {
+            log::debug!("cannot unblock menu builder {e:?}");
+        }
     });
 
-    build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
+    build_ui_from_menu_items(&ui_elements, &meta, provider_elements, Some(receiver));
 
     // hide the fact that we are starting with a small window
     ui_elements.window.set_opacity(0.01);
@@ -681,6 +685,7 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     mut items: Vec<MenuItem<T>>,
+    wait_for_signal: Option<channel::Receiver<()>>,
 ) {
     let start = Instant::now();
     {
@@ -694,12 +699,18 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
         let ui_clone = Rc::<UiElements<T>>::clone(ui);
 
         glib::idle_add_local(move || {
+            if let Some(wait) = &wait_for_signal {
+                if !wait.is_ready() {
+                    return ControlFlow::Continue;
+                }
+            }
+
             ui_clone.main_box.unset_sort_func();
             let mut done = false;
             {
                 let mut lock = ui_clone.menu_rows.lock().unwrap();
 
-                for _ in 0..100 {
+                for _ in 0..25 {
                     if let Some(item) = items.pop() {
                         lock.insert(add_menu_item(&ui_clone, &meta_clone, &item), item);
                     } else {
@@ -786,7 +797,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
     let update_view_from_provider = |query: &String| {
         let (changed, filtered_list) = meta.item_provider.lock().unwrap().get_elements(Some(query));
         if changed {
-            build_ui_from_menu_items(ui, meta, filtered_list);
+            build_ui_from_menu_items(ui, meta, filtered_list, None);
         }
         update_view(query);
     };
@@ -863,7 +874,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
                         if let Some(changed) = opt_changed {
                             let items = changed.0.1.unwrap_or_default();
                             if changed.0.0 {
-                                build_ui_from_menu_items(ui, meta, items);
+                                build_ui_from_menu_items(ui, meta, items, None);
                             }
 
                             let query = changed.1;
