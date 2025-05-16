@@ -1,12 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crossbeam::channel;
 use crossbeam::channel::Sender;
-use crossbeam::channel::internal::SelectHandle;
 use gdk4::Display;
 use gdk4::gio::File;
 use gdk4::glib::{MainContext, Propagation};
@@ -339,24 +338,39 @@ pub enum Modifier {
     None,
 }
 
-impl From<gdk4::ModifierType> for Modifier {
-    fn from(value: gdk4::ModifierType) -> Self {
-        match value {
-            gdk4::ModifierType::SHIFT_MASK => Modifier::Shift,
-            gdk4::ModifierType::CONTROL_MASK => Modifier::Control,
-            gdk4::ModifierType::ALT_MASK => Modifier::Alt,
-            gdk4::ModifierType::SUPER_MASK => Modifier::Super,
-            gdk4::ModifierType::META_MASK => Modifier::Meta,
-            gdk4::ModifierType::LOCK_MASK => Modifier::CapsLock,
-            _ => Modifier::None,
-        }
+fn modifiers_from_mask(mask: gdk4::ModifierType) -> HashSet<Modifier> {
+    let mut modifiers = HashSet::new();
+
+    if mask.contains(gdk4::ModifierType::SHIFT_MASK) {
+        modifiers.insert(Modifier::Shift);
     }
+    if mask.contains(gdk4::ModifierType::CONTROL_MASK) {
+        modifiers.insert(Modifier::Control);
+    }
+    if mask.contains(gdk4::ModifierType::ALT_MASK) {
+        modifiers.insert(Modifier::Alt);
+    }
+    if mask.contains(gdk4::ModifierType::SUPER_MASK) {
+        modifiers.insert(Modifier::Super);
+    }
+    if mask.contains(gdk4::ModifierType::META_MASK) {
+        modifiers.insert(Modifier::Meta);
+    }
+    if mask.contains(gdk4::ModifierType::LOCK_MASK) {
+        modifiers.insert(Modifier::CapsLock);
+    }
+
+    if modifiers.is_empty() {
+        modifiers.insert(Modifier::None);
+    }
+
+    modifiers
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct KeyBinding {
     pub key: Key,
-    pub modifiers: Modifier, // todo support masks
+    pub modifiers: HashSet<Modifier>,
     pub label: String,
 }
 
@@ -566,22 +580,19 @@ fn build_ui<T, P>(
     let (_changed, provider_elements) = get_provider_elements.join().unwrap();
     log::debug!("got items after {:?}", wait_for_items.elapsed());
 
-    let animate_cfg = config.clone();
+    let active_cfg = config.clone();
+    let map_cfg = config.clone();
     let animate_window = ui_elements.window.clone();
 
-    let (sender, receiver) = channel::bounded(1);
     animate_window.connect_is_active_notify(move |w| {
-        w.set_opacity(1.0);
-        window_show_resize(&animate_cfg.clone(), w);
-        if let Err(e) = sender.send(()) {
-            log::debug!("cannot unblock menu builder {e:?}");
-        }
+        window_show_resize(&active_cfg.clone(), w);
+    });
+    animate_window.connect_map(move |w| {
+        window_show_resize(&map_cfg.clone(), w);
     });
 
-    build_ui_from_menu_items(&ui_elements, &meta, provider_elements, Some(receiver));
+    build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
 
-    // hide the fact that we are starting with a small window
-    ui_elements.window.set_opacity(0.01);
     let window_start = Instant::now();
     ui_elements.window.present();
     log::debug!("window show took {:?}", window_start.elapsed());
@@ -685,7 +696,6 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     mut items: Vec<MenuItem<T>>,
-    wait_for_signal: Option<channel::Receiver<()>>,
 ) {
     let start = Instant::now();
     {
@@ -699,12 +709,6 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
         let ui_clone = Rc::<UiElements<T>>::clone(ui);
 
         glib::idle_add_local(move || {
-            if let Some(wait) = &wait_for_signal {
-                if !wait.is_ready() {
-                    return ControlFlow::Continue;
-                }
-            }
-
             ui_clone.main_box.unset_sort_func();
             let mut done = false;
             {
@@ -797,15 +801,18 @@ fn handle_key_press<T: Clone + 'static + Send>(
     let update_view_from_provider = |query: &String| {
         let (changed, filtered_list) = meta.item_provider.lock().unwrap().get_elements(Some(query));
         if changed {
-            build_ui_from_menu_items(ui, meta, filtered_list, None);
+            build_ui_from_menu_items(ui, meta, filtered_list);
         }
         update_view(query);
     };
 
     if let Some(custom_keys) = custom_keys {
+        let mods = modifiers_from_mask(modifier_type);
         for custom_key in custom_keys {
-            if custom_key.key == keyboard_key.into() && custom_key.modifiers == modifier_type.into()
-            {
+            log::debug!(
+                "comparing custom key {custom_key:?} to mask {mods:?} and key {keyboard_key}"
+            );
+            if custom_key.key == keyboard_key.into() && mods.is_subset(&custom_key.modifiers) {
                 let search_lock = ui.search_text.lock().unwrap();
                 if let Err(e) = handle_selected_item(
                     ui,
@@ -874,7 +881,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
                         if let Some(changed) = opt_changed {
                             let items = changed.0.1.unwrap_or_default();
                             if changed.0.0 {
-                                build_ui_from_menu_items(ui, meta, items, None);
+                                build_ui_from_menu_items(ui, meta, items);
                             }
 
                             let query = changed.1;
