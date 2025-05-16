@@ -1,8 +1,7 @@
 use crate::config::Config;
-use crate::desktop::{copy_to_clipboard, spawn_fork};
+use crate::desktop::spawn_fork;
 use crate::gui::{ItemProvider, MenuItem};
 use crate::modes::drun::{DRunProvider, update_drun_cache_and_run};
-use crate::modes::emoji::EmojiProvider;
 use crate::modes::file::FileItemProvider;
 use crate::modes::math::MathProvider;
 use crate::modes::ssh;
@@ -16,7 +15,6 @@ enum AutoRunType {
     DRun,
     File,
     Ssh,
-    Emoji,
     // WebSearch,
 }
 
@@ -26,7 +24,6 @@ struct AutoItemProvider {
     file: FileItemProvider<AutoRunType>,
     math: MathProvider<AutoRunType>,
     ssh: SshProvider<AutoRunType>,
-    emoji: EmojiProvider<AutoRunType>,
     last_mode: Option<AutoRunType>,
 }
 
@@ -37,7 +34,6 @@ impl AutoItemProvider {
             file: FileItemProvider::new(AutoRunType::File, config.sort_order()),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh, &config.sort_order()),
-            emoji: EmojiProvider::new(AutoRunType::Emoji, &config.sort_order()),
             last_mode: None,
         }
     }
@@ -84,8 +80,6 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
             (AutoRunType::File, self.file.get_elements(search_opt))
         } else if search.starts_with("ssh") {
             (AutoRunType::Ssh, self.ssh.get_elements(search_opt))
-        } else if search.starts_with("emoji") {
-            (AutoRunType::Emoji, self.emoji.get_elements(search_opt))
         } else {
             return self.default_auto_elements(search_opt);
         };
@@ -154,14 +148,6 @@ pub fn show(config: &Config) -> Result<(), Error> {
                     }
                     AutoRunType::Ssh => {
                         ssh::launch(&selection_result, config)?;
-                        break;
-                    }
-                    AutoRunType::Emoji => {
-                        if let Some(action) = selection_result.action {
-                            copy_to_clipboard(action, None)?;
-                        } else {
-                            return Err(Error::MissingAction);
-                        }
                         break;
                     }
                 }
