@@ -44,7 +44,7 @@ impl PasswordProvider {
                             key.clone(),
                             None,
                             None,
-                            vec![],
+                            vec![].into_iter().collect(),
                             None,
                             0.0,
                             Some(MenuItemMetaData { ids: value.clone() }),
@@ -59,7 +59,7 @@ impl PasswordProvider {
                     format!("Error from rbw: {error}"),
                     None,
                     None,
-                    vec![],
+                    vec![].into_iter().collect(),
                     None,
                     0.0,
                     None,
@@ -79,11 +79,11 @@ impl PasswordProvider {
                     rbw_get_user(id, false)?,
                     None,
                     None,
-                    vec![],
+                    vec![].into_iter().collect(),
                     None,
                     0.0,
                     Some(MenuItemMetaData {
-                        ids: vec![id.clone()],
+                        ids: vec![id.clone()].into_iter().collect(),
                     }),
                 ))
             })
@@ -125,7 +125,16 @@ fn keyboard_type(text: &str) {
 
 fn keyboard_tab() {
     Command::new("ydotool")
-        .arg("TAB")
+        .arg("type")
+        .arg("\t")
+        .output()
+        .expect("Failed to execute ydotool");
+}
+
+fn keyboard_return() {
+    Command::new("ydotool")
+        .arg("type")
+        .arg("\n")
         .output()
         .expect("Failed to execute ydotool");
 }
@@ -178,7 +187,7 @@ fn rbw_get_totp(id: &str, copy: bool) -> Result<String, String> {
 fn key_type_all() -> KeyBinding {
     KeyBinding {
         key: Key::Num1,
-        modifiers: Modifier::Alt,
+        modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+1</b> Type All".to_string(),
     }
 }
@@ -186,7 +195,7 @@ fn key_type_all() -> KeyBinding {
 fn key_type_user() -> KeyBinding {
     KeyBinding {
         key: Key::Num2,
-        modifiers: Modifier::Alt,
+        modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+2</b> Type User".to_string(),
     }
 }
@@ -194,15 +203,23 @@ fn key_type_user() -> KeyBinding {
 fn key_type_password() -> KeyBinding {
     KeyBinding {
         key: Key::Num3,
-        modifiers: Modifier::Alt,
+        modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+3</b> Type Password".to_string(),
+    }
+}
+
+fn key_type_password_and_enter() -> KeyBinding {
+    KeyBinding {
+        key: Key::Hash,
+        modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
+        label: "<b>Alt+Shift+3</b> Type Password + Enter".to_string(),
     }
 }
 
 fn key_type_totp() -> KeyBinding {
     KeyBinding {
         key: Key::Num4,
-        modifiers: Modifier::Alt,
+        modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+4</b> Type Totp".to_string(),
     }
 }
@@ -210,7 +227,7 @@ fn key_type_totp() -> KeyBinding {
 fn key_sync() -> KeyBinding {
     KeyBinding {
         key: Key::R,
-        modifiers: Modifier::Alt,
+        modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+r</b> Sync".to_string(),
     }
 }
@@ -219,7 +236,7 @@ fn key_sync() -> KeyBinding {
 fn key_totp() -> KeyBinding {
     KeyBinding {
         key: Key::T,
-        modifiers: Modifier::Alt,
+        modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+t</b> Totp".to_string(),
     }
 }
@@ -227,7 +244,7 @@ fn key_totp() -> KeyBinding {
 fn key_lock() -> KeyBinding {
     KeyBinding {
         key: Key::L,
-        modifiers: Modifier::Alt,
+        modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+l</b> Lock".to_string(),
     }
 }
@@ -242,6 +259,7 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
             key_type_all(),
             key_type_user(),
             key_type_password(),
+            key_type_password_and_enter(),
             key_type_totp(),
             key_sync(),
             key_totp(),
@@ -256,7 +274,7 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
 
                 let id = meta.ids.first().unwrap_or(&selection.menu.label);
 
-                sleep(Duration::from_millis(250));
+                sleep(Duration::from_millis(500));
                 if let Some(key) = selection.custom_key {
                     if key == key_type_all() {
                         keyboard_type(&rbw_get_user(id, false)?);
@@ -266,6 +284,9 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
                         keyboard_type(&rbw_get_user(id, false)?);
                     } else if key == key_type_password() {
                         keyboard_type(&rbw_get_password(id, false)?);
+                    } else if key == key_type_password_and_enter() {
+                        keyboard_type(&rbw_get_password(id, false)?);
+                        keyboard_return();
                     } else if key == key_type_totp() {
                         keyboard_type(&rbw_get_totp(id, false)?);
                     } else if key == key_lock() {
