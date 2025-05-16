@@ -1,8 +1,7 @@
 use crate::config::Config;
-use crate::desktop::{copy_to_clipboard, spawn_fork};
+use crate::desktop::spawn_fork;
 use crate::gui::{ItemProvider, MenuItem};
 use crate::modes::drun::{DRunProvider, update_drun_cache_and_run};
-use crate::modes::emoji::EmojiProvider;
 use crate::modes::file::FileItemProvider;
 use crate::modes::math::MathProvider;
 use crate::modes::ssh;
@@ -16,7 +15,6 @@ enum AutoRunType {
     DRun,
     File,
     Ssh,
-    Emoji,
     // WebSearch,
 }
 
@@ -150,14 +148,6 @@ pub fn show(config: &Config) -> Result<(), Error> {
                     }
                     AutoRunType::Ssh => {
                         ssh::launch(&selection_result, config)?;
-                        break;
-                    }
-                    AutoRunType::Emoji => {
-                        if let Some(action) = selection_result.action {
-                            copy_to_clipboard(action, None)?;
-                        } else {
-                            return Err(Error::MissingAction);
-                        }
                         break;
                     }
                 }
