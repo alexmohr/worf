@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Instant;
 
@@ -29,7 +29,7 @@ use crate::config::{Anchor, Config, MatchMethod, SortOrder, WrapMode};
 use crate::desktop::known_image_extension_regex_pattern;
 use crate::{Error, config, desktop};
 
-type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
+type ArcMenuMap<T> = Arc<RwLock<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
 
 pub struct Selection<T: Clone + Send> {
@@ -79,6 +79,20 @@ impl From<config::Align> for Align {
             config::Align::Fill => Align::Fill,
             config::Align::Start => Align::Start,
             config::Align::Center => Align::Center,
+        }
+    }
+}
+
+fn into_core_order(gtk_order: &Ordering) -> core::cmp::Ordering {
+    match gtk_order {
+        Ordering::Smaller => {
+            core::cmp::Ordering::Less
+        }
+        Ordering::Larger => {
+            core::cmp::Ordering::Greater
+        }
+        _ => {
+            core::cmp::Ordering::Equal
         }
     }
 }
@@ -523,7 +537,7 @@ fn build_ui<T, P>(
         window,
         search: SearchEntry::new(),
         main_box: FlowBox::new(),
-        menu_rows: Arc::new(Mutex::new(HashMap::new())),
+        menu_rows: Arc::new(RwLock::new(HashMap::new())),
         search_text: Arc::new(Mutex::new(String::new())),
     });
 
@@ -581,15 +595,15 @@ fn build_ui<T, P>(
     log::debug!("got items after {:?}", wait_for_items.elapsed());
 
     let active_cfg = config.clone();
-    let map_cfg = config.clone();
+    //let map_cfg = config.clone();
     let animate_window = ui_elements.window.clone();
 
     animate_window.connect_is_active_notify(move |w| {
         window_show_resize(&active_cfg.clone(), w);
     });
-    animate_window.connect_map(move |w| {
-        window_show_resize(&map_cfg.clone(), w);
-    });
+    // animate_window.connect_map(move |w| {
+    //     window_show_resize(&map_cfg.clone(), w);
+    // });
 
     build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
 
@@ -626,7 +640,7 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
         fb.grab_focus();
         fb.invalidate_sort();
 
-        let lock = ui_clone.menu_rows.lock().unwrap();
+        let lock = ui_clone.menu_rows.read().unwrap();
         select_first_visible_child(&*lock, &ui_clone.main_box);
     });
 }
@@ -697,22 +711,22 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
     meta: &Rc<MetaData<T>>,
     mut items: Vec<MenuItem<T>>,
 ) {
+    items.reverse();
     let start = Instant::now();
     {
         while let Some(b) = ui.main_box.child_at_index(0) {
             ui.main_box.remove(&b);
             drop(b);
         }
-        ui.menu_rows.lock().unwrap().clear();
+        ui.menu_rows.write().unwrap().clear();
 
         let meta_clone = Rc::<MetaData<T>>::clone(meta);
         let ui_clone = Rc::<UiElements<T>>::clone(ui);
 
         glib::idle_add_local(move || {
-            ui_clone.main_box.unset_sort_func();
             let mut done = false;
             {
-                let mut lock = ui_clone.menu_rows.lock().unwrap();
+                let mut lock = ui_clone.menu_rows.write().unwrap();
 
                 for _ in 0..25 {
                     if let Some(item) = items.pop() {
@@ -732,19 +746,18 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
                 );
             }
 
-            let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
-            ui_clone.main_box.set_sort_func(move |child1, child2| {
-                sort_menu_items_by_score(child1, child2, &items_sort)
-            });
-
             if done {
-                let mut lock = ui_clone.menu_rows.lock().unwrap();
-                let menus = &mut *lock;
-                select_first_visible_child(menus, &ui_clone.main_box);
+                let lock = ui_clone.menu_rows.read().unwrap();
+                let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
+                ui_clone.main_box.set_sort_func(move |child1, child2| {
+                    sort_flow_box_childs(child1, child2, &items_sort)
+                });
+
+                select_first_visible_child(&lock, &ui_clone.main_box);
 
                 log::debug!(
                     "Created {} menu items in {:?}",
-                    menus.len(),
+                    &lock.len(),
                     start.elapsed()
                 );
                 ControlFlow::Break
@@ -787,11 +800,10 @@ fn handle_key_press<T: Clone + 'static + Send>(
     custom_keys: Option<&Vec<KeyBinding>>,
 ) -> Propagation {
     let update_view = |query: &String| {
-        let mut lock = ui.menu_rows.lock().unwrap();
-        let menus = &mut *lock;
+        let mut lock = ui.menu_rows.write().unwrap();
         set_menu_visibility_for_search(
             query,
-            menus,
+            &mut lock,
             &meta.config,
             meta.search_ignored_words.as_ref(),
         );
@@ -865,7 +877,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
                         expander.set_expanded(true);
                     } else {
                         let opt_changed = {
-                            let lock = ui.menu_rows.lock().unwrap();
+                            let lock = ui.menu_rows.read().unwrap();
                             let menu_item = lock.get(fb);
                             menu_item.map(|menu_item| {
                                 (
@@ -904,12 +916,12 @@ fn handle_key_press<T: Clone + 'static + Send>(
     Propagation::Proceed
 }
 
-fn sort_menu_items_by_score<T: Clone>(
+fn sort_flow_box_childs<T: Clone>(
     child1: &FlowBoxChild,
     child2: &FlowBoxChild,
     items_lock: &ArcMenuMap<T>,
 ) -> Ordering {
-    let lock = items_lock.lock().unwrap();
+    let lock = items_lock.read().unwrap();
     let m1 = lock.get(child1);
     let m2 = lock.get(child2);
 
@@ -920,6 +932,10 @@ fn sort_menu_items_by_score<T: Clone>(
         return Ordering::Larger;
     }
 
+    sort_menu_items_by_score(m1, m2)
+}
+
+fn sort_menu_items_by_score<T: Clone>(m1: Option<&MenuItem<T>>, m2: Option<&MenuItem<T>>) -> Ordering {
     match (m1, m2) {
         (Some(menu1), Some(menu2)) => {
             fn compare(a: f64, b: f64) -> Ordering {
@@ -988,7 +1004,7 @@ where
         send_selected_item(ui, meta, custom_key.cloned(), selected_item);
         return Ok(());
     } else if let Some(s) = ui.main_box.selected_children().into_iter().next() {
-        let list_items = ui.menu_rows.lock().unwrap();
+        let list_items = ui.menu_rows.read().unwrap();
         let item = list_items.get(&s);
         if let Some(selected_item) = item {
             if selected_item.visible {
@@ -1359,6 +1375,8 @@ pub fn apply_sort<T: Clone>(items: &mut [MenuItem<T>], order: &SortOrder) {
                     item.initial_sort_score += special_score;
                 }
             }
+
+            items.sort_by(|l, r| into_core_order(&sort_menu_items_by_score(Some(l), Some(r))));
         }
     }
 }
