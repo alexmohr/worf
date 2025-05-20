@@ -3,9 +3,9 @@ use std::env;
 use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
-use worf_lib::config::Config;
+use worf_lib::config::{Config, CustomKeyHintLocation};
 use worf_lib::desktop::{copy_to_clipboard, spawn_fork};
-use worf_lib::gui::{ItemProvider, Key, KeyBinding, MenuItem, Modifier};
+use worf_lib::gui::{CustomKeyHint, CustomKeys, ItemProvider, Key, KeyBinding, MenuItem, Modifier};
 use worf_lib::{config, gui};
 
 #[derive(Clone)]
@@ -189,6 +189,16 @@ fn key_type_all() -> KeyBinding {
         key: Key::Num1,
         modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+1</b> Type All".to_string(),
+        visible: true,
+    }
+}
+
+fn key_type_all_and_enter() -> KeyBinding {
+    KeyBinding {
+        key: Key::Exclamation,
+        modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
+        label: String::new(),
+        visible: false,
     }
 }
 
@@ -197,6 +207,16 @@ fn key_type_user() -> KeyBinding {
         key: Key::Num2,
         modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+2</b> Type User".to_string(),
+        visible: true,
+    }
+}
+
+fn key_type_user_and_enter() -> KeyBinding {
+    KeyBinding {
+        key: Key::At,
+        modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
+        label: String::new(),
+        visible: false,
     }
 }
 
@@ -205,6 +225,7 @@ fn key_type_password() -> KeyBinding {
         key: Key::Num3,
         modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+3</b> Type Password".to_string(),
+        visible: true,
     }
 }
 
@@ -212,7 +233,8 @@ fn key_type_password_and_enter() -> KeyBinding {
     KeyBinding {
         key: Key::Hash,
         modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
-        label: "<b>Alt+Shift+3</b> Type Password + Enter".to_string(),
+        label: String::new(),
+        visible: false,
     }
 }
 
@@ -221,6 +243,16 @@ fn key_type_totp() -> KeyBinding {
         key: Key::Num4,
         modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+4</b> Type Totp".to_string(),
+        visible: true,
+    }
+}
+
+fn key_type_totp_and_enter() -> KeyBinding {
+    KeyBinding {
+        key: Key::Dollar,
+        modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
+        label: String::new(),
+        visible: false,
     }
 }
 
@@ -229,6 +261,7 @@ fn key_sync() -> KeyBinding {
         key: Key::R,
         modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+r</b> Sync".to_string(),
+        visible: true,
     }
 }
 
@@ -238,6 +271,7 @@ fn key_totp() -> KeyBinding {
         key: Key::T,
         modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+t</b> Totp".to_string(),
+        visible: true,
     }
 }
 
@@ -246,6 +280,7 @@ fn key_lock() -> KeyBinding {
         key: Key::L,
         modifiers: vec![Modifier::Alt].into_iter().collect(),
         label: "<b>Alt+l</b> Lock".to_string(),
+        visible: true,
     }
 }
 
@@ -255,16 +290,25 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
         provider,
         false,
         None,
-        Some(vec![
-            key_type_all(),
-            key_type_user(),
-            key_type_password(),
-            key_type_password_and_enter(),
-            key_type_totp(),
-            key_sync(),
-            key_totp(),
-            key_lock(),
-        ]),
+        Some(CustomKeys {
+            bindings: vec![
+                key_type_all(),
+                key_type_all_and_enter(),
+                key_type_user(),
+                key_type_user_and_enter(),
+                key_type_password(),
+                key_type_password_and_enter(),
+                key_type_totp(),
+                key_type_totp_and_enter(),
+                key_sync(),
+                key_totp(),
+                key_lock(),
+            ],
+            hint: Some(CustomKeyHint {
+                label: "Use Shift as additional modifier to send enter".to_string(),
+                location: CustomKeyHintLocation::Top,
+            }),
+        }),
     ) {
         Ok(selection) => {
             if let Some(meta) = selection.menu.data {
@@ -276,18 +320,15 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
 
                 sleep(Duration::from_millis(500));
                 if let Some(key) = selection.custom_key {
-                    if key == key_type_all() {
+                    if key == key_type_all() || key == key_type_all_and_enter() {
                         keyboard_type(&rbw_get_user(id, false)?);
                         keyboard_tab();
                         keyboard_type(&rbw_get_password(id, false)?);
-                    } else if key == key_type_user() {
+                    } else if key == key_type_user() || key == key_type_user_and_enter() {
                         keyboard_type(&rbw_get_user(id, false)?);
-                    } else if key == key_type_password() {
+                    } else if key == key_type_password() || key == key_type_password_and_enter() {
                         keyboard_type(&rbw_get_password(id, false)?);
-                    } else if key == key_type_password_and_enter() {
-                        keyboard_type(&rbw_get_password(id, false)?);
-                        keyboard_return();
-                    } else if key == key_type_totp() {
+                    } else if key == key_type_totp() || key == key_type_totp_and_enter() {
                         keyboard_type(&rbw_get_totp(id, false)?);
                     } else if key == key_lock() {
                         rbw("lock", None)?;
@@ -295,6 +336,10 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
                         rbw("sync", None)?;
                     } else if key == key_totp() {
                         rbw_get_totp(id, true)?;
+                    }
+
+                    if key.modifiers.contains(&Modifier::Shift) {
+                        keyboard_return();
                     }
                 } else {
                     let pw = rbw_get_password(id, true)?;

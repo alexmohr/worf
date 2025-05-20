@@ -25,7 +25,7 @@ use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 use regex::Regex;
 
-use crate::config::{Anchor, Config, MatchMethod, SortOrder, WrapMode};
+use crate::config::{Anchor, Config, CustomKeyHintLocation, MatchMethod, SortOrder, WrapMode};
 use crate::desktop::known_image_extension_regex_pattern;
 use crate::{Error, config, desktop};
 
@@ -83,17 +83,11 @@ impl From<config::Align> for Align {
     }
 }
 
-fn into_core_order(gtk_order: &Ordering) -> core::cmp::Ordering {
+fn into_core_order(gtk_order: Ordering) -> core::cmp::Ordering {
     match gtk_order {
-        Ordering::Smaller => {
-            core::cmp::Ordering::Less
-        }
-        Ordering::Larger => {
-            core::cmp::Ordering::Greater
-        }
-        _ => {
-            core::cmp::Ordering::Equal
-        }
+        Ordering::Smaller => core::cmp::Ordering::Less,
+        Ordering::Larger => core::cmp::Ordering::Greater,
+        _ => core::cmp::Ordering::Equal,
     }
 }
 
@@ -386,6 +380,19 @@ pub struct KeyBinding {
     pub key: Key,
     pub modifiers: HashSet<Modifier>,
     pub label: String,
+    pub visible: bool,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct CustomKeyHint {
+    pub label: String,
+    pub location: CustomKeyHintLocation,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct CustomKeys {
+    pub bindings: Vec<KeyBinding>,
+    pub hint: Option<CustomKeyHint>,
 }
 
 impl<T: Clone> MenuItem<T> {
@@ -445,7 +452,7 @@ pub fn show<T, P>(
     item_provider: P,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
-    custom_keys: Option<Vec<KeyBinding>>,
+    custom_keys: Option<CustomKeys>,
 ) -> Result<Selection<T>, Error>
 where
     T: Clone + 'static + Send,
@@ -503,7 +510,7 @@ fn build_ui<T, P>(
     app: Application,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
-    custom_keys: Option<&Vec<KeyBinding>>,
+    custom_keys: Option<&CustomKeys>,
 ) where
     T: Clone + 'static + Send,
     P: ItemProvider<T> + 'static + Send,
@@ -569,7 +576,9 @@ fn build_ui<T, P>(
     let outer_box = gtk4::Box::new(config.orientation().into(), 0);
     outer_box.set_widget_name("outer-box");
     outer_box.append(&ui_elements.search);
-    build_custom_key_view(custom_keys, &outer_box);
+    if let Some(custom_keys) = custom_keys {
+        build_custom_key_view(custom_keys, &outer_box);
+    }
 
     ui_elements.window.set_child(Some(&outer_box));
 
@@ -595,15 +604,11 @@ fn build_ui<T, P>(
     log::debug!("got items after {:?}", wait_for_items.elapsed());
 
     let active_cfg = config.clone();
-    //let map_cfg = config.clone();
     let animate_window = ui_elements.window.clone();
 
     animate_window.connect_is_active_notify(move |w| {
         window_show_resize(&active_cfg.clone(), w);
     });
-    // animate_window.connect_map(move |w| {
-    //     window_show_resize(&map_cfg.clone(), w);
-    // });
 
     build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
 
@@ -626,7 +631,6 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
         .main_box
         .set_max_children_per_line(config.columns());
     ui_elements.main_box.set_activate_on_single_click(true);
-
     ui_elements.main_box.set_halign(config.halign().into());
     ui_elements.main_box.set_valign(config.valign().into());
     if config.orientation() == config::Orientation::Horizontal {
@@ -664,31 +668,75 @@ fn build_search_entry<T: Clone + Send>(
     }
 }
 
-fn build_custom_key_view(custom_keys: Option<&Vec<KeyBinding>>, outer_box: &gtk4::Box) {
-    let inner_box = FlowBox::new();
+fn build_custom_key_view(custom_keys: &CustomKeys, outer_box: &gtk4::Box) {
+    fn create_label(inner_box: &FlowBox, text: &str, label_css: &str, box_css: &str) {
+        let label_box = FlowBoxChild::new();
+        label_box.set_halign(Align::Fill);
+        inner_box.set_valign(Align::Start);
+        label_box.set_widget_name(box_css);
+        inner_box.append(&label_box);
+        inner_box.set_vexpand(false);
+        inner_box.set_hexpand(false);
+        let label = Label::new(Some(text));
+        label.set_halign(Align::Fill);
+        label.set_valign(Align::Start);
+        label.set_use_markup(true);
+        label.set_hexpand(true);
+        label.set_vexpand(false);
+        label.set_widget_name(label_css);
+        label.set_wrap(false);
+        label.set_xalign(0.0);
+        label_box.set_child(Some(&label));
+    }
+
+    let inner_box = gtk4::Box::new(Orientation::Vertical, 0);
     inner_box.set_halign(Align::Fill);
-    inner_box.set_widget_name("custom-key-box");
-    if let Some(custom_keys) = custom_keys {
-        for key in custom_keys {
-            let label_box = FlowBoxChild::new();
-            label_box.set_halign(Align::Fill);
-            inner_box.set_valign(Align::Start);
-            label_box.set_widget_name("custom-key-label-box");
-            inner_box.append(&label_box);
-            inner_box.set_vexpand(false);
-            inner_box.set_hexpand(false);
-            let label = Label::new(Some(&key.label));
-            label.set_halign(Align::Fill);
-            label.set_valign(Align::Start);
-            label.set_use_markup(true);
-            label.set_hexpand(true);
-            label.set_vexpand(false);
-            label.set_widget_name("custom-key-label-text");
-            label.set_wrap(false);
-            label.set_xalign(0.0);
-            label_box.set_child(Some(&label));
+
+    let hint_box = FlowBox::new();
+    hint_box.set_halign(Align::Fill);
+    hint_box.set_widget_name("custom-key-box");
+
+    let custom_key_box = FlowBox::new();
+    custom_key_box.set_halign(Align::Fill);
+    custom_key_box.set_widget_name("custom-key-box");
+    inner_box.append(&custom_key_box);
+
+    let make_key_labels = || {
+        for key in custom_keys.bindings.iter().filter(|key| key.visible) {
+            create_label(
+                &custom_key_box,
+                key.label.as_ref(),
+                "custom-key-label-text",
+                "custom-key-label-box",
+            );
+        }
+    };
+
+    if let Some(hint) = custom_keys.hint.as_ref() {
+        match hint.location {
+            CustomKeyHintLocation::Top => {
+                inner_box.append(&hint_box);
+                create_label(
+                    &hint_box,
+                    &hint.label,
+                    "custom-key-hint-text",
+                    "custom-key-hint-box",
+                );
+                make_key_labels();
+            } // todo this surely can be done better
+            CustomKeyHintLocation::Bottom => {
+                make_key_labels();
+                create_label(
+                    &hint_box,
+                    &hint.label,
+                    "custom-key-hint-text",
+                    "custom-key-hint-box",
+                );
+                inner_box.append(&hint_box);
+            }
         }
     }
+
     outer_box.append(&inner_box);
 }
 
@@ -771,7 +819,7 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
 fn setup_key_event_handler<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
-    custom_keys: Option<&Vec<KeyBinding>>,
+    custom_keys: Option<&CustomKeys>,
 ) {
     let key_controller = EventControllerKey::new();
 
@@ -797,7 +845,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
     meta: &Rc<MetaData<T>>,
     keyboard_key: gdk4::Key,
     modifier_type: gdk4::ModifierType,
-    custom_keys: Option<&Vec<KeyBinding>>,
+    custom_keys: Option<&CustomKeys>,
 ) -> Propagation {
     let update_view = |query: &String| {
         let mut lock = ui.menu_rows.write().unwrap();
@@ -820,7 +868,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
 
     if let Some(custom_keys) = custom_keys {
         let mods = modifiers_from_mask(modifier_type);
-        for custom_key in custom_keys {
+        for custom_key in &custom_keys.bindings {
             log::debug!(
                 "comparing custom key {custom_key:?} to mask {mods:?} and key {keyboard_key}"
             );
@@ -935,7 +983,10 @@ fn sort_flow_box_childs<T: Clone>(
     sort_menu_items_by_score(m1, m2)
 }
 
-fn sort_menu_items_by_score<T: Clone>(m1: Option<&MenuItem<T>>, m2: Option<&MenuItem<T>>) -> Ordering {
+fn sort_menu_items_by_score<T: Clone>(
+    m1: Option<&MenuItem<T>>,
+    m2: Option<&MenuItem<T>>,
+) -> Ordering {
     match (m1, m2) {
         (Some(menu1), Some(menu2)) => {
             fn compare(a: f64, b: f64) -> Ordering {
@@ -1376,7 +1427,7 @@ pub fn apply_sort<T: Clone>(items: &mut [MenuItem<T>], order: &SortOrder) {
                 }
             }
 
-            items.sort_by(|l, r| into_core_order(&sort_menu_items_by_score(Some(l), Some(r))));
+            items.sort_by(|l, r| into_core_order(sort_menu_items_by_score(Some(l), Some(r))));
         }
     }
 }
