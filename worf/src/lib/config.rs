@@ -49,6 +49,12 @@ pub enum SortOrder {
     Alphabetical,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum CustomKeyHintLocation {
+    Top,
+    Bottom,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mode {
     /// searches `$PATH` for executables and allows them to be run by selecting them.

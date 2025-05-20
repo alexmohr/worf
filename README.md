@@ -65,6 +65,9 @@ Styling names and classes are inspired by wofi, so most of the documentation and
 | `row`                   | Row containing the entry, used to control hover effects.      |
 | `custom-key-label-text` | The label for custom keys                                     |
 | `custom-key-label-box`  | Box containing the label, can be used for borders etc.        |
+| `custom-key-hint-text`  | The label for custom keys hint                                |
+| `custom-key-hint-box`   | Box containing the hint, can be used for borders etc.         |
+
 
 Checkout more showcases in the [styles directory of this repo](styles).
 
