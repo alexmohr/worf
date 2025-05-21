@@ -1,3 +1,4 @@
+use regex::Regex;
 use crate::config::Config;
 use crate::gui;
 use crate::gui::{ItemProvider, MenuItem};
@@ -21,10 +22,19 @@ impl<T: Clone> MathProvider<T> {
 }
 
 impl<T: Clone> ItemProvider<T> for MathProvider<T> {
+    #[allow(clippy::cast_possible_truncation)]
     fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
         if let Some(search_text) = search {
-            let result = match meval::eval_str(search_text) {
-                Ok(result) => result.to_string(),
+
+            let re = Regex::new(r"0x[0-9a-fA-F]+").unwrap();
+            let result = re.replace_all(search_text, |caps: &regex::Captures| {
+                let hex_str = &caps[0][2..]; // Skip "0x"
+                let decimal = u64::from_str_radix(hex_str, 16).unwrap();
+                decimal.to_string()
+            });
+
+            let result = match meval::eval_str(result) {
+                Ok(result) => format!("{} (0x{:X})", result, result as i64),
                 Err(e) => format!("failed to calculate {e:?}"),
             };
 
