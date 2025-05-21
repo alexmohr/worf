@@ -771,9 +771,12 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
         let meta_clone = Rc::<MetaData<T>>::clone(meta);
         let ui_clone = Rc::<UiElements<T>>::clone(ui);
 
+     
+
         glib::idle_add_local(move || {
             let mut done = false;
             {
+                ui_clone.main_box.unset_sort_func();
                 let mut lock = ui_clone.menu_rows.write().unwrap();
 
                 for _ in 0..25 {
@@ -793,14 +796,15 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
                     meta_clone.search_ignored_words.as_ref(),
                 );
             }
+            let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
+            ui_clone.main_box.set_sort_func(move |child1, child2| {
+                sort_flow_box_childs(child1, child2, &items_sort)
+            });
+
 
             if done {
                 let lock = ui_clone.menu_rows.read().unwrap();
-                let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
-                ui_clone.main_box.set_sort_func(move |child1, child2| {
-                    sort_flow_box_childs(child1, child2, &items_sort)
-                });
-
+             
                 select_first_visible_child(&lock, &ui_clone.main_box);
 
                 log::debug!(
