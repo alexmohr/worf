@@ -333,6 +333,10 @@ pub struct Config {
 
     #[clap(long = "line-wrap")]
     line_wrap: Option<WrapMode>,
+
+    /// Display only icon in emoji mode
+    #[clap(long = "emoji-hide-string")]
+    emoji_hide_label: Option<bool>,
 }
 
 impl Config {
@@ -509,6 +513,11 @@ impl Config {
     #[must_use]
     pub fn sort_order(&self) -> SortOrder {
         self.sort_order.clone().unwrap_or(SortOrder::Alphabetical)
+    }
+
+    #[must_use]
+    pub fn emoji_hide_label(&self) -> bool {
+        self.emoji_hide_label.unwrap_or(false)
     }
 }
 
