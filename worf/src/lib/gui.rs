@@ -876,7 +876,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
             log::debug!(
                 "comparing custom key {custom_key:?} to mask {mods:?} and key {keyboard_key}"
             );
-            if custom_key.key == keyboard_key.into() && mods.is_subset(&custom_key.modifiers) {
+            if custom_key.key == keyboard_key.to_upper().into() && mods.is_subset(&custom_key.modifiers) {
                 let search_lock = ui.search_text.lock().unwrap();
                 if let Err(e) = handle_selected_item(
                     ui,
