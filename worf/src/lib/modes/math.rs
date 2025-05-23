@@ -32,7 +32,9 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
                 decimal.to_string()
             });
 
-            let result = match meval::eval_str(result) {
+            // todo maybe we want to support variables later?
+            let mut ns = fasteval3::EmptyNamespace;
+            let result = match fasteval3::ez_eval(&result, &mut ns) {
                 Ok(result) => format!("{} (0x{:X})", result, result as i64),
                 Err(e) => format!("failed to calculate {e:?}"),
             };
