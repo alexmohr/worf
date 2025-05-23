@@ -25,7 +25,9 @@ use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 use regex::Regex;
 
-use crate::config::{Anchor, Config, CustomKeyHintLocation, MatchMethod, SortOrder, WrapMode};
+use crate::config::{
+    Anchor, Config, CustomKeyHintLocation, KeyDetectionType, MatchMethod, SortOrder, WrapMode,
+};
 use crate::desktop::known_image_extension_regex_pattern;
 use crate::{Error, config, desktop};
 
@@ -330,6 +332,109 @@ impl From<gdk::Key> for Key {
             gdk4::Key::question => Key::Question,
             gdk4::Key::grave => Key::Grave,
             gdk4::Key::asciitilde => Key::Tilde,
+            _ => Key::None,
+        }
+    }
+}
+
+impl From<u32> for Key {
+    fn from(value: u32) -> Self {
+        match value {
+            // Letters
+            38 => Key::A,
+            56 => Key::B,
+            54 => Key::C,
+            40 => Key::D,
+            26 => Key::E,
+            41 => Key::F,
+            42 => Key::G,
+            43 => Key::H,
+            31 => Key::I,
+            44 => Key::J,
+            45 => Key::K,
+            46 => Key::L,
+            58 => Key::M,
+            57 => Key::N,
+            32 => Key::O,
+            33 => Key::P,
+            24 => Key::Q,
+            27 => Key::R,
+            39 => Key::S,
+            28 => Key::T,
+            30 => Key::U,
+            55 => Key::V,
+            25 => Key::W,
+            53 => Key::X,
+            29 => Key::Y,
+            52 => Key::Z,
+
+            // Numbers
+            10 => Key::Num0,
+            11 => Key::Num1,
+            12 => Key::Num2,
+            13 => Key::Num3,
+            14 => Key::Num4,
+            15 => Key::Num5,
+            16 => Key::Num6,
+            17 => Key::Num7,
+            18 => Key::Num8,
+            19 => Key::Num9,
+
+            // Function Keys
+            67 => Key::F1,
+            68 => Key::F2,
+            69 => Key::F3,
+            70 => Key::F4,
+            71 => Key::F5,
+            72 => Key::F6,
+            73 => Key::F7,
+            74 => Key::F8,
+            75 => Key::F9,
+            76 => Key::F10,
+            77 => Key::F11,
+            78 => Key::F12,
+
+            // Navigation / Editing
+            9 => Key::Escape,
+            36 => Key::Enter,
+            65 => Key::Space,
+            23 => Key::Tab,
+            22 => Key::Backspace,
+            118 => Key::Insert,
+            119 => Key::Delete,
+            110 => Key::Home,
+            115 => Key::End,
+            112 => Key::PageUp,
+            117 => Key::PageDown,
+            113 => Key::Left,
+            114 => Key::Right,
+            111 => Key::Up,
+            116 => Key::Down,
+
+            // Special characters
+            20 => Key::Exclamation,
+            63 => Key::At,
+            3 => Key::Hash,
+            4 => Key::Dollar,
+            5 => Key::Percent,
+            6 => Key::Caret,
+            7 => Key::Ampersand,
+            8 => Key::Asterisk,
+            34 => Key::LeftParen,
+            35 => Key::RightParen,
+            48 => Key::Minus,
+            47 => Key::Underscore,
+            21 => Key::Equal,
+            49 => Key::Plus,
+            51 => Key::Backslash,
+            94 => Key::Pipe,
+            50 => Key::Quote,
+            59 => Key::Comma,
+            60 => Key::Period,
+            61 => Key::Slash,
+            62 => Key::Question,
+            96 => Key::Grave,
+            97 => Key::Tilde,
             _ => Key::None,
         }
     }
@@ -771,8 +876,6 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
         let meta_clone = Rc::<MetaData<T>>::clone(meta);
         let ui_clone = Rc::<UiElements<T>>::clone(ui);
 
-     
-
         glib::idle_add_local(move || {
             let mut done = false;
             {
@@ -801,10 +904,9 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
                 sort_flow_box_childs(child1, child2, &items_sort)
             });
 
-
             if done {
                 let lock = ui_clone.menu_rows.read().unwrap();
-             
+
                 select_first_visible_child(&lock, &ui_clone.main_box);
 
                 log::debug!(
@@ -830,11 +932,12 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
     let ui_clone = Rc::clone(ui);
     let meta_clone = Rc::clone(meta);
     let keys_clone = custom_keys.cloned();
-    key_controller.connect_key_pressed(move |_, key_value, _, modifier| {
+    key_controller.connect_key_pressed(move |_, key_value, key_code, modifier| {
         handle_key_press(
             &ui_clone,
             &meta_clone,
             key_value,
+            key_code,
             modifier,
             keys_clone.as_ref(),
         )
@@ -848,6 +951,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     keyboard_key: gdk4::Key,
+    key_code: u32,
     modifier_type: gdk4::ModifierType,
     custom_keys: Option<&CustomKeys>,
 ) -> Propagation {
@@ -873,10 +977,13 @@ fn handle_key_press<T: Clone + 'static + Send>(
     if let Some(custom_keys) = custom_keys {
         let mods = modifiers_from_mask(modifier_type);
         for custom_key in &custom_keys.bindings {
-            log::debug!(
-                "comparing custom key {custom_key:?} to mask {mods:?} and key {keyboard_key}"
-            );
-            if custom_key.key == keyboard_key.to_upper().into() && mods.is_subset(&custom_key.modifiers) {
+            let custom_key_match = if meta.config.key_detection_type() == KeyDetectionType::Code {
+                custom_key.key == key_code.into()
+            } else {
+                custom_key.key == keyboard_key.to_upper().into()
+            } && mods.is_subset(&custom_key.modifiers);
+
+            if custom_key_match {
                 let search_lock = ui.search_text.lock().unwrap();
                 if let Err(e) = handle_selected_item(
                     ui,

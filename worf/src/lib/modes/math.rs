@@ -1,7 +1,7 @@
-use regex::Regex;
 use crate::config::Config;
 use crate::gui;
 use crate::gui::{ItemProvider, MenuItem};
+use regex::Regex;
 
 #[derive(Clone)]
 pub(crate) struct MathProvider<T: Clone> {
@@ -25,7 +25,6 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
     #[allow(clippy::cast_possible_truncation)]
     fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
         if let Some(search_text) = search {
-
             let re = Regex::new(r"0x[0-9a-fA-F]+").unwrap();
             let result = re.replace_all(search_text, |caps: &regex::Captures| {
                 let hex_str = &caps[0][2..]; // Skip "0x"

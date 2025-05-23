@@ -55,6 +55,15 @@ pub enum CustomKeyHintLocation {
     Bottom,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+
+pub enum KeyDetectionType {
+    /// Raw keyboard value, might not be correct all layouts
+    Code,
+    /// The value of the key, but note that shift+3 != 3 (as shift+3 = #)
+    Value,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mode {
     /// searches `$PATH` for executables and allows them to be run by selecting them.
@@ -151,6 +160,20 @@ impl FromStr for SortOrder {
     }
 }
 
+impl FromStr for KeyDetectionType {
+    type Err = ArgsError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "value" => Ok(KeyDetectionType::Value),
+            "code" => Ok(KeyDetectionType::Code),
+            _ => Err(ArgsError::InvalidParameter(
+                format!("{s} is not a valid argument, see help for details").to_owned(),
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, Parser)]
 #[clap(about = "Worf is a wofi clone written in rust, it aims to be a drop-in replacement")]
 #[derive(Default)]
@@ -161,7 +184,7 @@ pub struct Config {
 
     /// Selects a config file to use
     #[clap(short = 'c', long = "conf")]
-    config: Option<String>,
+    cfg_path: Option<String>,
 
     /// Prints the version and then exits
     #[clap(short = 'v', long = "version")]
@@ -329,7 +352,7 @@ pub struct Config {
 
     /// Orientation of items in the row box where items are displayed
     #[clap(long = "row-box-orientation")]
-    row_bow_orientation: Option<Orientation>,
+    row_box_orientation: Option<Orientation>,
 
     #[clap(long = "line-wrap")]
     line_wrap: Option<WrapMode>,
@@ -337,6 +360,9 @@ pub struct Config {
     /// Display only icon in emoji mode
     #[clap(long = "emoji-hide-string")]
     emoji_hide_label: Option<bool>,
+
+    #[clap(long = "keyboard-detection-type")]
+    key_detection_type: Option<KeyDetectionType>,
 }
 
 impl Config {
@@ -438,7 +464,7 @@ impl Config {
 
     #[must_use]
     pub fn row_bow_orientation(&self) -> Orientation {
-        self.row_bow_orientation.unwrap_or(Orientation::Horizontal)
+        self.row_box_orientation.unwrap_or(Orientation::Horizontal)
     }
 
     #[must_use]
@@ -518,6 +544,13 @@ impl Config {
     #[must_use]
     pub fn emoji_hide_label(&self) -> bool {
         self.emoji_hide_label.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn key_detection_type(&self) -> KeyDetectionType {
+        self.key_detection_type
+            .clone()
+            .unwrap_or(KeyDetectionType::Value)
     }
 }
 
@@ -672,7 +705,7 @@ pub fn resolve_path(
 /// * no config file exists
 /// * config file and args cannot be merged
 pub fn load_config(args_opt: Option<&Config>) -> Result<Config, Error> {
-    let config_path = conf_path(args_opt.as_ref().and_then(|c| c.config.as_ref()));
+    let config_path = conf_path(args_opt.as_ref().and_then(|c| c.cfg_path.as_ref()));
     match config_path {
         Ok(path) => {
             let toml_content = fs::read_to_string(path).map_err(|e| Error::Io(format!("{e}")))?;

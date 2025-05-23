@@ -11,19 +11,22 @@ pub(crate) struct EmojiProvider<T: Clone> {
 }
 
 impl<T: Clone> EmojiProvider<T> {
-    pub(crate) fn new(data: T, sort_order: &SortOrder, hide_label: &bool) -> Self {
+    pub(crate) fn new(data: T, sort_order: &SortOrder, hide_label: bool) -> Self {
         let emoji = emoji::search::search_annotation_all("");
         let mut menus = emoji
             .into_iter()
             .map(|e| {
                 MenuItem::new(
-                    if *hide_label {
-                      e.glyph.to_string()
+                    if hide_label {
+                        e.glyph.to_string()
                     } else {
                         format!("{} — Category: {} — Name: {}", e.glyph, e.group, e.name)
                     },
                     None,
-                    Some(format!("emoji {} — Category: {} — Name: {}", e.glyph, e.group, e.name)),
+                    Some(format!(
+                        "emoji {} — Category: {} — Name: {}",
+                        e.glyph, e.group, e.name
+                    )),
                     vec![],
                     None,
                     0.0,
@@ -55,7 +58,7 @@ impl<T: Clone> ItemProvider<T> for EmojiProvider<T> {
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
 pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = EmojiProvider::new(0, &config.sort_order(), &config.emoji_hide_label());
+    let provider = EmojiProvider::new(0, &config.sort_order(), config.emoji_hide_label());
     let selection_result = gui::show(config.clone(), provider, true, None, None)?;
     match selection_result.menu.action {
         None => Err(Error::MissingAction),
