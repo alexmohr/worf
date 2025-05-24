@@ -1,11 +1,12 @@
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::{env, fs};
-
 use crate::Error;
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::str::FromStr;
+use std::{env, fs};
 use thiserror::Error;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
@@ -47,6 +48,20 @@ pub enum WrapMode {
 pub enum SortOrder {
     Default,
     Alphabetical,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum CustomKeyHintLocation {
+    Top,
+    Bottom,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum KeyDetectionType {
+    /// Raw keyboard value, might not be correct all layouts
+    Code,
+    /// The value of the key, but note that shift+3 != 3 (as shift+3 = #)
+    Value,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -145,17 +160,31 @@ impl FromStr for SortOrder {
     }
 }
 
+impl FromStr for KeyDetectionType {
+    type Err = ArgsError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "value" => Ok(KeyDetectionType::Value),
+            "code" => Ok(KeyDetectionType::Code),
+            _ => Err(ArgsError::InvalidParameter(
+                format!("{s} is not a valid argument, see help for details").to_owned(),
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, Parser)]
 #[clap(about = "Worf is a wofi clone written in rust, it aims to be a drop-in replacement")]
 #[derive(Default)]
 pub struct Config {
     /// Forks the menu so you can close the terminal
     #[clap(short = 'f', long = "fork")]
-    fork: Option<bool>, // todo support fork
+    fork: Option<bool>,
 
     /// Selects a config file to use
     #[clap(short = 'c', long = "conf")]
-    config: Option<String>,
+    cfg_path: Option<String>,
 
     /// Prints the version and then exits
     #[clap(short = 'v', long = "version")]
@@ -252,8 +281,13 @@ pub struct Config {
     #[clap(short = 'a', long = "no-actions")]
     no_actions: Option<bool>,
 
+    /// If set, the given amount tof lines will be shown
     #[clap(short = 'L', long = "lines")]
-    lines: Option<u32>, // todo support this
+    lines: Option<i32>,
+
+    /// Additional space to add to the window when `lines` is used.
+    #[clap(long = "line-additional-space")]
+    lines_additional_space: Option<i32>,
 
     #[clap(short = 'w', long = "columns")]
     columns: Option<u32>,
@@ -287,7 +321,7 @@ pub struct Config {
 
     /// Defines the image size in pixels
     #[clap(long = "image-size")]
-    image_size: Option<i32>,
+    image_size: Option<u16>,
 
     key_up: Option<String>,          // todo support this
     key_down: Option<String>,        // todo support this
@@ -308,13 +342,16 @@ pub struct Config {
     // key_custom: Option<HashMap<String, String>>,
     global_coords: Option<bool>, // todo support this
 
-    /// If set to `true` the search field will be hidden.
+    /// If set to `true` the search field willOption<> be hidden.
     #[clap(long = "hide-search")]
     hide_search: Option<bool>,
-    dynamic_lines: Option<bool>,    // todo support this
-    layer: Option<String>,          // todo support this
-    copy_exec: Option<String>,      // todo support this
-    single_click: Option<bool>,     // todo support this
+    #[clap(long = "dynamic-lines")]
+    dynamic_lines: Option<bool>, // todo support this
+    layer: Option<String>,     // todo support this
+    copy_exec: Option<String>, // todo support this
+    #[clap(long = "single_click")]
+    single_click: Option<bool>, // todo support this
+    #[clap(long = "pre-display-exec")]
     pre_display_exec: Option<bool>, // todo support this
 
     /// Minimum score for a fuzzy search to be shown
@@ -323,15 +360,27 @@ pub struct Config {
 
     /// Orientation of items in the row box where items are displayed
     #[clap(long = "row-box-orientation")]
-    row_bow_orientation: Option<Orientation>,
+    row_box_orientation: Option<Orientation>,
 
     #[clap(long = "line-wrap")]
     line_wrap: Option<WrapMode>,
+
+    /// Display only icon in emoji mode
+    #[clap(long = "emoji-hide-string")]
+    emoji_hide_label: Option<bool>,
+
+    #[clap(long = "keyboard-detection-type")]
+    key_detection_type: Option<KeyDetectionType>,
 }
 
 impl Config {
     #[must_use]
-    pub fn image_size(&self) -> i32 {
+    pub fn fork(&self) -> bool {
+        self.fork.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn image_size(&self) -> u16 {
         self.image_size.unwrap_or(32)
     }
 
@@ -347,7 +396,7 @@ impl Config {
 
     #[must_use]
     pub fn style(&self) -> Option<String> {
-        style_path(None)
+        style_path(self.style.as_ref())
             .ok()
             .map(|pb| pb.display().to_string())
             .or_else(|| {
@@ -427,8 +476,8 @@ impl Config {
     }
 
     #[must_use]
-    pub fn row_bow_orientation(&self) -> Orientation {
-        self.row_bow_orientation.unwrap_or(Orientation::Horizontal)
+    pub fn row_box_orientation(&self) -> Orientation {
+        self.row_box_orientation.unwrap_or(Orientation::Horizontal)
     }
 
     #[must_use]
@@ -503,6 +552,28 @@ impl Config {
     #[must_use]
     pub fn sort_order(&self) -> SortOrder {
         self.sort_order.clone().unwrap_or(SortOrder::Alphabetical)
+    }
+
+    #[must_use]
+    pub fn emoji_hide_label(&self) -> bool {
+        self.emoji_hide_label.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn key_detection_type(&self) -> KeyDetectionType {
+        self.key_detection_type
+            .clone()
+            .unwrap_or(KeyDetectionType::Value)
+    }
+
+    #[must_use]
+    pub fn lines(&self) -> Option<i32> {
+        self.lines
+    }
+
+    #[must_use]
+    pub fn lines_additional_space(&self) -> i32 {
+        self.lines_additional_space.unwrap_or(0)
     }
 }
 
@@ -599,7 +670,7 @@ pub fn parse_args() -> Config {
 /// # Errors
 ///
 /// Will return Err when it cannot resolve any path or no style is found
-fn style_path(full_path: Option<String>) -> Result<PathBuf, Error> {
+fn style_path(full_path: Option<&String>) -> Result<PathBuf, Error> {
     let alternative_paths = path_alternatives(
         vec![dirs::config_dir()],
         &PathBuf::from("worf").join("style.css"),
@@ -610,7 +681,7 @@ fn style_path(full_path: Option<String>) -> Result<PathBuf, Error> {
 /// # Errors
 ///
 /// Will return Err when it cannot resolve any path or no style is found
-pub fn conf_path(full_path: Option<String>) -> Result<PathBuf, Error> {
+pub fn conf_path(full_path: Option<&String>) -> Result<PathBuf, Error> {
     let alternative_paths = path_alternatives(
         vec![dirs::config_dir()],
         &PathBuf::from("worf").join("config"),
@@ -633,9 +704,10 @@ pub fn path_alternatives(base_paths: Vec<Option<PathBuf>>, sub_path: &PathBuf) -
 ///
 /// Will return `Err` if it is not able to find any valid path
 pub fn resolve_path(
-    full_path: Option<String>,
+    full_path: Option<&String>,
     alternatives: Vec<PathBuf>,
 ) -> Result<PathBuf, Error> {
+    log::debug!("resolving path for {full_path:?}, with alternatives: {alternatives:?}");
     full_path
         .map(PathBuf::from)
         .and_then(|p| p.canonicalize().ok().filter(|c| c.exists()))
@@ -656,9 +728,10 @@ pub fn resolve_path(
 /// * no config file exists
 /// * config file and args cannot be merged
 pub fn load_config(args_opt: Option<&Config>) -> Result<Config, Error> {
-    let config_path = conf_path(args_opt.as_ref().and_then(|c| c.config.clone()));
+    let config_path = conf_path(args_opt.as_ref().and_then(|c| c.cfg_path.as_ref()));
     match config_path {
         Ok(path) => {
+            log::debug!("loading config from {}", path.display());
             let toml_content = fs::read_to_string(path).map_err(|e| Error::Io(format!("{e}")))?;
             let mut config: Config =
                 toml::from_str(&toml_content).map_err(|e| Error::ParsingError(format!("{e}")))?;
@@ -723,5 +796,34 @@ fn merge_json(a: &mut Value, b: &Value) {
                 *a_val = b_val.clone();
             }
         }
+    }
+}
+
+/// Fork into background if configured
+/// # Panics
+/// Panics if preexec and or setsid do not work
+pub fn fork_if_configured(config: &Config) {
+    let fork_env_var = "WORF_PROCESS_IS_FORKED";
+    if config.fork() && env::var(fork_env_var).is_err() {
+        let mut cmd = Command::new(env::current_exe().expect("Failed to get current executable"));
+
+        for arg in env::args().skip(1) {
+            cmd.arg(arg);
+        }
+
+        cmd.env(fork_env_var, "1");
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+
+        cmd.spawn().expect("Failed to fork to background");
+        std::process::exit(0);
     }
 }

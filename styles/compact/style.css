@@ -74,8 +74,15 @@ font-family: DejaVu;
   margin-bottom: 0.25em;
   border-right: 1px solid rgba(214, 174, 0, 1);
   border-left: 1px solid rgba(214, 174, 0, 1);
+  border-bottom: 1px solid rgba(214, 174, 0, 1);
+  padding-left: 1em;
+}
+
+#custom-key-hint-box {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
   padding-left: 1em;
 }
 
 #custom-key-label-text {
-  }
+}

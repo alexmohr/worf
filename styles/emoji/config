@@ -6,3 +6,4 @@ content_halign="Center"
 height="70%"
 width="60%"
 valign="Start"
+emoji_hide_label=true

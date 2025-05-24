@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Instant;
 
@@ -25,11 +25,15 @@ use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 use regex::Regex;
 
-use crate::config::{Anchor, Config, MatchMethod, SortOrder, WrapMode};
-use crate::desktop::known_image_extension_regex_pattern;
-use crate::{Error, config, desktop};
+use crate::{
+    Error, config,
+    config::{
+        Anchor, Config, CustomKeyHintLocation, KeyDetectionType, MatchMethod, SortOrder, WrapMode,
+    },
+    desktop::known_image_extension_regex_pattern,
+};
 
-type ArcMenuMap<T> = Arc<Mutex<HashMap<FlowBoxChild, MenuItem<T>>>>;
+type ArcMenuMap<T> = Arc<RwLock<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
 
 pub struct Selection<T: Clone + Send> {
@@ -80,6 +84,14 @@ impl From<config::Align> for Align {
             config::Align::Start => Align::Start,
             config::Align::Center => Align::Center,
         }
+    }
+}
+
+fn into_core_order(gtk_order: Ordering) -> core::cmp::Ordering {
+    match gtk_order {
+        Ordering::Smaller => core::cmp::Ordering::Less,
+        Ordering::Larger => core::cmp::Ordering::Greater,
+        _ => core::cmp::Ordering::Equal,
     }
 }
 
@@ -327,6 +339,109 @@ impl From<gdk::Key> for Key {
     }
 }
 
+impl From<u32> for Key {
+    fn from(value: u32) -> Self {
+        match value {
+            // Letters
+            38 => Key::A,
+            56 => Key::B,
+            54 => Key::C,
+            40 => Key::D,
+            26 => Key::E,
+            41 => Key::F,
+            42 => Key::G,
+            43 => Key::H,
+            31 => Key::I,
+            44 => Key::J,
+            45 => Key::K,
+            46 => Key::L,
+            58 => Key::M,
+            57 => Key::N,
+            32 => Key::O,
+            33 => Key::P,
+            24 => Key::Q,
+            27 => Key::R,
+            39 => Key::S,
+            28 => Key::T,
+            30 => Key::U,
+            55 => Key::V,
+            25 => Key::W,
+            53 => Key::X,
+            29 => Key::Y,
+            52 => Key::Z,
+
+            // Numbers
+            10 => Key::Num0,
+            11 => Key::Num1,
+            12 => Key::Num2,
+            13 => Key::Num3,
+            14 => Key::Num4,
+            15 => Key::Num5,
+            16 => Key::Num6,
+            17 => Key::Num7,
+            18 => Key::Num8,
+            19 => Key::Num9,
+
+            // Function Keys
+            67 => Key::F1,
+            68 => Key::F2,
+            69 => Key::F3,
+            70 => Key::F4,
+            71 => Key::F5,
+            72 => Key::F6,
+            73 => Key::F7,
+            74 => Key::F8,
+            75 => Key::F9,
+            76 => Key::F10,
+            77 => Key::F11,
+            78 => Key::F12,
+
+            // Navigation / Editing
+            9 => Key::Escape,
+            36 => Key::Enter,
+            65 => Key::Space,
+            23 => Key::Tab,
+            22 => Key::Backspace,
+            118 => Key::Insert,
+            119 => Key::Delete,
+            110 => Key::Home,
+            115 => Key::End,
+            112 => Key::PageUp,
+            117 => Key::PageDown,
+            113 => Key::Left,
+            114 => Key::Right,
+            111 => Key::Up,
+            116 => Key::Down,
+
+            // Special characters
+            20 => Key::Exclamation,
+            63 => Key::At,
+            3 => Key::Hash,
+            4 => Key::Dollar,
+            5 => Key::Percent,
+            6 => Key::Caret,
+            7 => Key::Ampersand,
+            8 => Key::Asterisk,
+            34 => Key::LeftParen,
+            35 => Key::RightParen,
+            48 => Key::Minus,
+            47 => Key::Underscore,
+            21 => Key::Equal,
+            49 => Key::Plus,
+            51 => Key::Backslash,
+            94 => Key::Pipe,
+            50 => Key::Quote,
+            59 => Key::Comma,
+            60 => Key::Period,
+            61 => Key::Slash,
+            62 => Key::Question,
+            96 => Key::Grave,
+            97 => Key::Tilde,
+            _ => Key::None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Modifier {
     Shift,
@@ -338,25 +453,53 @@ pub enum Modifier {
     None,
 }
 
-impl From<gdk4::ModifierType> for Modifier {
-    fn from(value: gdk4::ModifierType) -> Self {
-        match value {
-            gdk4::ModifierType::SHIFT_MASK => Modifier::Shift,
-            gdk4::ModifierType::CONTROL_MASK => Modifier::Control,
-            gdk4::ModifierType::ALT_MASK => Modifier::Alt,
-            gdk4::ModifierType::SUPER_MASK => Modifier::Super,
-            gdk4::ModifierType::META_MASK => Modifier::Meta,
-            gdk4::ModifierType::LOCK_MASK => Modifier::CapsLock,
-            _ => Modifier::None,
-        }
+fn modifiers_from_mask(mask: gdk4::ModifierType) -> HashSet<Modifier> {
+    let mut modifiers = HashSet::new();
+
+    if mask.contains(gdk4::ModifierType::SHIFT_MASK) {
+        modifiers.insert(Modifier::Shift);
     }
+    if mask.contains(gdk4::ModifierType::CONTROL_MASK) {
+        modifiers.insert(Modifier::Control);
+    }
+    if mask.contains(gdk4::ModifierType::ALT_MASK) {
+        modifiers.insert(Modifier::Alt);
+    }
+    if mask.contains(gdk4::ModifierType::SUPER_MASK) {
+        modifiers.insert(Modifier::Super);
+    }
+    if mask.contains(gdk4::ModifierType::META_MASK) {
+        modifiers.insert(Modifier::Meta);
+    }
+    if mask.contains(gdk4::ModifierType::LOCK_MASK) {
+        modifiers.insert(Modifier::CapsLock);
+    }
+
+    if modifiers.is_empty() {
+        modifiers.insert(Modifier::None);
+    }
+
+    modifiers
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct KeyBinding {
     pub key: Key,
-    pub modifiers: Modifier, // todo support masks
+    pub modifiers: HashSet<Modifier>,
     pub label: String,
+    pub visible: bool,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct CustomKeyHint {
+    pub label: String,
+    pub location: CustomKeyHintLocation,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct CustomKeys {
+    pub bindings: Vec<KeyBinding>,
+    pub hint: Option<CustomKeyHint>,
 }
 
 impl<T: Clone> MenuItem<T> {
@@ -416,7 +559,7 @@ pub fn show<T, P>(
     item_provider: P,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
-    custom_keys: Option<Vec<KeyBinding>>,
+    custom_keys: Option<CustomKeys>,
 ) -> Result<Selection<T>, Error>
 where
     T: Clone + 'static + Send,
@@ -425,6 +568,7 @@ where
     gtk4::init().map_err(|e| Error::Graphics(e.to_string()))?;
     log::debug!("Starting GUI");
     if let Some(ref css) = config.style() {
+        log::debug!("loading css from {css}");
         let provider = CssProvider::new();
         let css_file_path = File::for_path(css);
         provider.load_from_file(&css_file_path);
@@ -473,7 +617,7 @@ fn build_ui<T, P>(
     app: Application,
     new_on_empty: bool,
     search_ignored_words: Option<Vec<Regex>>,
-    custom_keys: Option<&Vec<KeyBinding>>,
+    custom_keys: Option<&CustomKeys>,
 ) where
     T: Clone + 'static + Send,
     P: ItemProvider<T> + 'static + Send,
@@ -498,8 +642,8 @@ fn build_ui<T, P>(
         .application(&app)
         .decorated(false)
         .resizable(false)
-        .default_width(100)
-        .default_height(100)
+        .default_width(1)
+        .default_height(1)
         .build();
 
     let ui_elements = Rc::new(UiElements {
@@ -507,7 +651,7 @@ fn build_ui<T, P>(
         window,
         search: SearchEntry::new(),
         main_box: FlowBox::new(),
-        menu_rows: Arc::new(Mutex::new(HashMap::new())),
+        menu_rows: Arc::new(RwLock::new(HashMap::new())),
         search_text: Arc::new(Mutex::new(String::new())),
     });
 
@@ -539,7 +683,9 @@ fn build_ui<T, P>(
     let outer_box = gtk4::Box::new(config.orientation().into(), 0);
     outer_box.set_widget_name("outer-box");
     outer_box.append(&ui_elements.search);
-    build_custom_key_view(custom_keys, &outer_box);
+    if let Some(custom_keys) = custom_keys {
+        build_custom_key_view(custom_keys, &outer_box);
+    }
 
     ui_elements.window.set_child(Some(&outer_box));
 
@@ -563,18 +709,15 @@ fn build_ui<T, P>(
     let wait_for_items = Instant::now();
     let (_changed, provider_elements) = get_provider_elements.join().unwrap();
     log::debug!("got items after {:?}", wait_for_items.elapsed());
-    build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
 
-    let animate_cfg = config.clone();
-    let animate_window = ui_elements.window.clone();
-
-    animate_window.connect_is_active_notify(move |w| {
-        w.set_opacity(1.0);
-        window_show_resize(&animate_cfg.clone(), w);
+    let cfg = config.clone();
+    let ui = Rc::clone(&ui_elements);
+    ui_elements.window.connect_is_active_notify(move |_| {
+        window_show_resize(&cfg.clone(), &ui);
     });
 
-    // hide the fact that we are starting with a small window
-    ui_elements.window.set_opacity(0.01);
+    build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
+
     let window_start = Instant::now();
     ui_elements.window.present();
     log::debug!("window show took {:?}", window_start.elapsed());
@@ -594,7 +737,6 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
         .main_box
         .set_max_children_per_line(config.columns());
     ui_elements.main_box.set_activate_on_single_click(true);
-
     ui_elements.main_box.set_halign(config.halign().into());
     ui_elements.main_box.set_valign(config.valign().into());
     if config.orientation() == config::Orientation::Horizontal {
@@ -608,7 +750,7 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
         fb.grab_focus();
         fb.invalidate_sort();
 
-        let lock = ui_clone.menu_rows.lock().unwrap();
+        let lock = ui_clone.menu_rows.read().unwrap();
         select_first_visible_child(&*lock, &ui_clone.main_box);
     });
 }
@@ -632,31 +774,75 @@ fn build_search_entry<T: Clone + Send>(
     }
 }
 
-fn build_custom_key_view(custom_keys: Option<&Vec<KeyBinding>>, outer_box: &gtk4::Box) {
-    let inner_box = FlowBox::new();
+fn build_custom_key_view(custom_keys: &CustomKeys, outer_box: &gtk4::Box) {
+    fn create_label(inner_box: &FlowBox, text: &str, label_css: &str, box_css: &str) {
+        let label_box = FlowBoxChild::new();
+        label_box.set_halign(Align::Fill);
+        inner_box.set_valign(Align::Start);
+        label_box.set_widget_name(box_css);
+        inner_box.append(&label_box);
+        inner_box.set_vexpand(false);
+        inner_box.set_hexpand(false);
+        let label = Label::new(Some(text));
+        label.set_halign(Align::Fill);
+        label.set_valign(Align::Start);
+        label.set_use_markup(true);
+        label.set_hexpand(true);
+        label.set_vexpand(false);
+        label.set_widget_name(label_css);
+        label.set_wrap(false);
+        label.set_xalign(0.0);
+        label_box.set_child(Some(&label));
+    }
+
+    let inner_box = gtk4::Box::new(Orientation::Vertical, 0);
     inner_box.set_halign(Align::Fill);
-    inner_box.set_widget_name("custom-key-box");
-    if let Some(custom_keys) = custom_keys {
-        for key in custom_keys {
-            let label_box = FlowBoxChild::new();
-            label_box.set_halign(Align::Fill);
-            inner_box.set_valign(Align::Start);
-            label_box.set_widget_name("custom-key-label-box");
-            inner_box.append(&label_box);
-            inner_box.set_vexpand(false);
-            inner_box.set_hexpand(false);
-            let label = Label::new(Some(&key.label));
-            label.set_halign(Align::Fill);
-            label.set_valign(Align::Start);
-            label.set_use_markup(true);
-            label.set_hexpand(true);
-            label.set_vexpand(false);
-            label.set_widget_name("custom-key-label-text");
-            label.set_wrap(false);
-            label.set_xalign(0.0);
-            label_box.set_child(Some(&label));
+
+    let hint_box = FlowBox::new();
+    hint_box.set_halign(Align::Fill);
+    hint_box.set_widget_name("custom-key-box");
+
+    let custom_key_box = FlowBox::new();
+    custom_key_box.set_halign(Align::Fill);
+    custom_key_box.set_widget_name("custom-key-box");
+    inner_box.append(&custom_key_box);
+
+    let make_key_labels = || {
+        for key in custom_keys.bindings.iter().filter(|key| key.visible) {
+            create_label(
+                &custom_key_box,
+                key.label.as_ref(),
+                "custom-key-label-text",
+                "custom-key-label-box",
+            );
+        }
+    };
+
+    if let Some(hint) = custom_keys.hint.as_ref() {
+        match hint.location {
+            CustomKeyHintLocation::Top => {
+                inner_box.append(&hint_box);
+                create_label(
+                    &hint_box,
+                    &hint.label,
+                    "custom-key-hint-text",
+                    "custom-key-hint-box",
+                );
+                make_key_labels();
+            } // todo this surely can be done better
+            CustomKeyHintLocation::Bottom => {
+                make_key_labels();
+                create_label(
+                    &hint_box,
+                    &hint.label,
+                    "custom-key-hint-text",
+                    "custom-key-hint-box",
+                );
+                inner_box.append(&hint_box);
+            }
         }
     }
+
     outer_box.append(&inner_box);
 }
 
@@ -679,24 +865,27 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
     meta: &Rc<MetaData<T>>,
     mut items: Vec<MenuItem<T>>,
 ) {
+    if meta.config.sort_order() != SortOrder::Default {
+        items.reverse();
+    }
     let start = Instant::now();
     {
         while let Some(b) = ui.main_box.child_at_index(0) {
             ui.main_box.remove(&b);
             drop(b);
         }
-        ui.menu_rows.lock().unwrap().clear();
+        ui.menu_rows.write().unwrap().clear();
 
         let meta_clone = Rc::<MetaData<T>>::clone(meta);
         let ui_clone = Rc::<UiElements<T>>::clone(ui);
 
         glib::idle_add_local(move || {
-            ui_clone.main_box.unset_sort_func();
             let mut done = false;
             {
-                let mut lock = ui_clone.menu_rows.lock().unwrap();
+                ui_clone.main_box.unset_sort_func();
+                let mut lock = ui_clone.menu_rows.write().unwrap();
 
-                for _ in 0..100 {
+                for _ in 0..25 {
                     if let Some(item) = items.pop() {
                         lock.insert(add_menu_item(&ui_clone, &meta_clone, &item), item);
                     } else {
@@ -713,22 +902,22 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
                     meta_clone.search_ignored_words.as_ref(),
                 );
             }
-
             let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
             ui_clone.main_box.set_sort_func(move |child1, child2| {
-                sort_menu_items_by_score(child1, child2, &items_sort)
+                sort_flow_box_childs(child1, child2, &items_sort)
             });
 
             if done {
-                let mut lock = ui_clone.menu_rows.lock().unwrap();
-                let menus = &mut *lock;
-                select_first_visible_child(menus, &ui_clone.main_box);
+                let lock = ui_clone.menu_rows.read().unwrap();
+
+                select_first_visible_child(&lock, &ui_clone.main_box);
 
                 log::debug!(
                     "Created {} menu items in {:?}",
-                    menus.len(),
+                    &lock.len(),
                     start.elapsed()
                 );
+
                 ControlFlow::Break
             } else {
                 ControlFlow::Continue
@@ -740,18 +929,19 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
 fn setup_key_event_handler<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
-    custom_keys: Option<&Vec<KeyBinding>>,
+    custom_keys: Option<&CustomKeys>,
 ) {
     let key_controller = EventControllerKey::new();
 
     let ui_clone = Rc::clone(ui);
     let meta_clone = Rc::clone(meta);
     let keys_clone = custom_keys.cloned();
-    key_controller.connect_key_pressed(move |_, key_value, _, modifier| {
+    key_controller.connect_key_pressed(move |_, key_value, key_code, modifier| {
         handle_key_press(
             &ui_clone,
             &meta_clone,
             key_value,
+            key_code,
             modifier,
             keys_clone.as_ref(),
         )
@@ -765,15 +955,15 @@ fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     keyboard_key: gdk4::Key,
+    key_code: u32,
     modifier_type: gdk4::ModifierType,
-    custom_keys: Option<&Vec<KeyBinding>>,
+    custom_keys: Option<&CustomKeys>,
 ) -> Propagation {
     let update_view = |query: &String| {
-        let mut lock = ui.menu_rows.lock().unwrap();
-        let menus = &mut *lock;
+        let mut lock = ui.menu_rows.write().unwrap();
         set_menu_visibility_for_search(
             query,
-            menus,
+            &mut lock,
             &meta.config,
             meta.search_ignored_words.as_ref(),
         );
@@ -789,9 +979,15 @@ fn handle_key_press<T: Clone + 'static + Send>(
     };
 
     if let Some(custom_keys) = custom_keys {
-        for custom_key in custom_keys {
-            if custom_key.key == keyboard_key.into() && custom_key.modifiers == modifier_type.into()
-            {
+        let mods = modifiers_from_mask(modifier_type);
+        for custom_key in &custom_keys.bindings {
+            let custom_key_match = if meta.config.key_detection_type() == KeyDetectionType::Code {
+                custom_key.key == key_code.into()
+            } else {
+                custom_key.key == keyboard_key.to_upper().into()
+            } && mods.is_subset(&custom_key.modifiers);
+
+            if custom_key_match {
                 let search_lock = ui.search_text.lock().unwrap();
                 if let Err(e) = handle_selected_item(
                     ui,
@@ -844,7 +1040,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
                         expander.set_expanded(true);
                     } else {
                         let opt_changed = {
-                            let lock = ui.menu_rows.lock().unwrap();
+                            let lock = ui.menu_rows.read().unwrap();
                             let menu_item = lock.get(fb);
                             menu_item.map(|menu_item| {
                                 (
@@ -883,12 +1079,12 @@ fn handle_key_press<T: Clone + 'static + Send>(
     Propagation::Proceed
 }
 
-fn sort_menu_items_by_score<T: Clone>(
+fn sort_flow_box_childs<T: Clone>(
     child1: &FlowBoxChild,
     child2: &FlowBoxChild,
     items_lock: &ArcMenuMap<T>,
 ) -> Ordering {
-    let lock = items_lock.lock().unwrap();
+    let lock = items_lock.read().unwrap();
     let m1 = lock.get(child1);
     let m2 = lock.get(child2);
 
@@ -899,6 +1095,13 @@ fn sort_menu_items_by_score<T: Clone>(
         return Ordering::Larger;
     }
 
+    sort_menu_items_by_score(m1, m2)
+}
+
+fn sort_menu_items_by_score<T: Clone>(
+    m1: Option<&MenuItem<T>>,
+    m2: Option<&MenuItem<T>>,
+) -> Ordering {
     match (m1, m2) {
         (Some(menu1), Some(menu2)) => {
             fn compare(a: f64, b: f64) -> Ordering {
@@ -923,28 +1126,79 @@ fn sort_menu_items_by_score<T: Clone>(
     }
 }
 
-fn window_show_resize(config: &Config, window: &ApplicationWindow) {
-    if let Some(surface) = window.surface() {
-        let display = surface.display();
-        let monitor = display.monitor_at_surface(&surface);
-        if let Some(monitor) = monitor {
-            let geometry = monitor.geometry();
-            let Some(target_width) = percent_or_absolute(&config.width(), geometry.width()) else {
-                return;
-            };
+fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>>) {
+    // Get the surface and associated monitor geometry
+    let Some(surface) = ui.window.surface() else {
+        return;
+    };
 
-            let Some(target_height) = percent_or_absolute(&config.height(), geometry.height())
-            else {
-                return;
-            };
+    let display = surface.display();
+    let Some(monitor) = display.monitor_at_surface(&surface) else {
+        return;
+    };
+    let geometry = monitor.geometry();
 
+    // Calculate target width from config, return early if not set
+    let Some(target_width) = percent_or_absolute(&config.width(), geometry.width()) else {
+        log::error!("width is not set");
+        return;
+    };
+
+    // Calculate target height based on either lines or absolute height
+    let target_height = if let Some(lines) = config.lines() {
+        let (_, _, _, height_search) = ui.search.measure(Orientation::Vertical, 10_000);
+        let widget = {
+            let lock = ui.menu_rows.read().unwrap();
+            lock.iter().next().map(|(w, _)| w.clone())
+        };
+
+        if let Some(widget) = widget {
             log::debug!(
-                "monitor geometry: {geometry:?}, target_height {target_height}, target_width {target_width}"
+                "widget, mapped: {}, realized {}, visible {}, has child {}, baseline {}, pref size {:#?}",
+                widget.is_mapped(),
+                widget.is_realized(),
+                widget.is_visible(),
+                widget.child().is_some(),
+                widget.allocated_baseline(),
+                widget.preferred_size()
             );
+            if !widget.is_mapped() {
+                let c_clone = config.clone();
+                let ui_clone = Rc::clone(ui);
+                widget.connect_realize(move |_| {
+                    window_show_resize(&c_clone, &Rc::clone(&ui_clone));
+                });
+                return;
+            }
 
-            window.set_width_request(target_width);
-            window.set_height_request(target_height);
+            let (_, nat, _, baseline) = widget.measure(Orientation::Vertical, 10_000);
+            log::debug!("natural height base {baseline}, nat {nat}");
+            // todo fix this eventually properly, so baseline is always set and not only in 85% of cases.
+            let height = if baseline > 0 {
+                baseline
+            } else {
+                nat // for my configuration way bigger than baseline
+            };
+
+            Some((height_search + height) * lines + config.lines_additional_space())
+        } else {
+            log::warn!("No widget for height calculation available");
+            Some(0)
         }
+    } else if let Some(height) = percent_or_absolute(&config.height(), geometry.height()) {
+        Some(height)
+    } else {
+        log::error!("Widget is none");
+        Some(0)
+    };
+
+    // Apply the calculated size or log an error if height missing
+    if let Some(target_height) = target_height {
+        log::debug!("Setting width {target_width}, height {target_height}");
+        ui.window.set_height_request(target_height);
+        ui.window.set_width_request(target_width);
+    } else {
+        log::error!("height is not set");
     }
 }
 
@@ -967,7 +1221,7 @@ where
         send_selected_item(ui, meta, custom_key.cloned(), selected_item);
         return Ok(());
     } else if let Some(s) = ui.main_box.selected_children().into_iter().next() {
-        let list_items = ui.menu_rows.lock().unwrap();
+        let list_items = ui.menu_rows.read().unwrap();
         let item = list_items.get(&s);
         if let Some(selected_item) = item {
             if selected_item.visible {
@@ -1074,7 +1328,7 @@ fn create_menu_row<T: Clone + 'static + Send>(
     row.set_halign(Align::Fill);
     row.set_widget_name("row");
 
-    let row_box = gtk4::Box::new(meta.config.row_bow_orientation().into(), 0);
+    let row_box = gtk4::Box::new(meta.config.row_box_orientation().into(), 0);
     row_box.set_hexpand(true);
     row_box.set_vexpand(false);
     row_box.set_halign(Align::Fill);
@@ -1187,7 +1441,11 @@ fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
         let image = if image_path.starts_with('/') {
             Image::from_file(image_path)
         } else if img_regex.unwrap().is_match(image_path) {
-            if let Ok(img) = desktop::fetch_icon_from_common_dirs(image_path) {
+            if let Some(img) = freedesktop_icons::lookup(image_path)
+                .with_size(config.image_size())
+                .with_scale(1)
+                .find()
+            {
                 Image::from_file(img)
             } else {
                 Image::from_icon_name(image_path)
@@ -1196,7 +1454,7 @@ fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
             Image::from_icon_name(image_path)
         };
 
-        image.set_pixel_size(config.image_size());
+        image.set_pixel_size(i32::from(config.image_size()));
         Some(image)
     } else {
         None
@@ -1209,10 +1467,6 @@ fn set_menu_visibility_for_search<T: Clone>(
     config: &Config,
     search_ignored_words: Option<&Vec<Regex>>,
 ) {
-    if config.sort_order() == SortOrder::Default {
-        return;
-    }
-
     {
         if query.is_empty() {
             for (fb, menu_item) in items.iter_mut() {
@@ -1338,6 +1592,8 @@ pub fn apply_sort<T: Clone>(items: &mut [MenuItem<T>], order: &SortOrder) {
                     item.initial_sort_score += special_score;
                 }
             }
+
+            items.sort_by(|l, r| into_core_order(sort_menu_items_by_score(Some(l), Some(r))));
         }
     }
 }

@@ -25,7 +25,6 @@ The standard view will show `ssh` and `drun`, for other modes the following pref
 * `ssh` (optional)
 * `?` web search
 * `/`, `$` or `~` for files
-* `emoji` for emojis
 
 <img src="images/demo.gif">
 
@@ -66,6 +65,9 @@ Styling names and classes are inspired by wofi, so most of the documentation and
 | `row`                   | Row containing the entry, used to control hover effects.      |
 | `custom-key-label-text` | The label for custom keys                                     |
 | `custom-key-label-box`  | Box containing the label, can be used for borders etc.        |
+| `custom-key-hint-text`  | The label for custom keys hint                                |
+| `custom-key-hint-box`   | Box containing the hint, can be used for borders etc.         |
+
 
 Checkout more showcases in the [styles directory of this repo](styles).
 
@@ -97,6 +99,7 @@ This library is not available publicly yet as the interface is not stable enough
 * Color files are not supported
 * `line_wrap` is now called `line-wrap`
 * Wofi has a C-API, that is not and won't be supported, but Worf can be used as a rust library.
+* Most boolean options now need `true` or `false` as argument, as Worf is using the same struct for config and command line arguments and this is the only way to merge both data sources
 
 ### Dropped arguments / config values
 * `mode`, use show

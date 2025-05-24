@@ -1,7 +1,7 @@
 use std::env;
 
 use anyhow::anyhow;
-use worf_lib::config::Mode;
+use worf_lib::config::{Mode, fork_if_configured};
 use worf_lib::{Error, config, modes};
 
 fn main() -> anyhow::Result<()> {
@@ -11,7 +11,16 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let args = config::parse_args();
-    let config = config::load_config(Some(&args)).unwrap_or(args);
+
+    let config = config::load_config(Some(&args));
+    let config = match config {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!("error during config load, skipping it, {e}");
+            args
+        }
+    };
+    fork_if_configured(&config);
 
     if let Some(show) = &config.show() {
         let result = match show {
