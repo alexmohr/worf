@@ -1,11 +1,12 @@
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::{env, fs};
-
 use crate::Error;
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::os::unix::process::CommandExt;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::str::FromStr;
+use std::{env, fs};
 use thiserror::Error;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
@@ -177,10 +178,11 @@ impl FromStr for KeyDetectionType {
 #[derive(Debug, Deserialize, Serialize, Clone, Parser)]
 #[clap(about = "Worf is a wofi clone written in rust, it aims to be a drop-in replacement")]
 #[derive(Default)]
+#[allow(clippy::struct_excessive_bools)] // it's fine for config
 pub struct Config {
     /// Forks the menu so you can close the terminal
-    #[clap(short = 'f', long = "fork")]
-    fork: Option<bool>, // todo support fork
+    #[clap(long = "fork")]
+    fork: bool,
 
     /// Selects a config file to use
     #[clap(short = 'c', long = "conf")]
@@ -225,7 +227,8 @@ pub struct Config {
 
     /// Set to 'false' to disable images, defaults to true
     #[clap(short = 'I', long = "allow-images")]
-    allow_images: Option<bool>,
+    #[serde(default = "default_true")]
+    allow_images: bool,
 
     /// If `true` pango markup is parsed
     #[clap(short = 'm', long = "allow-markup")]
@@ -335,16 +338,16 @@ pub struct Config {
     // todo re-add this
     // #[serde(flatten)]
     // key_custom: Option<HashMap<String, String>>,
-    global_coords: Option<bool>, // todo support this
+    global_coords: bool, // todo support this
 
-    /// If set to `true` the search field will be hidden.
+    /// If set to `true` the search field willOption<> be hidden.
     #[clap(long = "hide-search")]
-    hide_search: Option<bool>,
-    dynamic_lines: Option<bool>,    // todo support this
-    layer: Option<String>,          // todo support this
-    copy_exec: Option<String>,      // todo support this
-    single_click: Option<bool>,     // todo support this
-    pre_display_exec: Option<bool>, // todo support this
+    hide_search: bool,
+    dynamic_lines: bool,       // todo support this
+    layer: Option<String>,     // todo support this
+    copy_exec: Option<String>, // todo support this
+    single_click: bool,        // todo support this
+    pre_display_exec: bool,    // todo support this
 
     /// Minimum score for a fuzzy search to be shown
     #[clap(long = "fuzzy-min-score")]
@@ -359,13 +362,18 @@ pub struct Config {
 
     /// Display only icon in emoji mode
     #[clap(long = "emoji-hide-string")]
-    emoji_hide_label: Option<bool>,
+    emoji_hide_label: bool,
 
     #[clap(long = "keyboard-detection-type")]
     key_detection_type: Option<KeyDetectionType>,
 }
 
 impl Config {
+    #[must_use]
+    pub fn fork(&self) -> bool {
+        self.fork
+    }
+
     #[must_use]
     pub fn image_size(&self) -> u16 {
         self.image_size.unwrap_or(32)
@@ -469,7 +477,7 @@ impl Config {
 
     #[must_use]
     pub fn allow_images(&self) -> bool {
-        self.allow_images.unwrap_or(true)
+        self.allow_images
     }
 
     #[must_use]
@@ -513,7 +521,7 @@ impl Config {
 
     #[must_use]
     pub fn hide_search(&self) -> bool {
-        self.hide_search.unwrap_or(false)
+        self.hide_search
     }
 
     #[must_use]
@@ -543,7 +551,7 @@ impl Config {
 
     #[must_use]
     pub fn emoji_hide_label(&self) -> bool {
-        self.emoji_hide_label.unwrap_or(false)
+        self.emoji_hide_label
     }
 
     #[must_use]
@@ -558,9 +566,9 @@ fn default_false() -> bool {
     false
 }
 
-// fn default_true() -> bool {
-//     true
-// }
+fn default_true() -> bool {
+    true
+}
 
 //
 // // TODO
@@ -772,5 +780,34 @@ fn merge_json(a: &mut Value, b: &Value) {
                 *a_val = b_val.clone();
             }
         }
+    }
+}
+
+/// Fork into background if configured
+/// # Panics
+/// Panics if preexec and or setsid do not work
+pub fn fork_if_configured(config: &Config) {
+    let fork_env_var = "WORF_PROCESS_IS_FORKED";
+    if config.fork() && env::var(fork_env_var).is_err() {
+        let mut cmd = Command::new(env::current_exe().expect("Failed to get current executable"));
+
+        for arg in env::args().skip(1) {
+            cmd.arg(arg);
+        }
+
+        cmd.env(fork_env_var, "1");
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+
+        cmd.spawn().expect("Failed to fork to background");
+        std::process::exit(0);
     }
 }
