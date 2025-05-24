@@ -24,51 +24,34 @@ fn split_at_tab(input: &str) -> Option<(&str, &str)> {
 }
 
 impl PasswordProvider {
-    fn new(config: &Config) -> Self {
-        let output = rbw("list", Some(vec!["--fields", "id,name"]));
-        let items = match output {
-            Ok(output) => {
-                let mut items = output
-                    .lines()
-                    .filter_map(|s| split_at_tab(s))
-                    .fold(
-                        HashMap::new(),
-                        |mut acc: HashMap<String, Vec<String>>, (id, name)| {
-                            acc.entry(name.to_owned()).or_default().push(id.to_owned());
-                            acc
-                        },
-                    )
-                    .iter()
-                    .map(|(key, value)| {
-                        MenuItem::new(
-                            key.clone(),
-                            None,
-                            None,
-                            vec![].into_iter().collect(),
-                            None,
-                            0.0,
-                            Some(MenuItemMetaData { ids: value.clone() }),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                gui::apply_sort(&mut items, &config.sort_order());
-                items
-            }
-            Err(error) => {
-                let item = MenuItem::new(
-                    format!("Error from rbw: {error}"),
+    fn new(config: &Config) -> Result<Self, String> {
+        let output = rbw("list", Some(vec!["--fields", "id,name"]))?;
+        let mut items = output
+            .lines()
+            .filter_map(|s| split_at_tab(s))
+            .fold(
+                HashMap::new(),
+                |mut acc: HashMap<String, Vec<String>>, (id, name)| {
+                    acc.entry(name.to_owned()).or_default().push(id.to_owned());
+                    acc
+                },
+            )
+            .iter()
+            .map(|(key, value)| {
+                MenuItem::new(
+                    key.clone(),
                     None,
                     None,
                     vec![].into_iter().collect(),
                     None,
                     0.0,
-                    None,
-                );
-                vec![item]
-            }
-        };
+                    Some(MenuItemMetaData { ids: value.clone() }),
+                )
+            })
+            .collect::<Vec<_>>();
+        gui::apply_sort(&mut items, &config.sort_order());
 
-        Self { items }
+        Ok(Self { items })
     }
 
     fn sub_provider(ids: Vec<String>) -> Result<Self, String> {
@@ -376,7 +359,6 @@ fn main() -> Result<(), String> {
     spawn_fork("ydotoold", None).expect("failed to spawn ydotoold");
 
     // todo eventually use a propper rust client for this, for now rbw is good enough
-    let provider = PasswordProvider::new(&config);
-
+    let provider = PasswordProvider::new(&config)?;
     show(config, provider)
 }
