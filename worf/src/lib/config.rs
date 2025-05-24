@@ -316,7 +316,7 @@ pub struct Config {
 
     /// Defines the image size in pixels
     #[clap(long = "image-size")]
-    image_size: Option<i32>,
+    image_size: Option<u16>,
 
     key_up: Option<String>,          // todo support this
     key_down: Option<String>,        // todo support this
@@ -367,7 +367,7 @@ pub struct Config {
 
 impl Config {
     #[must_use]
-    pub fn image_size(&self) -> i32 {
+    pub fn image_size(&self) -> u16 {
         self.image_size.unwrap_or(32)
     }
 
