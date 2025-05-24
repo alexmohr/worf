@@ -710,11 +710,10 @@ fn build_ui<T, P>(
     let (_changed, provider_elements) = get_provider_elements.join().unwrap();
     log::debug!("got items after {:?}", wait_for_items.elapsed());
 
-    let active_cfg = config.clone();
-    let animate_window = ui_elements.window.clone();
-
-    animate_window.connect_is_active_notify(move |w| {
-        window_show_resize(&active_cfg.clone(), w);
+    let cfg = config.clone();
+    let ui = Rc::clone(&ui_elements);
+    ui_elements.window.connect_is_active_notify(move |_| {
+        window_show_resize(&cfg.clone(), &ui);
     });
 
     build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
@@ -918,6 +917,7 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
                     &lock.len(),
                     start.elapsed()
                 );
+
                 ControlFlow::Break
             } else {
                 ControlFlow::Continue
@@ -1126,28 +1126,81 @@ fn sort_menu_items_by_score<T: Clone>(
     }
 }
 
-fn window_show_resize(config: &Config, window: &ApplicationWindow) {
-    if let Some(surface) = window.surface() {
-        let display = surface.display();
-        let monitor = display.monitor_at_surface(&surface);
-        if let Some(monitor) = monitor {
-            let geometry = monitor.geometry();
-            let Some(target_width) = percent_or_absolute(&config.width(), geometry.width()) else {
-                return;
-            };
+fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>>) {
+    // Get the surface and associated monitor geometry
+    let Some(surface) = ui.window.surface() else {
+        return;
+    };
 
-            let Some(target_height) = percent_or_absolute(&config.height(), geometry.height())
-            else {
-                return;
-            };
+    let display = surface.display();
+    let Some(monitor) = display.monitor_at_surface(&surface) else {
+        return;
+    };
+    let geometry = monitor.geometry();
 
+    // Calculate target width from config, return early if not set
+    let Some(target_width) = percent_or_absolute(&config.width(), geometry.width()) else {
+        log::error!("width is not set");
+        return;
+    };
+
+    // Calculate target height based on either lines or absolute height
+    let target_height = if let Some(lines) = config.lines() {
+        let (_, _, _, height_search) = ui.search.measure(Orientation::Vertical, 10_000);
+        let widget = {
+            let lock = ui.menu_rows.read().unwrap();
+            lock.iter().next().map(|(w, _)| w.clone())
+        };
+
+        if let Some(widget) = widget {
             log::debug!(
-                "monitor geometry: {geometry:?}, target_height {target_height}, target_width {target_width}"
+                "widget, mapped: {}, realized {}, visible {}, has child {}, baseline {}, pref size {:#?}",
+                widget.is_mapped(),
+                widget.is_realized(),
+                widget.is_visible(),
+                widget.child().is_some(),
+                widget.allocated_baseline(),
+                widget.preferred_size()
             );
+            if !widget.is_mapped() {
+                let c_clone = config.clone();
+                let ui_clone = Rc::clone(ui);
+                widget.connect_realize(move |_| {
+                    window_show_resize(&c_clone, &Rc::clone(&ui_clone));
+                });
+                return;
+            }
 
-            window.set_width_request(target_width);
-            window.set_height_request(target_height);
+            let (_, nat, _, baseline) = widget.measure(Orientation::Vertical, 10_000);
+            log::debug!("natural height base {baseline}, nat {nat}");
+            // todo fix this eventually properly, so baseline is always set and not only in 85% of cases.
+            let height = if baseline > 0 {
+                baseline
+            } else if config.allow_images() {
+                i32::from(config.image_size()) // wild guess that image makes the most part of the row ...
+            } else {
+                nat // for my configuration way bigger than baseline
+            };
+
+            Some((height_search + height) * lines)
+        } else {
+            log::warn!("No widget for height calculation available");
+            Some(0)
         }
+    } else if let Some(height) = percent_or_absolute(&config.height(), geometry.height()) {
+        Some(height)
+    } else {
+        log::error!("Widget is none");
+        Some(0)
+    };
+
+    // Apply the calculated size or log an error if height missing
+    if let Some(target_height) = target_height {
+        log::debug!("Setting width {target_width}, height {target_height}");
+        ui.window.set_height_request(target_height);
+        ui.window.set_width_request(target_width);
+    } else {
+        log::error!("height is not set");
     }
 }
 

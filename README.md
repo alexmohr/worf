@@ -99,6 +99,7 @@ This library is not available publicly yet as the interface is not stable enough
 * Color files are not supported
 * `line_wrap` is now called `line-wrap`
 * Wofi has a C-API, that is not and won't be supported, but Worf can be used as a rust library.
+* Most boolean options now need `true` or `false` as argument, as Worf is using the same struct for config and command line arguments and this is the only way to merge both data sources
 
 ### Dropped arguments / config values
 * `mode`, use show
