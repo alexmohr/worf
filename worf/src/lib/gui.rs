@@ -25,11 +25,13 @@ use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 use regex::Regex;
 
-use crate::config::{
-    Anchor, Config, CustomKeyHintLocation, KeyDetectionType, MatchMethod, SortOrder, WrapMode,
+use crate::{
+    Error, config,
+    config::{
+        Anchor, Config, CustomKeyHintLocation, KeyDetectionType, MatchMethod, SortOrder, WrapMode,
+    },
+    desktop::known_image_extension_regex_pattern,
 };
-use crate::desktop::known_image_extension_regex_pattern;
-use crate::{Error, config, desktop};
 
 type ArcMenuMap<T> = Arc<RwLock<HashMap<FlowBoxChild, MenuItem<T>>>>;
 type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
@@ -1386,7 +1388,11 @@ fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
         let image = if image_path.starts_with('/') {
             Image::from_file(image_path)
         } else if img_regex.unwrap().is_match(image_path) {
-            if let Ok(img) = desktop::fetch_icon_from_common_dirs(image_path) {
+            if let Some(img) = freedesktop_icons::lookup(image_path)
+                .with_size(config.image_size())
+                .with_scale(1)
+                .find()
+            {
                 Image::from_file(img)
             } else {
                 Image::from_icon_name(image_path)
@@ -1395,7 +1401,7 @@ fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
             Image::from_icon_name(image_path)
         };
 
-        image.set_pixel_size(config.image_size());
+        image.set_pixel_size(i32::from(config.image_size()));
         Some(image)
     } else {
         None
