@@ -11,8 +11,15 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     let args = config::parse_args();
-    let config = config::load_config(Some(&args)).unwrap_or(args);
 
+    let config = config::load_config(Some(&args));
+    let config = match config {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!("error during config load, skipping it, {e}");
+            args
+        }
+    };
     fork_if_configured(&config);
 
     if let Some(show) = &config.show() {

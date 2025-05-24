@@ -1176,13 +1176,11 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
             // todo fix this eventually properly, so baseline is always set and not only in 85% of cases.
             let height = if baseline > 0 {
                 baseline
-            } else if config.allow_images() {
-                i32::from(config.image_size()) // wild guess that image makes the most part of the row ...
             } else {
                 nat // for my configuration way bigger than baseline
             };
 
-            Some((height_search + height) * lines)
+            Some((height_search + height) * lines + config.lines_additional_space())
         } else {
             log::warn!("No widget for height calculation available");
             Some(0)
@@ -1330,7 +1328,7 @@ fn create_menu_row<T: Clone + 'static + Send>(
     row.set_halign(Align::Fill);
     row.set_widget_name("row");
 
-    let row_box = gtk4::Box::new(meta.config.row_bow_orientation().into(), 0);
+    let row_box = gtk4::Box::new(meta.config.row_box_orientation().into(), 0);
     row_box.set_hexpand(true);
     row_box.set_vexpand(false);
     row_box.set_halign(Align::Fill);

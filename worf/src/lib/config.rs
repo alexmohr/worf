@@ -57,7 +57,6 @@ pub enum CustomKeyHintLocation {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-
 pub enum KeyDetectionType {
     /// Raw keyboard value, might not be correct all layouts
     Code,
@@ -282,8 +281,13 @@ pub struct Config {
     #[clap(short = 'a', long = "no-actions")]
     no_actions: Option<bool>,
 
+    /// If set, the given amount tof lines will be shown
     #[clap(short = 'L', long = "lines")]
-    lines: Option<i32>, // todo support this
+    lines: Option<i32>,
+
+    /// Additional space to add to the window when `lines` is used.
+    #[clap(long = "line-additional-space")]
+    lines_additional_space: Option<i32>,
 
     #[clap(short = 'w', long = "columns")]
     columns: Option<u32>,
@@ -342,7 +346,7 @@ pub struct Config {
     #[clap(long = "hide-search")]
     hide_search: Option<bool>,
     #[clap(long = "dynamic-lines")]
-    dynamic_lines: bool, // todo support this
+    dynamic_lines: Option<bool>, // todo support this
     layer: Option<String>,     // todo support this
     copy_exec: Option<String>, // todo support this
     #[clap(long = "single_click")]
@@ -472,7 +476,7 @@ impl Config {
     }
 
     #[must_use]
-    pub fn row_bow_orientation(&self) -> Orientation {
+    pub fn row_box_orientation(&self) -> Orientation {
         self.row_box_orientation.unwrap_or(Orientation::Horizontal)
     }
 
@@ -565,6 +569,11 @@ impl Config {
     #[must_use]
     pub fn lines(&self) -> Option<i32> {
         self.lines
+    }
+
+    #[must_use]
+    pub fn lines_additional_space(&self) -> i32 {
+        self.lines_additional_space.unwrap_or(0)
     }
 }
 
@@ -722,6 +731,7 @@ pub fn load_config(args_opt: Option<&Config>) -> Result<Config, Error> {
     let config_path = conf_path(args_opt.as_ref().and_then(|c| c.cfg_path.as_ref()));
     match config_path {
         Ok(path) => {
+            log::debug!("loading config from {}", path.display());
             let toml_content = fs::read_to_string(path).map_err(|e| Error::Io(format!("{e}")))?;
             let mut config: Config =
                 toml::from_str(&toml_content).map_err(|e| Error::ParsingError(format!("{e}")))?;
