@@ -866,7 +866,9 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
     meta: &Rc<MetaData<T>>,
     mut items: Vec<MenuItem<T>>,
 ) {
-    items.reverse();
+    if meta.config.sort_order() != SortOrder::Default {
+        items.reverse();
+    }
     let start = Instant::now();
     {
         while let Some(b) = ui.main_box.child_at_index(0) {
@@ -1414,10 +1416,6 @@ fn set_menu_visibility_for_search<T: Clone>(
     config: &Config,
     search_ignored_words: Option<&Vec<Regex>>,
 ) {
-    if config.sort_order() == SortOrder::Default {
-        return;
-    }
-
     {
         if query.is_empty() {
             for (fb, menu_item) in items.iter_mut() {
