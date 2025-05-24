@@ -178,11 +178,10 @@ impl FromStr for KeyDetectionType {
 #[derive(Debug, Deserialize, Serialize, Clone, Parser)]
 #[clap(about = "Worf is a wofi clone written in rust, it aims to be a drop-in replacement")]
 #[derive(Default)]
-#[allow(clippy::struct_excessive_bools)] // it's fine for config
 pub struct Config {
     /// Forks the menu so you can close the terminal
-    #[clap(long = "fork")]
-    fork: bool,
+    #[clap(short = 'f', long = "fork")]
+    fork: Option<bool>,
 
     /// Selects a config file to use
     #[clap(short = 'c', long = "conf")]
@@ -227,8 +226,7 @@ pub struct Config {
 
     /// Set to 'false' to disable images, defaults to true
     #[clap(short = 'I', long = "allow-images")]
-    #[serde(default = "default_true")]
-    allow_images: bool,
+    allow_images: Option<bool>,
 
     /// If `true` pango markup is parsed
     #[clap(short = 'm', long = "allow-markup")]
@@ -285,7 +283,7 @@ pub struct Config {
     no_actions: Option<bool>,
 
     #[clap(short = 'L', long = "lines")]
-    lines: Option<u32>, // todo support this
+    lines: Option<i32>, // todo support this
 
     #[clap(short = 'w', long = "columns")]
     columns: Option<u32>,
@@ -338,16 +336,19 @@ pub struct Config {
     // todo re-add this
     // #[serde(flatten)]
     // key_custom: Option<HashMap<String, String>>,
-    global_coords: bool, // todo support this
+    global_coords: Option<bool>, // todo support this
 
     /// If set to `true` the search field willOption<> be hidden.
     #[clap(long = "hide-search")]
-    hide_search: bool,
-    dynamic_lines: bool,       // todo support this
+    hide_search: Option<bool>,
+    #[clap(long = "dynamic-lines")]
+    dynamic_lines: bool, // todo support this
     layer: Option<String>,     // todo support this
     copy_exec: Option<String>, // todo support this
-    single_click: bool,        // todo support this
-    pre_display_exec: bool,    // todo support this
+    #[clap(long = "single_click")]
+    single_click: Option<bool>, // todo support this
+    #[clap(long = "pre-display-exec")]
+    pre_display_exec: Option<bool>, // todo support this
 
     /// Minimum score for a fuzzy search to be shown
     #[clap(long = "fuzzy-min-score")]
@@ -362,7 +363,7 @@ pub struct Config {
 
     /// Display only icon in emoji mode
     #[clap(long = "emoji-hide-string")]
-    emoji_hide_label: bool,
+    emoji_hide_label: Option<bool>,
 
     #[clap(long = "keyboard-detection-type")]
     key_detection_type: Option<KeyDetectionType>,
@@ -371,7 +372,7 @@ pub struct Config {
 impl Config {
     #[must_use]
     pub fn fork(&self) -> bool {
-        self.fork
+        self.fork.unwrap_or(false)
     }
 
     #[must_use]
@@ -477,7 +478,7 @@ impl Config {
 
     #[must_use]
     pub fn allow_images(&self) -> bool {
-        self.allow_images
+        self.allow_images.unwrap_or(true)
     }
 
     #[must_use]
@@ -521,7 +522,7 @@ impl Config {
 
     #[must_use]
     pub fn hide_search(&self) -> bool {
-        self.hide_search
+        self.hide_search.unwrap_or(false)
     }
 
     #[must_use]
@@ -551,7 +552,7 @@ impl Config {
 
     #[must_use]
     pub fn emoji_hide_label(&self) -> bool {
-        self.emoji_hide_label
+        self.emoji_hide_label.unwrap_or(false)
     }
 
     #[must_use]
@@ -560,15 +561,20 @@ impl Config {
             .clone()
             .unwrap_or(KeyDetectionType::Value)
     }
+
+    #[must_use]
+    pub fn lines(&self) -> Option<i32> {
+        self.lines
+    }
 }
 
 fn default_false() -> bool {
     false
 }
 
-fn default_true() -> bool {
-    true
-}
+// fn default_true() -> bool {
+//     true
+// }
 
 //
 // // TODO
