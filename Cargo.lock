@@ -619,8 +619,9 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "freedesktop-file-parser"
-version = "0.1.3"
-source = "git+https://github.com/alexmohr/desktop_file_parser?branch=fix-format-and-clippy#2c42c2ce28f474b7b663037b344b2bee9be21ef1"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9874624824ee3ca96cf728451815bd93ae3978cdcd715c1d098edef7130fb0da"
 dependencies = [
  "freedesktop-icons",
  "thiserror 2.0.12",

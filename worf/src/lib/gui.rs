@@ -1144,42 +1144,17 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
         return;
     };
 
-    // Calculate target height based on either lines or absolute height
     let target_height = if let Some(lines) = config.lines() {
         let (_, _, _, height_search) = ui.search.measure(Orientation::Vertical, 10_000);
-        let widget = {
+        let height = {
             let lock = ui.menu_rows.read().unwrap();
-            lock.iter().next().map(|(w, _)| w.clone())
+            lock.iter().find_map(|(fb, _)| {
+                let (_, _, _, baseline) = fb.measure(Orientation::Vertical, 10_000);
+                if baseline > 0 { Some(baseline) } else { None }
+            })
         };
 
-        if let Some(widget) = widget {
-            log::debug!(
-                "widget, mapped: {}, realized {}, visible {}, has child {}, baseline {}, pref size {:#?}",
-                widget.is_mapped(),
-                widget.is_realized(),
-                widget.is_visible(),
-                widget.child().is_some(),
-                widget.allocated_baseline(),
-                widget.preferred_size()
-            );
-            if !widget.is_mapped() {
-                let c_clone = config.clone();
-                let ui_clone = Rc::clone(ui);
-                widget.connect_realize(move |_| {
-                    window_show_resize(&c_clone, &Rc::clone(&ui_clone));
-                });
-                return;
-            }
-
-            let (_, nat, _, baseline) = widget.measure(Orientation::Vertical, 10_000);
-            log::debug!("natural height base {baseline}, nat {nat}");
-            // todo fix this eventually properly, so baseline is always set and not only in 85% of cases.
-            let height = if baseline > 0 {
-                baseline
-            } else {
-                nat // for my configuration way bigger than baseline
-            };
-
+        if let Some(height) = height {
             Some((height_search + height) * lines + config.lines_additional_space())
         } else {
             log::warn!("No widget for height calculation available");
