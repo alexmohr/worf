@@ -5,7 +5,9 @@ Worf is written in Rust on top of GTK4.
 
 It started out as a drop in replacement for wofi, so styles and config in most part (should) be compatible, 
 with a few exception documented below. 
-Worf has more features than wofi though, so there won't be 100% compatibility.
+Worf has more features than wofi though, so there won't be 100% compatibility. 
+Broken compatibility with wofi is not considered a bug, but issues regarding that will be accepted if you 
+would rather use worf than wofi.
 
 **While the main branch in general is stable and I am using this on a daily basis, it is not ready yet
 to be used as a library, a lot of things are still moving around.**
@@ -17,7 +19,7 @@ It supports various modes:
 * Ssh
 * Run
 * Emoji 
-* // WebSearch
+* // WebSearch --> tracked by https://github.com/alexmohr/worf/issues/55
 * Auto
 
 Auto mode tries to detect the desired mode automatically, to achieve this some modes require a prefix in the search.
@@ -28,12 +30,6 @@ The standard view will show `ssh` and `drun`, for other modes the following pref
 
 <img src="images/demo.gif">
 
-## Not finished
-* [ ] key support
-* [ ] full config support
-* [ ] web search mode
-* [ ] publish library
-
 
 ## Additional functionality compared to Wofi
 * Support passing 'hidden' parameters that are not visible in the launcher but will be returned to the application
@@ -43,8 +39,6 @@ The standard view will show `ssh` and `drun`, for other modes the following pref
 ### New config / command line options
 * fuzzy-length: Defines how long a string must be to be considered for fuzzy match
 * row-box-orientation: Allows aligning values vertically to place the label below the icon
-
-### New Styling options
 
 ## Styling
 
