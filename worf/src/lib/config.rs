@@ -180,8 +180,7 @@ impl FromStr for KeyDetectionType {
 pub struct Config {
     /// Forks the menu so you can close the terminal
     #[clap(short = 'f', long = "fork")]
-    #[serde(default = "default_false")]
-    fork: bool,
+    fork: Option<bool>,
 
     /// Selects a config file to use
     #[clap(short = 'c', long = "conf")]
@@ -189,8 +188,7 @@ pub struct Config {
 
     /// Prints the version and then exits
     #[clap(short = 'v', long = "version")]
-    #[serde(default = "default_false")]
-    version: bool,
+    version: Option<bool>,
 
     /// Defines the style sheet to be loaded.
     /// Defaults to `$XDG_CONF_DIR/worf/style.css`
@@ -227,13 +225,11 @@ pub struct Config {
 
     /// Set to 'false' to disable images, defaults to true
     #[clap(short = 'I', long = "allow-images")]
-    #[serde(default = "default_true")]
-    allow_images: bool,
+    allow_images: Option<bool>,
 
     /// If `true` pango markup is parsed
     #[clap(short = 'm', long = "allow-markup")]
-    #[serde(default = "default_true")]
-    allow_markup: bool,
+    allow_markup: Option<bool>,
 
     #[clap(short = 'k', long = "cache-file")]
     cache_file: Option<String>, // todo support this
@@ -261,8 +257,7 @@ pub struct Config {
 
     /// Defines whether the scrollbar is visible
     #[clap(short = 'b', long = "hide-scroll")]
-    #[serde(default = "default_false")]
-    hide_scroll: bool,
+    hide_scroll: Option<bool>,
 
     /// Defines the matching method, defaults to contains
     #[clap(short = 'M', long = "matching")]
@@ -271,8 +266,7 @@ pub struct Config {
     /// Control if search is case-insensitive or not.
     /// Defaults to true
     #[clap(short = 'i', long = "insensitive")]
-    #[serde(default = "default_true")]
-    insensitive: bool,
+    insensitive: Option<bool>,
 
     #[clap(short = 'q', long = "parse-search")]
     parse_search: Option<bool>, // todo support this
@@ -284,7 +278,6 @@ pub struct Config {
     )]
     location: Option<Vec<Anchor>>,
 
-    // todo support this
     #[clap(short = 'a', long = "no-actions")]
     no_actions: Option<bool>,
 
@@ -351,20 +344,13 @@ pub struct Config {
 
     /// If set to `true` the search field willOption<> be hidden.
     #[clap(long = "hide-search")]
-    #[serde(default = "default_false")]
-    hide_search: bool,
-
+    hide_search: Option<bool>,
     #[clap(long = "dynamic-lines")]
-    #[serde(default = "default_false")]
-    dynamic_lines: bool, // todo support this
-
+    dynamic_lines: Option<bool>, // todo support this
     layer: Option<String>,     // todo support this
-
     copy_exec: Option<String>, // todo support this
-
     #[clap(long = "single_click")]
     single_click: Option<bool>, // todo support this
-
     #[clap(long = "pre-display-exec")]
     pre_display_exec: Option<bool>, // todo support this
 
@@ -390,7 +376,7 @@ pub struct Config {
 impl Config {
     #[must_use]
     pub fn fork(&self) -> bool {
-        self.fork
+        self.fork.unwrap_or(false)
     }
 
     #[must_use]
@@ -431,7 +417,7 @@ impl Config {
 
     #[must_use]
     pub fn hide_scroll(&self) -> bool {
-        self.hide_scroll
+        self.hide_scroll.unwrap_or(false)
     }
 
     #[must_use]
@@ -496,7 +482,7 @@ impl Config {
 
     #[must_use]
     pub fn allow_images(&self) -> bool {
-        self.allow_images
+        self.allow_images.unwrap_or(true)
     }
 
     #[must_use]
@@ -535,12 +521,12 @@ impl Config {
 
     #[must_use]
     pub fn insensitive(&self) -> bool {
-        self.insensitive
+        self.insensitive.unwrap_or(true)
     }
 
     #[must_use]
     pub fn hide_search(&self) -> bool {
-        self.hide_search
+        self.hide_search.unwrap_or(false)
     }
 
     #[must_use]
@@ -550,7 +536,7 @@ impl Config {
 
     #[must_use]
     pub fn allow_markup(&self) -> bool {
-        self.allow_markup
+        self.allow_markup.unwrap_or(false)
     }
 
     #[must_use]
@@ -589,10 +575,10 @@ impl Config {
     pub fn lines_additional_space(&self) -> i32 {
         self.lines_additional_space.unwrap_or(0)
     }
-    
+
     #[must_use]
     pub fn version(&self) -> bool {
-        self.version
+        self.version.unwrap_or(false)
     }
 }
 
@@ -600,9 +586,9 @@ fn default_false() -> bool {
     false
 }
 
-fn default_true() -> bool {
-    true
-}
+// fn default_true() -> bool {
+//     true
+// }
 
 //
 // // TODO

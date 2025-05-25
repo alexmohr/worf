@@ -20,12 +20,12 @@ fn main() -> anyhow::Result<()> {
             args
         }
     };
-    
+
     if config.version() {
         println!("worf version {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
-    
+
     fork_if_configured(&config);
 
     if let Some(show) = &config.show() {

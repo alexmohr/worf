@@ -1162,20 +1162,32 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
 
         let height = {
             let lock = ui.menu_rows.read().unwrap();
-            lock.iter().find_map(|(fb, _)| {
-                let (_, _, _, baseline) = fb.measure(Orientation::Vertical, 10_000);
-                if baseline > 0 {
-                    let factor = if lines > 1 {
-                        1.4 // todo find a better way to do this
-                    // most likely it will not work with all styles
+            lock.iter()
+                .find_map(|(fb, _)| {
+                    let (_, _, _, baseline) = fb.measure(Orientation::Vertical, 10_000);
+                    if baseline > 0 {
+                        let factor = if lines > 1 {
+                            1.4 // todo find a better way to do this
+                        // most likely it will not work with all styles
+                        } else {
+                            1.0
+                        };
+
+                        if config.allow_images() && baseline < i32::from(config.image_size()) {
+                            Some(i32::from(config.image_size()))
+                        } else {
+                            Some((f64::from(baseline) * factor) as i32)
+                        }
                     } else {
-                        1.0
-                    };
-                    Some((f64::from(baseline) * factor) as i32)
-                } else {
-                    None
-                }
-            })
+                        None
+                    }
+                })
+                .or_else(|| {
+                    lock.iter().find_map(|(fb, _)| {
+                        let (_, nat, _, _) = fb.measure(Orientation::Vertical, 10_000);
+                        if nat > 0 { Some(nat) } else { None }
+                    })
+                })
         };
 
         log::debug!(
