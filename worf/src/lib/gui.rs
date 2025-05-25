@@ -371,16 +371,16 @@ impl From<u32> for Key {
             52 => Key::Z,
 
             // Numbers
-            10 => Key::Num0,
-            11 => Key::Num1,
-            12 => Key::Num2,
-            13 => Key::Num3,
-            14 => Key::Num4,
-            15 => Key::Num5,
-            16 => Key::Num6,
-            17 => Key::Num7,
-            18 => Key::Num8,
-            19 => Key::Num9,
+            10 => Key::Num1,
+            11 => Key::Num2,
+            12 => Key::Num3,
+            13 => Key::Num4,
+            14 => Key::Num5,
+            15 => Key::Num6,
+            16 => Key::Num7,
+            17 => Key::Num8,
+            18 => Key::Num9,
+            19 => Key::Num0,
 
             // Function Keys
             67 => Key::F1,
@@ -987,6 +987,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
         update_view(query);
     };
 
+    log::debug!("received key. code: {key_code}, key: {keyboard_key:?}");
+
     if let Some(custom_keys) = custom_keys {
         let mods = modifiers_from_mask(modifier_type);
         for custom_key in &custom_keys.bindings {
@@ -995,6 +997,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
             } else {
                 custom_key.key == keyboard_key.to_upper().into()
             } && mods.is_subset(&custom_key.modifiers);
+
+            log::debug!("customy key {custom_key:?}, match {custom_key_match}");
 
             if custom_key_match {
                 let search_lock = ui.search_text.lock().unwrap();
