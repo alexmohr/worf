@@ -178,7 +178,7 @@ fn key_type_all() -> KeyBinding {
 
 fn key_type_all_and_enter() -> KeyBinding {
     KeyBinding {
-        key: Key::Exclamation,
+        key: Key::Num1,
         modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
         label: String::new(),
         visible: false,
@@ -196,7 +196,7 @@ fn key_type_user() -> KeyBinding {
 
 fn key_type_user_and_enter() -> KeyBinding {
     KeyBinding {
-        key: Key::At,
+        key: Key::Num2,
         modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
         label: String::new(),
         visible: false,
@@ -214,7 +214,7 @@ fn key_type_password() -> KeyBinding {
 
 fn key_type_password_and_enter() -> KeyBinding {
     KeyBinding {
-        key: Key::Hash,
+        key: Key::Num3,
         modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
         label: String::new(),
         visible: false,
@@ -232,7 +232,7 @@ fn key_type_totp() -> KeyBinding {
 
 fn key_type_totp_and_enter() -> KeyBinding {
     KeyBinding {
-        key: Key::Dollar,
+        key: Key::Num4,
         modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
         label: String::new(),
         visible: false,

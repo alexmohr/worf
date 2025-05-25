@@ -369,7 +369,7 @@ pub struct Config {
     #[clap(long = "emoji-hide-string")]
     emoji_hide_label: Option<bool>,
 
-    #[clap(long = "keyboard-detection-type")]
+    #[clap(long = "key-detection-type")]
     key_detection_type: Option<KeyDetectionType>,
 }
 
@@ -831,4 +831,23 @@ pub fn fork_if_configured(config: &Config) {
         cmd.spawn().expect("Failed to fork to background");
         std::process::exit(0);
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_keyboard_type() {
+        let toml_str = r#"
+        key_detection_type="Code"
+    "#;
+
+        let config: Config = toml::from_str(toml_str).expect("Failed to parse TOML");
+        assert_eq!(config.key_detection_type(), KeyDetectionType::Code);
+    }
+
+    
+    
 }
