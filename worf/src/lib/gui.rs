@@ -548,6 +548,9 @@ struct UiElements<T: Clone> {
     main_box: FlowBox,
     menu_rows: ArcMenuMap<T>,
     search_text: Arc<Mutex<String>>,
+    outer_box: gtk4::Box,
+    scroll: ScrolledWindow,
+    custom_key_box: gtk4::Box,
 }
 
 /// Shows the user interface and **blocks** until the user selected an entry
@@ -653,6 +656,9 @@ fn build_ui<T, P>(
         main_box: FlowBox::new(),
         menu_rows: Arc::new(RwLock::new(HashMap::new())),
         search_text: Arc::new(Mutex::new(String::new())),
+        outer_box: gtk4::Box::new(config.orientation().into(), 0),
+        scroll: ScrolledWindow::new(),
+        custom_key_box: gtk4::Box::new(Orientation::Vertical, 0),
     });
 
     // handle keys as soon as possible
@@ -680,31 +686,35 @@ fn build_ui<T, P>(
         }
     }
 
-    let outer_box = gtk4::Box::new(config.orientation().into(), 0);
-    outer_box.set_widget_name("outer-box");
-    outer_box.append(&ui_elements.search);
+    ui_elements.outer_box.set_widget_name("outer-box");
+    ui_elements.outer_box.append(&ui_elements.search);
     if let Some(custom_keys) = custom_keys {
-        build_custom_key_view(custom_keys, &outer_box);
+        build_custom_key_view(
+            custom_keys,
+            &ui_elements.outer_box,
+            &ui_elements.custom_key_box,
+        );
     }
 
-    ui_elements.window.set_child(Some(&outer_box));
+    ui_elements.window.set_child(Some(&ui_elements.outer_box));
 
-    let scroll = ScrolledWindow::new();
-    scroll.set_widget_name("scroll");
-    scroll.set_hexpand(true);
-    scroll.set_vexpand(true);
+    ui_elements.scroll.set_widget_name("scroll");
+    ui_elements.scroll.set_hexpand(true);
+    ui_elements.scroll.set_vexpand(true);
 
     if config.hide_scroll() {
-        scroll.set_policy(PolicyType::External, PolicyType::External);
+        ui_elements
+            .scroll
+            .set_policy(PolicyType::External, PolicyType::External);
     }
-    outer_box.append(&scroll);
+    ui_elements.outer_box.append(&ui_elements.scroll);
 
     build_main_box(config, &ui_elements);
     build_search_entry(config, &ui_elements, &meta);
 
     let wrapper_box = gtk4::Box::new(Orientation::Vertical, 0);
     wrapper_box.append(&ui_elements.main_box);
-    scroll.set_child(Some(&wrapper_box));
+    ui_elements.scroll.set_child(Some(&wrapper_box));
 
     let wait_for_items = Instant::now();
     let (_changed, provider_elements) = get_provider_elements.join().unwrap();
@@ -774,7 +784,7 @@ fn build_search_entry<T: Clone + Send>(
     }
 }
 
-fn build_custom_key_view(custom_keys: &CustomKeys, outer_box: &gtk4::Box) {
+fn build_custom_key_view(custom_keys: &CustomKeys, outer_box: &gtk4::Box, inner_box: &gtk4::Box) {
     fn create_label(inner_box: &FlowBox, text: &str, label_css: &str, box_css: &str) {
         let label_box = FlowBoxChild::new();
         label_box.set_halign(Align::Fill);
@@ -795,7 +805,6 @@ fn build_custom_key_view(custom_keys: &CustomKeys, outer_box: &gtk4::Box) {
         label_box.set_child(Some(&label));
     }
 
-    let inner_box = gtk4::Box::new(Orientation::Vertical, 0);
     inner_box.set_halign(Align::Fill);
 
     let hint_box = FlowBox::new();
@@ -843,7 +852,7 @@ fn build_custom_key_view(custom_keys: &CustomKeys, outer_box: &gtk4::Box) {
         }
     }
 
-    outer_box.append(&inner_box);
+    outer_box.append(inner_box);
 }
 
 fn set_search_text<T: Clone + Send>(text: &str, ui: &UiElements<T>, meta: &MetaData<T>) {
@@ -1126,6 +1135,7 @@ fn sort_menu_items_by_score<T: Clone>(
     }
 }
 
+#[allow(clippy::cast_possible_truncation)] // does not matter for calculating height
 fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>>) {
     // Get the surface and associated monitor geometry
     let Some(surface) = ui.window.surface() else {
@@ -1146,16 +1156,40 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
 
     let target_height = if let Some(lines) = config.lines() {
         let (_, _, _, height_search) = ui.search.measure(Orientation::Vertical, 10_000);
+        let (height_box, _, _, _) = ui.custom_key_box.measure(Orientation::Vertical, 10_000);
+        let (_, scroll_height, _, _) = ui.scroll.measure(Orientation::Vertical, 10_000);
+        let (_, window_height, _, _) = ui.window.measure(Orientation::Vertical, 10_000);
+
         let height = {
             let lock = ui.menu_rows.read().unwrap();
             lock.iter().find_map(|(fb, _)| {
                 let (_, _, _, baseline) = fb.measure(Orientation::Vertical, 10_000);
-                if baseline > 0 { Some(baseline) } else { None }
+                if baseline > 0 {
+                    let factor = if lines > 1 {
+                        1.4 // todo find a better way to do this
+                    // most likely it will not work with all styles
+                    } else {
+                        1.0
+                    };
+                    Some((f64::from(baseline) * factor) as i32)
+                } else {
+                    None
+                }
             })
         };
 
+        log::debug!(
+            "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}"
+        );
+
         if let Some(height) = height {
-            Some((height_search + height) * lines + config.lines_additional_space())
+            Some(
+                height_box
+                    + scroll_height
+                    + height_search
+                    + height * lines
+                    + config.lines_additional_space(),
+            )
         } else {
             log::warn!("No widget for height calculation available");
             Some(0)
@@ -1163,7 +1197,6 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
     } else if let Some(height) = percent_or_absolute(&config.height(), geometry.height()) {
         Some(height)
     } else {
-        log::error!("Widget is none");
         Some(0)
     };
 
