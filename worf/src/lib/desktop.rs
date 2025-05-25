@@ -1,20 +1,28 @@
-use freedesktop_file_parser::DesktopFile;
+use std::{
+    collections::HashMap,
+    env,
+    ffi::OsStr,
+    fs,
+    io,
+    os::unix::{
+        fs::PermissionsExt,
+        prelude::CommandExt,
+    },
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::Instant,
+};
+
+pub use freedesktop_file_parser::{DesktopFile, EntryType};
 use notify_rust::Notification;
 use rayon::prelude::*;
 use regex::Regex;
-use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::os::unix::fs::PermissionsExt;
-use std::os::unix::prelude::CommandExt;
-use std::path::Path;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::time::Instant;
-use std::{env, fs, io};
 use wl_clipboard_rs::copy::{ClipboardType, MimeType, ServeRequests, Source};
 
-use crate::Error;
-use crate::config::{Config, expand_path};
+use crate::{
+    config::{expand_path, Config},
+    Error,
+};
 
 /// Returns a regex with supported image extensions
 /// # Panics
