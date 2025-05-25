@@ -833,7 +833,6 @@ pub fn fork_if_configured(config: &Config) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -847,7 +846,4 @@ mod tests {
         let config: Config = toml::from_str(toml_str).expect("Failed to parse TOML");
         assert_eq!(config.key_detection_type(), KeyDetectionType::Code);
     }
-
-    
-    
 }
