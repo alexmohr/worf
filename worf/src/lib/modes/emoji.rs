@@ -34,9 +34,7 @@ impl EmojiProvider {
             .collect::<Vec<_>>();
         gui::apply_sort(&mut menus, sort_order);
 
-        Self {
-            elements: menus,
-        }
+        Self { elements: menus }
     }
 }
 
@@ -55,7 +53,7 @@ impl ItemProvider<String> for EmojiProvider {
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
 pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = EmojiProvider::new( &config.sort_order(), config.emoji_hide_label());
+    let provider = EmojiProvider::new(&config.sort_order(), config.emoji_hide_label());
     let selection_result = gui::show(config.clone(), provider, true, None, None)?;
     match selection_result.menu.data {
         None => Err(Error::MissingAction),

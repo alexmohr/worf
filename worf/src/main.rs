@@ -1,7 +1,8 @@
 use std::env;
 
 use anyhow::anyhow;
-use worf_lib::config::{Mode, fork_if_configured};
+use worf_lib::config::Mode;
+use worf_lib::desktop::fork_if_configured;
 use worf_lib::{Error, config, modes};
 
 fn main() -> anyhow::Result<()> {
@@ -26,7 +27,7 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    fork_if_configured(&config);
+    fork_if_configured(&config); // may exit the program
 
     if let Some(show) = &config.show() {
         let result = match show {
