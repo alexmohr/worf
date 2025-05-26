@@ -30,7 +30,12 @@ struct AutoItemProvider {
 impl AutoItemProvider {
     fn new(config: &Config) -> Self {
         AutoItemProvider {
-            drun: DRunProvider::new(AutoRunType::DRun, config.no_actions(), config.sort_order()),
+            drun: DRunProvider::new(
+                AutoRunType::DRun,
+                config.no_actions(),
+                config.sort_order(),
+                config.term(),
+            ),
             file: FileItemProvider::new(AutoRunType::File, config.sort_order()),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh, &config.sort_order()),

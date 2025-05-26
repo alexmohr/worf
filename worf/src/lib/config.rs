@@ -2,9 +2,7 @@ use crate::Error;
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::{env, fs};
 use thiserror::Error;
@@ -801,35 +799,6 @@ fn merge_json(a: &mut Value, b: &Value) {
                 *a_val = b_val.clone();
             }
         }
-    }
-}
-
-/// Fork into background if configured
-/// # Panics
-/// Panics if preexec and or setsid do not work
-pub fn fork_if_configured(config: &Config) {
-    let fork_env_var = "WORF_PROCESS_IS_FORKED";
-    if config.fork() && env::var(fork_env_var).is_err() {
-        let mut cmd = Command::new(env::current_exe().expect("Failed to get current executable"));
-
-        for arg in env::args().skip(1) {
-            cmd.arg(arg);
-        }
-
-        cmd.env(fork_env_var, "1");
-        cmd.stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::setsid();
-                Ok(())
-            });
-        }
-
-        cmd.spawn().expect("Failed to fork to background");
-        std::process::exit(0);
     }
 }
 

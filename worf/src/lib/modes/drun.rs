@@ -26,6 +26,7 @@ pub(crate) struct DRunProvider<T: Clone> {
     data: T,
     no_actions: bool,
     sort_order: SortOrder,
+    terminal: Option<String>,
 }
 
 impl<T: Clone + Send + Sync> ItemProvider<T> for DRunProvider<T> {
@@ -42,7 +43,12 @@ impl<T: Clone + Send + Sync> ItemProvider<T> for DRunProvider<T> {
 }
 
 impl<T: Clone + Send + Sync> DRunProvider<T> {
-    pub(crate) fn new(menu_item_data: T, no_actions: bool, sort_order: SortOrder) -> Self {
+    pub(crate) fn new(
+        menu_item_data: T,
+        no_actions: bool,
+        sort_order: SortOrder,
+        terminal: Option<String>,
+    ) -> Self {
         let (cache_path, d_run_cache) = load_d_run_cache();
         DRunProvider {
             items: None,
@@ -51,6 +57,7 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
             data: menu_item_data,
             no_actions,
             sort_order,
+            terminal,
         }
     }
 
@@ -74,8 +81,8 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                     &file.entry.name.default,
                 )?;
 
-                let (action, working_dir) = match &file.entry.entry_type {
-                    EntryType::Application(app) => (app.exec.clone(), app.path.clone()),
+                let (action, working_dir, in_terminal) = match &file.entry.entry_type {
+                    EntryType::Application(app) => (app.exec.clone(), app.path.clone(), app.terminal.unwrap_or(false)),
                     _ => return None,
                 };
 
@@ -106,12 +113,13 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                 let mut entry = MenuItem::new(
                     name.clone(),
                     icon.clone(),
-                    action.clone(),
+                    self.get_action(in_terminal, action, &name),
                     Vec::new(),
                     working_dir.clone(),
                     sort_score,
                     Some(self.data.clone()),
                 );
+
                 if !self.no_actions {
                     for action in file.actions.values() {
                         if let Some(action_name) = lookup_name_with_locale(
@@ -127,10 +135,12 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                                 .unwrap_or("application-x-executable".to_string());
 
 
+                            let action = self.get_action(in_terminal, action.exec.clone(), &action_name);
+
                             entry.sub_elements.push(MenuItem::new(
                                 action_name,
                                 Some(action_icon),
-                                action.exec.clone(),
+                                action,
                                 Vec::new(),
                                 working_dir.clone(),
                                 0.0,
@@ -156,6 +166,25 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
 
         gui::apply_sort(&mut entries, &self.sort_order);
         entries
+    }
+
+    fn get_action(
+        &self,
+        in_terminal: bool,
+        action: Option<String>,
+        action_name: &String,
+    ) -> Option<String> {
+        if in_terminal {
+            match self.terminal.as_ref() {
+                None => {
+                    log::warn!("No terminal configured for terminal app {action_name}");
+                    None
+                }
+                Some(terminal) => action.map(|cmd| format!("{terminal} {cmd}")),
+            }
+        } else {
+            action
+        }
     }
 }
 
@@ -188,7 +217,7 @@ pub(crate) fn update_drun_cache_and_run<T: Clone>(
 ///
 /// Will return `Err` if it was not able to spawn the process
 pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = DRunProvider::new(0, config.no_actions(), config.sort_order());
+    let provider = DRunProvider::new(0, config.no_actions(), config.sort_order(), config.term());
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 

@@ -1,4 +1,9 @@
+use freedesktop_file_parser::DesktopFile;
+use notify_rust::Notification;
+use rayon::prelude::*;
+use regex::Regex;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::prelude::CommandExt;
 use std::path::Path;
@@ -6,15 +11,10 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Instant;
 use std::{env, fs, io};
-
-use freedesktop_file_parser::DesktopFile;
-use notify_rust::Notification;
-use rayon::prelude::*;
-use regex::Regex;
 use wl_clipboard_rs::copy::{ClipboardType, MimeType, ServeRequests, Source};
 
 use crate::Error;
-use crate::config::expand_path;
+use crate::config::{Config, expand_path};
 
 /// Returns a regex with supported image extensions
 /// # Panics
@@ -132,6 +132,23 @@ pub fn lookup_name_with_locale(
         .or_else(|| Some(fallback.to_owned()))
 }
 
+/// Fork into background if configured
+/// # Panics
+/// Panics if preexec and or setsid do not work
+pub fn fork_if_configured(config: &Config) {
+    let fork_env_var = "WORF_PROCESS_IS_FORKED";
+    if config.fork() && env::var(fork_env_var).is_err() {
+        let mut cmd = Command::new(env::current_exe().expect("Failed to get current executable"));
+
+        for arg in env::args().skip(1) {
+            cmd.arg(arg);
+        }
+
+        start_forked_cmd(cmd).expect("Failed to fork to background");
+        std::process::exit(0);
+    }
+}
+
 /// Spawn a new process and forks it away from the current worf process
 /// # Errors
 /// * No action in menu item
@@ -169,18 +186,32 @@ pub fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), Error> 
         .map(|arg| expand_path(arg))
         .collect();
 
+    start_forked(&exec, args)
+}
+
+fn start_forked<I, S>(exec: &str, args: I) -> Result<(), Error>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut cmd = Command::new(exec);
+    cmd.args(args);
+    start_forked_cmd(cmd)
+}
+
+fn start_forked_cmd(mut cmd: Command) -> Result<(), Error> {
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
     unsafe {
-        let _ = Command::new(exec)
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .pre_exec(|| {
-                libc::setsid();
-                Ok(())
-            })
-            .spawn();
+        cmd.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
     }
+
+    cmd.spawn().map_err(|e| Error::Io(e.to_string()))?;
     Ok(())
 }
 
