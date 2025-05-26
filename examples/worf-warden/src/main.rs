@@ -249,11 +249,11 @@ fn key_sync() -> KeyBinding {
 }
 
 /// copies totp to clipboard
-fn key_totp() -> KeyBinding {
+fn key_totp_to_clipboard() -> KeyBinding {
     KeyBinding {
         key: Key::T,
         modifiers: vec![Modifier::Alt].into_iter().collect(),
-        label: "<b>Alt+t</b> Totp".to_string(),
+        label: "<b>Alt+t</b> Copy Totp".to_string(),
         visible: true,
     }
 }
@@ -284,7 +284,7 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
                 key_type_totp(),
                 key_type_totp_and_enter(),
                 key_sync(),
-                key_totp(),
+                key_totp_to_clipboard(),
                 key_lock(),
             ],
             hint: Some(CustomKeyHint {
@@ -317,7 +317,7 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
                         rbw("lock", None)?;
                     } else if key == key_sync() {
                         rbw("sync", None)?;
-                    } else if key == key_totp() {
+                    } else if key == key_totp_to_clipboard() {
                         rbw_get_totp(id, true)?;
                     }
 
