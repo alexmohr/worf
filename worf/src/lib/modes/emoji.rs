@@ -4,14 +4,12 @@ use crate::gui::{ItemProvider, MenuItem};
 use crate::{Error, gui};
 
 #[derive(Clone)]
-pub(crate) struct EmojiProvider<T: Clone> {
-    elements: Vec<MenuItem<T>>,
-    #[allow(dead_code)] // needed for the detection of mode in 'auto'
-    menu_item_data: T,
+pub(crate) struct EmojiProvider {
+    elements: Vec<MenuItem<String>>,
 }
 
-impl<T: Clone> EmojiProvider<T> {
-    pub(crate) fn new(data: T, sort_order: &SortOrder, hide_label: bool) -> Self {
+impl EmojiProvider {
+    pub(crate) fn new(sort_order: &SortOrder, hide_label: bool) -> Self {
         let emoji = emoji::search::search_annotation_all("");
         let mut menus = emoji
             .into_iter()
@@ -30,7 +28,7 @@ impl<T: Clone> EmojiProvider<T> {
                     vec![],
                     None,
                     0.0,
-                    Some(data.clone()),
+                    Some(e.glyph.to_string()),
                 )
             })
             .collect::<Vec<_>>();
@@ -38,17 +36,16 @@ impl<T: Clone> EmojiProvider<T> {
 
         Self {
             elements: menus,
-            menu_item_data: data.clone(),
         }
     }
 }
 
-impl<T: Clone> ItemProvider<T> for EmojiProvider<T> {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
+impl ItemProvider<String> for EmojiProvider {
+    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<String>>) {
         (false, self.elements.clone())
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
+    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> (bool, Option<Vec<MenuItem<String>>>) {
         (false, None)
     }
 }
@@ -58,9 +55,9 @@ impl<T: Clone> ItemProvider<T> for EmojiProvider<T> {
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
 pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = EmojiProvider::new(0, &config.sort_order(), config.emoji_hide_label());
+    let provider = EmojiProvider::new( &config.sort_order(), config.emoji_hide_label());
     let selection_result = gui::show(config.clone(), provider, true, None, None)?;
-    match selection_result.menu.action {
+    match selection_result.menu.data {
         None => Err(Error::MissingAction),
         Some(action) => copy_to_clipboard(action, None),
     }
