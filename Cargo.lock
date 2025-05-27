@@ -676,12 +676,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fasteval3"
-version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ebd4dfc97a204b81366c95809cddaf586b713c7b3dc7ccec2e0c9c2bd5a62c0"
-
-[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2881,7 +2875,6 @@ dependencies = [
  "dirs 6.0.0",
  "emoji",
  "env_logger",
- "fasteval3",
  "freedesktop-file-parser",
  "freedesktop-icons",
  "gdk4",
