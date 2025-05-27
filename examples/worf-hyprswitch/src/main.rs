@@ -64,7 +64,10 @@ impl WindowProvider {
                         });
 
                     MenuItem::new(
-                        format!("{} - {}", c.initial_class, c.title),
+                        format!(
+                            "[{}] \t {} \t {}",
+                            c.workspace.name, c.initial_class, c.title
+                        ),
                         icon,
                         None,
                         vec![].into_iter().collect(),
