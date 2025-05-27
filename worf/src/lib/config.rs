@@ -186,7 +186,8 @@ pub struct Config {
 
     /// Prints the version and then exits
     #[clap(short = 'v', long = "version")]
-    version: Option<bool>,
+    #[serde(default = "default_false")]
+    version: bool,
 
     /// Defines the style sheet to be loaded.
     /// Defaults to `$XDG_CONF_DIR/worf/style.css`
@@ -576,7 +577,7 @@ impl Config {
 
     #[must_use]
     pub fn version(&self) -> bool {
-        self.version.unwrap_or(false)
+        self.version
     }
 }
 
