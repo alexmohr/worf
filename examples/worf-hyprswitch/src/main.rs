@@ -1,10 +1,12 @@
-use hyprland::dispatch::{DispatchType, WindowIdentifier};
-use hyprland::prelude::HyprData;
-use hyprland::shared::Address;
-use rayon::prelude::*;
 use std::{env, sync::Arc};
-use sysinfo::{Pid, System};
 
+use hyprland::{
+    dispatch::{DispatchType, WindowIdentifier},
+    prelude::HyprData,
+    shared::Address,
+};
+use rayon::prelude::*;
+use sysinfo::{Pid, System};
 use worf_lib::{
     config::{self, Config},
     desktop::EntryType,

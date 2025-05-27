@@ -1,11 +1,17 @@
-use crate::config::{Config, SortOrder, expand_path};
-use crate::desktop::spawn_fork;
-use crate::gui::{ItemProvider, MenuItem};
-use crate::{Error, gui};
+use std::{
+    fs,
+    os::unix::fs::FileTypeExt,
+    path::{Path, PathBuf},
+};
+
 use regex::Regex;
-use std::fs;
-use std::os::unix::fs::FileTypeExt;
-use std::path::{Path, PathBuf};
+
+use crate::{
+    Error,
+    config::{Config, SortOrder, expand_path},
+    desktop::spawn_fork,
+    gui::{self, ItemProvider, MenuItem},
+};
 
 #[derive(Clone)]
 pub(crate) struct FileItemProvider<T: Clone> {

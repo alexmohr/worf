@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-use std::env;
-use std::process::Command;
-use std::thread::sleep;
-use std::time::Duration;
-use worf_lib::config::{Config, CustomKeyHintLocation};
-use worf_lib::desktop::{copy_to_clipboard, spawn_fork};
-use worf_lib::gui::{CustomKeyHint, CustomKeys, ItemProvider, Key, KeyBinding, MenuItem, Modifier};
-use worf_lib::{config, gui};
+use std::{collections::HashMap, env, process::Command, thread::sleep, time::Duration};
+
+use worf_lib::{
+    config::{self, Config, CustomKeyHintLocation},
+    desktop::{copy_to_clipboard, spawn_fork},
+    gui::{self, CustomKeyHint, CustomKeys, ItemProvider, Key, KeyBinding, MenuItem, Modifier},
+};
 
 #[derive(Clone)]
 struct MenuItemMetaData {

@@ -2,12 +2,8 @@ use std::{
     collections::HashMap,
     env,
     ffi::OsStr,
-    fs,
-    io,
-    os::unix::{
-        fs::PermissionsExt,
-        prelude::CommandExt,
-    },
+    fs, io,
+    os::unix::{fs::PermissionsExt, prelude::CommandExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::Instant,
@@ -20,8 +16,8 @@ use regex::Regex;
 use wl_clipboard_rs::copy::{ClipboardType, MimeType, ServeRequests, Source};
 
 use crate::{
-    config::{expand_path, Config},
     Error,
+    config::{Config, expand_path},
 };
 
 /// Returns a regex with supported image extensions

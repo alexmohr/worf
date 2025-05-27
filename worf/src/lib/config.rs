@@ -1,11 +1,11 @@
-use crate::Error;
+use std::{env, fs, path::PathBuf, str::FromStr};
+
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::{env, fs};
 use thiserror::Error;
+
+use crate::Error;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub enum Anchor {

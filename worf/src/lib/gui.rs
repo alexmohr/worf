@@ -1,34 +1,37 @@
-use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
-use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
-use std::time::Instant;
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
+    thread,
+    time::Instant,
+};
 
-use crossbeam::channel;
-use crossbeam::channel::Sender;
-use gdk4::Display;
-use gdk4::gio::File;
-use gdk4::glib::{MainContext, Propagation};
-use gdk4::prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt};
-use gtk4::glib::ControlFlow;
-use gtk4::prelude::{
-    ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
-    GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt,
+use crossbeam::channel::{self, Sender};
+use gdk4::{
+    Display,
+    gio::File,
+    glib::{self, MainContext, Propagation},
+    prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt},
 };
 use gtk4::{
-    Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
-    ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry,
-    Widget, gdk, glib,
+    Align, Application, ApplicationWindow, CssProvider, EventControllerKey, Expander, FlowBox,
+    FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, NaturalWrapMode, Ordering,
+    Orientation, PolicyType, ScrolledWindow, SearchEntry, Widget,
+    glib::ControlFlow,
+    prelude::{
+        ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt,
+        GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt,
+    },
 };
-use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 use regex::Regex;
 
 use crate::{
-    Error, config,
+    Error,
     config::{
-        Anchor, Config, CustomKeyHintLocation, KeyDetectionType, MatchMethod, SortOrder, WrapMode,
+        self, Anchor, Config, CustomKeyHintLocation, KeyDetectionType, MatchMethod, SortOrder,
+        WrapMode,
     },
     desktop::known_image_extension_regex_pattern,
 };
@@ -229,7 +232,7 @@ pub enum Key {
     Tilde,        // ~
 }
 
-impl From<gdk::Key> for Key {
+impl From<gtk4::gdk::Key> for Key {
     fn from(value: gdk4::Key) -> Self {
         match value {
             // Letters
@@ -1396,7 +1399,7 @@ fn create_menu_row<T: Clone + 'static + Send>(
     let element_clone = element_to_add.clone();
 
     let click = GestureClick::new();
-    click.set_button(gdk::BUTTON_PRIMARY);
+    click.set_button(gtk4::gdk::BUTTON_PRIMARY);
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
         if n_press == 2 {
             if let Err(e) = handle_selected_item(

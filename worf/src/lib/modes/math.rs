@@ -1,7 +1,9 @@
-use crate::config::Config;
-use crate::gui;
-use crate::gui::{ItemProvider, MenuItem};
 use regex::Regex;
+
+use crate::{
+    config::Config,
+    gui::{self, ItemProvider, MenuItem},
+};
 
 #[derive(Clone)]
 pub(crate) struct MathProvider<T: Clone> {

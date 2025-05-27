@@ -1,16 +1,23 @@
-use crate::config::{Config, SortOrder};
-use crate::desktop::{
-    find_desktop_files, get_locale_variants, lookup_name_with_locale, save_cache_file, spawn_fork,
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    time::Instant,
 };
-use crate::gui::{ItemProvider, MenuItem};
-use crate::modes::load_cache;
-use crate::{Error, gui};
+
 use freedesktop_file_parser::EntryType;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
-use std::time::Instant;
+
+use crate::{
+    Error,
+    config::{Config, SortOrder},
+    desktop::{
+        find_desktop_files, get_locale_variants, lookup_name_with_locale, save_cache_file,
+        spawn_fork,
+    },
+    gui::{self, ItemProvider, MenuItem},
+    modes::load_cache,
+};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct DRunCache {
