@@ -32,8 +32,7 @@ The standard view will show `ssh` and `drun`, for other modes the following pref
 
 
 ## Additional functionality compared to Wofi
-* Support passing 'hidden' parameters that are not visible in the launcher but will be returned to the application
-* Window switcher for hyprland
+* Window switcher for hyprland and bitwarden client (see examples)
 * All arguments expect show are supported by config and args
 
 ### New config / command line options
