@@ -1,9 +1,8 @@
 use std::env;
 
 use anyhow::anyhow;
-use worf_lib::config::Mode;
-use worf_lib::desktop::fork_if_configured;
-use worf_lib::{Error, config, modes};
+
+use worf_lib::{Error, config, config::Mode, desktop::fork_if_configured, modes};
 
 fn main() -> anyhow::Result<()> {
     env_logger::Builder::new()

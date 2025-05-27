@@ -1,7 +1,9 @@
-use crate::config::{Config, SortOrder};
-use crate::desktop::copy_to_clipboard;
-use crate::gui::{ItemProvider, MenuItem};
-use crate::{Error, gui};
+use crate::{
+    Error,
+    config::{Config, SortOrder},
+    desktop::copy_to_clipboard,
+    gui::{self, ItemProvider, MenuItem},
+};
 
 #[derive(Clone)]
 pub(crate) struct EmojiProvider {

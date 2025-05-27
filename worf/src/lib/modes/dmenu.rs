@@ -1,8 +1,10 @@
-use crate::config::{Config, SortOrder};
-use crate::gui::{ItemProvider, MenuItem};
-use crate::{Error, gui};
-use std::io;
-use std::io::Read;
+use std::io::{self, Read};
+
+use crate::{
+    Error,
+    config::{Config, SortOrder},
+    gui::{self, ItemProvider, MenuItem},
+};
 
 #[derive(Clone)]
 struct DMenuProvider {

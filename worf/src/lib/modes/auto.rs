@@ -1,13 +1,18 @@
-use crate::config::Config;
-use crate::desktop::spawn_fork;
-use crate::gui::{ItemProvider, MenuItem};
-use crate::modes::drun::{DRunProvider, update_drun_cache_and_run};
-use crate::modes::file::FileItemProvider;
-use crate::modes::math::MathProvider;
-use crate::modes::ssh;
-use crate::modes::ssh::SshProvider;
-use crate::{Error, gui};
 use regex::Regex;
+
+use crate::{
+    Error,
+    config::Config,
+    desktop::spawn_fork,
+    gui::{self, ItemProvider, MenuItem},
+    modes::{
+        drun::{DRunProvider, update_drun_cache_and_run},
+        file::FileItemProvider,
+        math::MathProvider,
+        ssh,
+        ssh::SshProvider,
+    },
+};
 
 #[derive(Debug, Clone, PartialEq)]
 enum AutoRunType {
