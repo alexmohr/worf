@@ -89,6 +89,28 @@ pub enum Mode {
     Emoji,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Layer {
+    Background,
+    Bottom,
+    Top,
+    Overlay
+}
+
+impl FromStr for Layer {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Background" => Ok(Layer::Background),
+            "Bottom" => Ok(Layer::Bottom),
+            "Top" => Ok(Layer::Top),
+            "Overlay" => Ok(Layer::Overlay),
+            _ => Err(format!("{s} is not a valid layer.")),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ArgsError {
     #[error("input is not valid {0}")]
@@ -344,9 +366,13 @@ pub struct Config {
     /// If set to `true` the search field willOption<> be hidden.
     #[clap(long = "hide-search")]
     hide_search: Option<bool>,
+
     #[clap(long = "dynamic-lines")]
     dynamic_lines: Option<bool>, // todo support this
-    layer: Option<String>,     // todo support this
+
+    #[clap(long = "layer")]
+    layer: Option<Layer>,
+
     copy_exec: Option<String>, // todo support this
     #[clap(long = "single_click")]
     single_click: Option<bool>, // todo support this
@@ -578,6 +604,11 @@ impl Config {
     #[must_use]
     pub fn version(&self) -> bool {
         self.version
+    }
+
+    #[must_use]
+    pub fn layer(&self) -> Layer {
+        self.layer.clone().unwrap_or(Layer::Top)
     }
 }
 

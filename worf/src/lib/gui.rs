@@ -485,6 +485,17 @@ fn modifiers_from_mask(mask: gdk4::ModifierType) -> HashSet<Modifier> {
     modifiers
 }
 
+impl From<config::Layer> for  gtk4_layer_shell::Layer{
+    fn from(value: config::Layer) -> Self {
+        match value {
+            config::Layer::Background => gtk4_layer_shell::Layer::Background,
+            config::Layer::Bottom => gtk4_layer_shell::Layer::Bottom,
+            config::Layer::Top => gtk4_layer_shell::Layer::Top,
+            config::Layer::Overlay => gtk4_layer_shell::Layer::Overlay,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct KeyBinding {
     pub key: Key,
@@ -674,9 +685,7 @@ fn build_ui<T, P>(
     if !config.normal_window() {
         // Initialize the window as a layer
         ui_elements.window.init_layer_shell();
-        ui_elements
-            .window
-            .set_layer(gtk4_layer_shell::Layer::Overlay);
+        ui_elements.window.set_layer(config.layer().into());
         ui_elements
             .window
             .set_keyboard_mode(KeyboardMode::Exclusive);
