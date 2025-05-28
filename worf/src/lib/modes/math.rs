@@ -232,7 +232,7 @@ fn calc(input: &str) -> String {
     };
 
     match eval_expr(&mut tokens) {
-        Ok(Value::Int(i)) => format!("{i} (0x{i:X})"),
+        Ok(Value::Int(i)) => format!("{i} (0x{i:X}) (0b{i:b})"),
         Ok(Value::Float(f)) => format!("{f}"),
         Err(e) => e,
     }
