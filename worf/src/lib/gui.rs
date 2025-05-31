@@ -485,7 +485,7 @@ fn modifiers_from_mask(mask: gdk4::ModifierType) -> HashSet<Modifier> {
     modifiers
 }
 
-impl From<config::Layer> for  gtk4_layer_shell::Layer{
+impl From<config::Layer> for gtk4_layer_shell::Layer {
     fn from(value: config::Layer) -> Self {
         match value {
             config::Layer::Background => gtk4_layer_shell::Layer::Background,
@@ -1395,6 +1395,22 @@ fn create_menu_row<T: Clone + 'static + Send>(
     label.set_hexpand(true);
     label.set_widget_name("text");
     label.set_wrap(true);
+    if let Some(max_width_chars) = meta.config.line_max_width_chars() {
+        label.set_max_width_chars(max_width_chars);
+    }
+
+    if let Some(max_len) = meta.config.line_max_chars() {
+        if let Some(text) = label_text.as_ref() {
+            if text.chars().count() > max_len {
+                let end = text
+                    .char_indices()
+                    .nth(max_len)
+                    .map_or(text.len(), |(idx, _)| idx);
+                label.set_text(&format!("{}...", &text[..end]));
+            }
+        }
+    }
+
     row_box.append(&label);
 
     if meta.config.content_halign().eq(&config::Align::Start)

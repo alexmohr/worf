@@ -94,7 +94,7 @@ pub enum Layer {
     Background,
     Bottom,
     Top,
-    Overlay
+    Overlay,
 }
 
 impl FromStr for Layer {
@@ -387,13 +387,28 @@ pub struct Config {
     #[clap(long = "row-box-orientation")]
     row_box_orientation: Option<Orientation>,
 
+    /// Defines if lines should wrap.
+    /// Can be None, Inherit, Word
+    /// Defaults to None
     #[clap(long = "line-wrap")]
     line_wrap: Option<WrapMode>,
+
+    /// Truncate labels after reaching this amount of chars.
+    #[clap(long = "line-max-chars")]
+    line_max_chars: Option<usize>,
+
+    /// Defines the maximum width of a label in chars.
+    /// After reaching this, lines will break into a new line.
+    /// Does not truncate.
+    #[clap(long = "line-max-width-chars")]
+    line_max_width_chars: Option<i32>,
 
     /// Display only icon in emoji mode
     #[clap(long = "emoji-hide-string")]
     emoji_hide_label: Option<bool>,
 
+    /// Defines the key detection type.
+    /// See `KeyDetectionType` for details.
     #[clap(long = "key-detection-type")]
     key_detection_type: Option<KeyDetectionType>,
 }
@@ -513,6 +528,16 @@ impl Config {
     #[must_use]
     pub fn line_wrap(&self) -> WrapMode {
         self.line_wrap.clone().unwrap_or(WrapMode::None)
+    }
+
+    #[must_use]
+    pub fn line_max_chars(&self) -> Option<usize> {
+        self.line_max_chars
+    }
+
+    #[must_use]
+    pub fn line_max_width_chars(&self) -> Option<i32> {
+        self.line_max_width_chars
     }
 
     #[must_use]
