@@ -8,7 +8,7 @@ use std::{
 
 use crossbeam::channel::{self, Sender};
 use gdk4::{
-    Display,
+    Display, Rectangle,
     gio::File,
     glib::{self, MainContext, Propagation},
     prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt},
@@ -992,11 +992,10 @@ fn handle_key_press<T: Clone + 'static + Send>(
         select_first_visible_child(&*lock, &ui.main_box);
         drop(lock);
         if meta.config.dynamic_lines() {
-            ui.window.set_height_request(calculate_row_height(
-                ui,
-                visible_row_count(ui),
-                &meta.config,
-            ));
+            if let Some(geometry) = get_monitor_geometry(ui) {
+                let height = calculate_dynamic_lines_window_height(&meta.config, ui, geometry);
+                ui.window.set_height_request(height);
+            }
         }
     };
 
@@ -1019,7 +1018,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
                 custom_key.key == keyboard_key.to_upper().into()
             } && mods.is_subset(&custom_key.modifiers);
 
-            log::debug!("customy key {custom_key:?}, match {custom_key_match}");
+            log::debug!("custom key {custom_key:?}, match {custom_key_match}");
 
             if custom_key_match {
                 let search_lock = ui.search_text.lock().unwrap();
@@ -1161,16 +1160,7 @@ fn sort_menu_items_by_score<T: Clone>(
 }
 
 fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>>) {
-    // Get the surface and associated monitor geometry
-    let Some(surface) = ui.window.surface() else {
-        return;
-    };
-
-    let display = surface.display();
-    let Some(monitor) = display.monitor_at_surface(&surface) else {
-        return;
-    };
-    let geometry = monitor.geometry();
+    let Some(geometry) = get_monitor_geometry(ui) else { return };
 
     // Calculate target width from config, return early if not set
     let Some(target_width) = percent_or_absolute(&config.width(), geometry.width()) else {
@@ -1181,7 +1171,7 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
     let target_height = if let Some(lines) = config.lines() {
         Some(calculate_row_height(ui, lines, config))
     } else if config.dynamic_lines() {
-        Some(calculate_row_height(ui, visible_row_count(ui), config))
+        Some(calculate_dynamic_lines_window_height(&config, ui, geometry))
     } else if let Some(height) = percent_or_absolute(&config.height(), geometry.height()) {
         Some(height)
     } else {
@@ -1196,6 +1186,29 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
     } else {
         log::error!("height is not set");
     }
+}
+
+fn calculate_dynamic_lines_window_height<T: Clone + 'static>(config: &Config, ui: &UiElements<T>, geometry: Rectangle) -> i32 {
+    if config.dynamic_lines_limit() {
+        calculate_row_height(ui, visible_row_count(ui), config)
+            .min(percent_or_absolute(&config.height(), geometry.height()).unwrap_or(0))
+    } else {
+        calculate_row_height(ui, visible_row_count(ui), config)
+    }
+}
+
+fn get_monitor_geometry<T: Clone>(ui: &UiElements<T>) -> Option<Rectangle> {
+    // Get the surface and associated monitor geometry
+    let Some(surface) = ui.window.surface() else {
+        return None;
+    };
+
+    let display = surface.display();
+    let Some(monitor) = display.monitor_at_surface(&surface) else {
+        return None;
+    };
+    let geometry = monitor.geometry();
+    Some(geometry)
 }
 
 #[allow(clippy::cast_possible_truncation)] // does not matter for calculating height
@@ -1218,7 +1231,7 @@ fn calculate_row_height<T: Clone + 'static>(
                 if baseline > 0 {
                     let factor = if lines > 1 {
                         1.4 // todo find a better way to do this
-                    // most likely it will not work with all styles
+                        // most likely it will not work with all styles
                     } else {
                         1.0
                     };
@@ -1264,7 +1277,7 @@ fn visible_row_count<T: Clone + 'static>(ui: &UiElements<T>) -> i32 {
             .filter(|(_, menu)| menu.visible)
             .count(),
     )
-    .unwrap_or(i32::MAX)
+        .unwrap_or(i32::MAX)
 }
 
 fn handle_selected_item<T>(
@@ -1403,10 +1416,10 @@ fn create_menu_row<T: Clone + 'static + Send>(
             element_to_add.icon_path.as_ref().map(AsRef::as_ref),
             &meta.config,
         )
-        .or(lookup_icon(
-            label_img.as_ref().map(AsRef::as_ref),
-            &meta.config,
-        ));
+            .or(lookup_icon(
+                label_img.as_ref().map(AsRef::as_ref),
+                &meta.config,
+            ));
 
         if let Some(image) = img {
             image.set_widget_name("img");

@@ -367,8 +367,16 @@ pub struct Config {
     #[clap(long = "hide-search")]
     hide_search: Option<bool>,
 
+    /// If enabled, worf will resize according to the amount of displayed rows
+    /// defaults to false
     #[clap(long = "dynamic-lines")]
     dynamic_lines: Option<bool>,
+
+    /// If enabled, dynamic lines do not exceed the maximum height specified in the
+    /// `height` option. It does ot evaluate the `lines` option though
+    /// defaults to true
+    #[clap(long = "dynamic-lines-limit")]
+    dynamic_lines_limit: Option<bool>,
 
     #[clap(long = "layer")]
     layer: Option<Layer>,
@@ -639,6 +647,11 @@ impl Config {
     #[must_use]
     pub fn dynamic_lines(&self) -> bool {
         self.dynamic_lines.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn dynamic_lines_limit(&self) -> bool {
+        self.dynamic_lines_limit.unwrap_or(true)
     }
 }
 
