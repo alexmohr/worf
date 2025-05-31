@@ -988,7 +988,16 @@ fn handle_key_press<T: Clone + 'static + Send>(
             &meta.config,
             meta.search_ignored_words.as_ref(),
         );
+
         select_first_visible_child(&*lock, &ui.main_box);
+        drop(lock);
+        if meta.config.dynamic_lines() {
+            ui.window.set_height_request(calculate_row_height(
+                ui,
+                visible_row_count(ui),
+                &meta.config,
+            ));
+        }
     };
 
     let update_view_from_provider = |query: &String| {
@@ -1151,7 +1160,6 @@ fn sort_menu_items_by_score<T: Clone>(
     }
 }
 
-#[allow(clippy::cast_possible_truncation)] // does not matter for calculating height
 fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>>) {
     // Get the surface and associated monitor geometry
     let Some(surface) = ui.window.surface() else {
@@ -1171,57 +1179,9 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
     };
 
     let target_height = if let Some(lines) = config.lines() {
-        let (_, _, _, height_search) = ui.search.measure(Orientation::Vertical, 10_000);
-        let (height_box, _, _, _) = ui.custom_key_box.measure(Orientation::Vertical, 10_000);
-        let (_, scroll_height, _, _) = ui.scroll.measure(Orientation::Vertical, 10_000);
-        let (_, window_height, _, _) = ui.window.measure(Orientation::Vertical, 10_000);
-
-        let height = {
-            let lock = ui.menu_rows.read().unwrap();
-            lock.iter()
-                .find_map(|(fb, _)| {
-                    let (_, _, _, baseline) = fb.measure(Orientation::Vertical, 10_000);
-                    if baseline > 0 {
-                        let factor = if lines > 1 {
-                            1.4 // todo find a better way to do this
-                        // most likely it will not work with all styles
-                        } else {
-                            1.0
-                        };
-
-                        if config.allow_images() && baseline < i32::from(config.image_size()) {
-                            Some(i32::from(config.image_size()))
-                        } else {
-                            Some((f64::from(baseline) * factor) as i32)
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| {
-                    lock.iter().find_map(|(fb, _)| {
-                        let (_, nat, _, _) = fb.measure(Orientation::Vertical, 10_000);
-                        if nat > 0 { Some(nat) } else { None }
-                    })
-                })
-        };
-
-        log::debug!(
-            "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}"
-        );
-
-        if let Some(height) = height {
-            Some(
-                height_box
-                    + scroll_height
-                    + height_search
-                    + height * lines
-                    + config.lines_additional_space(),
-            )
-        } else {
-            log::warn!("No widget for height calculation available");
-            Some(0)
-        }
+        Some(calculate_row_height(ui, lines, config))
+    } else if config.dynamic_lines() {
+        Some(calculate_row_height(ui, visible_row_count(ui), config))
     } else if let Some(height) = percent_or_absolute(&config.height(), geometry.height()) {
         Some(height)
     } else {
@@ -1238,8 +1198,73 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
     }
 }
 
+#[allow(clippy::cast_possible_truncation)] // does not matter for calculating height
+fn calculate_row_height<T: Clone + 'static>(
+    ui: &UiElements<T>,
+    lines: i32,
+    config: &Config,
+) -> i32 {
+    const MEAS_SIZE: i32 = 10_000;
+    let (_, _, _, height_search) = ui.search.measure(Orientation::Vertical, MEAS_SIZE);
+    let (height_box, _, _, _) = ui.custom_key_box.measure(Orientation::Vertical, MEAS_SIZE);
+    let (_, scroll_height, _, _) = ui.scroll.measure(Orientation::Vertical, MEAS_SIZE);
+    let (_, window_height, _, _) = ui.window.measure(Orientation::Vertical, MEAS_SIZE);
+
+    let height = {
+        let lock = ui.menu_rows.read().unwrap();
+        lock.iter()
+            .find_map(|(fb, _)| {
+                let (_, _, _, baseline) = fb.measure(Orientation::Vertical, MEAS_SIZE);
+                if baseline > 0 {
+                    let factor = if lines > 1 {
+                        1.4 // todo find a better way to do this
+                    // most likely it will not work with all styles
+                    } else {
+                        1.0
+                    };
+
+                    if config.allow_images() && baseline < i32::from(config.image_size()) {
+                        Some(i32::from(config.image_size()))
+                    } else {
+                        Some((f64::from(baseline) * factor) as i32)
+                    }
+                } else {
+                    None
+                }
+            })
+            .or_else(|| {
+                lock.iter().find_map(|(fb, _)| {
+                    let (_, nat, _, _) = fb.measure(Orientation::Vertical, MEAS_SIZE);
+                    if nat > 0 { Some(nat) } else { None }
+                })
+            })
+    };
+
+    log::debug!(
+        "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}"
+    );
+
+    height_box
+        + scroll_height
+        + height_search
+        + height.map_or(0, |h| h * lines)
+        + config.lines_additional_space()
+}
+
 fn close_gui(app: &Application) {
     app.quit();
+}
+
+fn visible_row_count<T: Clone + 'static>(ui: &UiElements<T>) -> i32 {
+    i32::try_from(
+        ui.menu_rows
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|(_, menu)| menu.visible)
+            .count(),
+    )
+    .unwrap_or(i32::MAX)
 }
 
 fn handle_selected_item<T>(
