@@ -7,7 +7,7 @@ use hyprland::{
 };
 use rayon::prelude::*;
 use sysinfo::{Pid, System};
-use worf_lib::{
+use worf::{
     config::{self, Config},
     desktop::EntryType,
     gui::{self, ItemProvider, MenuItem},
@@ -23,7 +23,7 @@ impl WindowProvider {
         let clients = hyprland::data::Clients::get().map_err(|e| e.to_string())?;
         let clients: Vec<_> = clients.iter().cloned().collect();
 
-        let desktop_files = Arc::new(worf_lib::desktop::find_desktop_files());
+        let desktop_files = Arc::new(worf::desktop::find_desktop_files());
 
         let mut sys = System::new_all();
         sys.refresh_all();

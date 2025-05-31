@@ -1,13 +1,18 @@
 use std::fmt;
 
 /// Configuration and command line parsing
+#[path = "lib/config.rs"]
 pub mod config;
 /// Desktop action like parsing desktop files and launching programs
+#[path = "lib/desktop.rs"]
 pub mod desktop;
+#[path = "lib/gui.rs"]
 /// All things related to the user interface
 pub mod gui;
 /// Out of the box supported modes, like drun, dmenu, etc...
+#[path = "lib/modes/mod.rs"]
 pub mod modes;
+
 
 /// Defines error the lib can encounter
 #[derive(Debug, PartialEq)]

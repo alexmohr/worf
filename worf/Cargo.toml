@@ -13,8 +13,8 @@ similar_names = "allow"
 clone_on_ref_ptr = "warn"
 
 [lib]
-name = "worf_lib"
-path = "src/lib/mod.rs"
+name = "worf"
+path = "src/mod.rs"
 
 [[bin]]
 name = "worf"
