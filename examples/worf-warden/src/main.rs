@@ -1,6 +1,6 @@
 use std::{collections::HashMap, env, process::Command, thread::sleep, time::Duration};
 
-use worf_lib::{
+use worf::{
     config::{self, Config, CustomKeyHintLocation},
     desktop::{copy_to_clipboard, spawn_fork},
     gui::{self, CustomKeyHint, CustomKeys, ItemProvider, Key, KeyBinding, MenuItem, Modifier},
