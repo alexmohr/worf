@@ -1,34 +1,37 @@
-use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
-use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
-use std::time::Instant;
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    sync::{Arc, Mutex, RwLock},
+    thread,
+    time::Instant,
+};
 
-use crossbeam::channel;
-use crossbeam::channel::Sender;
-use gdk4::Display;
-use gdk4::gio::File;
-use gdk4::glib::{MainContext, Propagation};
-use gdk4::prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt};
-use gtk4::glib::ControlFlow;
-use gtk4::prelude::{
-    ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt, GestureSingleExt,
-    GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt,
+use crossbeam::channel::{self, Sender};
+use gdk4::{
+    Display,
+    gio::File,
+    glib::{self, MainContext, Propagation},
+    prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt},
 };
 use gtk4::{
-    Align, EventControllerKey, Expander, FlowBox, FlowBoxChild, GestureClick, Image, Label,
-    ListBox, ListBoxRow, NaturalWrapMode, Ordering, PolicyType, ScrolledWindow, SearchEntry,
-    Widget, gdk, glib,
+    Align, Application, ApplicationWindow, CssProvider, EventControllerKey, Expander, FlowBox,
+    FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, NaturalWrapMode, Ordering,
+    Orientation, PolicyType, ScrolledWindow, SearchEntry, Widget,
+    glib::ControlFlow,
+    prelude::{
+        ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt,
+        GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt,
+    },
 };
-use gtk4::{Application, ApplicationWindow, CssProvider, Orientation};
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 use regex::Regex;
 
 use crate::{
-    Error, config,
+    Error,
     config::{
-        Anchor, Config, CustomKeyHintLocation, KeyDetectionType, MatchMethod, SortOrder, WrapMode,
+        self, Anchor, Config, CustomKeyHintLocation, KeyDetectionType, MatchMethod, SortOrder,
+        WrapMode,
     },
     desktop::known_image_extension_regex_pattern,
 };
@@ -229,7 +232,7 @@ pub enum Key {
     Tilde,        // ~
 }
 
-impl From<gdk::Key> for Key {
+impl From<gtk4::gdk::Key> for Key {
     fn from(value: gdk4::Key) -> Self {
         match value {
             // Letters
@@ -371,16 +374,16 @@ impl From<u32> for Key {
             52 => Key::Z,
 
             // Numbers
-            10 => Key::Num0,
-            11 => Key::Num1,
-            12 => Key::Num2,
-            13 => Key::Num3,
-            14 => Key::Num4,
-            15 => Key::Num5,
-            16 => Key::Num6,
-            17 => Key::Num7,
-            18 => Key::Num8,
-            19 => Key::Num9,
+            10 => Key::Num1,
+            11 => Key::Num2,
+            12 => Key::Num3,
+            13 => Key::Num4,
+            14 => Key::Num5,
+            15 => Key::Num6,
+            16 => Key::Num7,
+            17 => Key::Num8,
+            18 => Key::Num9,
+            19 => Key::Num0,
 
             // Function Keys
             67 => Key::F1,
@@ -480,6 +483,17 @@ fn modifiers_from_mask(mask: gdk4::ModifierType) -> HashSet<Modifier> {
     }
 
     modifiers
+}
+
+impl From<config::Layer> for gtk4_layer_shell::Layer {
+    fn from(value: config::Layer) -> Self {
+        match value {
+            config::Layer::Background => gtk4_layer_shell::Layer::Background,
+            config::Layer::Bottom => gtk4_layer_shell::Layer::Bottom,
+            config::Layer::Top => gtk4_layer_shell::Layer::Top,
+            config::Layer::Overlay => gtk4_layer_shell::Layer::Overlay,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -671,9 +685,7 @@ fn build_ui<T, P>(
     if !config.normal_window() {
         // Initialize the window as a layer
         ui_elements.window.init_layer_shell();
-        ui_elements
-            .window
-            .set_layer(gtk4_layer_shell::Layer::Overlay);
+        ui_elements.window.set_layer(config.layer().into());
         ui_elements
             .window
             .set_keyboard_mode(KeyboardMode::Exclusive);
@@ -976,7 +988,16 @@ fn handle_key_press<T: Clone + 'static + Send>(
             &meta.config,
             meta.search_ignored_words.as_ref(),
         );
+
         select_first_visible_child(&*lock, &ui.main_box);
+        drop(lock);
+        if meta.config.dynamic_lines() {
+            ui.window.set_height_request(calculate_row_height(
+                ui,
+                visible_row_count(ui),
+                &meta.config,
+            ));
+        }
     };
 
     let update_view_from_provider = |query: &String| {
@@ -987,6 +1008,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
         update_view(query);
     };
 
+    log::debug!("received key. code: {key_code}, key: {keyboard_key:?}");
+
     if let Some(custom_keys) = custom_keys {
         let mods = modifiers_from_mask(modifier_type);
         for custom_key in &custom_keys.bindings {
@@ -995,6 +1018,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
             } else {
                 custom_key.key == keyboard_key.to_upper().into()
             } && mods.is_subset(&custom_key.modifiers);
+
+            log::debug!("customy key {custom_key:?}, match {custom_key_match}");
 
             if custom_key_match {
                 let search_lock = ui.search_text.lock().unwrap();
@@ -1135,7 +1160,6 @@ fn sort_menu_items_by_score<T: Clone>(
     }
 }
 
-#[allow(clippy::cast_possible_truncation)] // does not matter for calculating height
 fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>>) {
     // Get the surface and associated monitor geometry
     let Some(surface) = ui.window.surface() else {
@@ -1155,57 +1179,9 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
     };
 
     let target_height = if let Some(lines) = config.lines() {
-        let (_, _, _, height_search) = ui.search.measure(Orientation::Vertical, 10_000);
-        let (height_box, _, _, _) = ui.custom_key_box.measure(Orientation::Vertical, 10_000);
-        let (_, scroll_height, _, _) = ui.scroll.measure(Orientation::Vertical, 10_000);
-        let (_, window_height, _, _) = ui.window.measure(Orientation::Vertical, 10_000);
-
-        let height = {
-            let lock = ui.menu_rows.read().unwrap();
-            lock.iter()
-                .find_map(|(fb, _)| {
-                    let (_, _, _, baseline) = fb.measure(Orientation::Vertical, 10_000);
-                    if baseline > 0 {
-                        let factor = if lines > 1 {
-                            1.4 // todo find a better way to do this
-                        // most likely it will not work with all styles
-                        } else {
-                            1.0
-                        };
-
-                        if config.allow_images() && baseline < i32::from(config.image_size()) {
-                            Some(i32::from(config.image_size()))
-                        } else {
-                            Some((f64::from(baseline) * factor) as i32)
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .or_else(|| {
-                    lock.iter().find_map(|(fb, _)| {
-                        let (_, nat, _, _) = fb.measure(Orientation::Vertical, 10_000);
-                        if nat > 0 { Some(nat) } else { None }
-                    })
-                })
-        };
-
-        log::debug!(
-            "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}"
-        );
-
-        if let Some(height) = height {
-            Some(
-                height_box
-                    + scroll_height
-                    + height_search
-                    + height * lines
-                    + config.lines_additional_space(),
-            )
-        } else {
-            log::warn!("No widget for height calculation available");
-            Some(0)
-        }
+        Some(calculate_row_height(ui, lines, config))
+    } else if config.dynamic_lines() {
+        Some(calculate_row_height(ui, visible_row_count(ui), config))
     } else if let Some(height) = percent_or_absolute(&config.height(), geometry.height()) {
         Some(height)
     } else {
@@ -1222,8 +1198,73 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
     }
 }
 
+#[allow(clippy::cast_possible_truncation)] // does not matter for calculating height
+fn calculate_row_height<T: Clone + 'static>(
+    ui: &UiElements<T>,
+    lines: i32,
+    config: &Config,
+) -> i32 {
+    const MEAS_SIZE: i32 = 10_000;
+    let (_, _, _, height_search) = ui.search.measure(Orientation::Vertical, MEAS_SIZE);
+    let (height_box, _, _, _) = ui.custom_key_box.measure(Orientation::Vertical, MEAS_SIZE);
+    let (_, scroll_height, _, _) = ui.scroll.measure(Orientation::Vertical, MEAS_SIZE);
+    let (_, window_height, _, _) = ui.window.measure(Orientation::Vertical, MEAS_SIZE);
+
+    let height = {
+        let lock = ui.menu_rows.read().unwrap();
+        lock.iter()
+            .find_map(|(fb, _)| {
+                let (_, _, _, baseline) = fb.measure(Orientation::Vertical, MEAS_SIZE);
+                if baseline > 0 {
+                    let factor = if lines > 1 {
+                        1.4 // todo find a better way to do this
+                    // most likely it will not work with all styles
+                    } else {
+                        1.0
+                    };
+
+                    if config.allow_images() && baseline < i32::from(config.image_size()) {
+                        Some(i32::from(config.image_size()))
+                    } else {
+                        Some((f64::from(baseline) * factor) as i32)
+                    }
+                } else {
+                    None
+                }
+            })
+            .or_else(|| {
+                lock.iter().find_map(|(fb, _)| {
+                    let (_, nat, _, _) = fb.measure(Orientation::Vertical, MEAS_SIZE);
+                    if nat > 0 { Some(nat) } else { None }
+                })
+            })
+    };
+
+    log::debug!(
+        "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}"
+    );
+
+    height_box
+        + scroll_height
+        + height_search
+        + height.map_or(0, |h| h * lines)
+        + config.lines_additional_space()
+}
+
 fn close_gui(app: &Application) {
     app.quit();
+}
+
+fn visible_row_count<T: Clone + 'static>(ui: &UiElements<T>) -> i32 {
+    i32::try_from(
+        ui.menu_rows
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|(_, menu)| menu.visible)
+            .count(),
+    )
+    .unwrap_or(i32::MAX)
 }
 
 fn handle_selected_item<T>(
@@ -1379,6 +1420,22 @@ fn create_menu_row<T: Clone + 'static + Send>(
     label.set_hexpand(true);
     label.set_widget_name("text");
     label.set_wrap(true);
+    if let Some(max_width_chars) = meta.config.line_max_width_chars() {
+        label.set_max_width_chars(max_width_chars);
+    }
+
+    if let Some(max_len) = meta.config.line_max_chars() {
+        if let Some(text) = label_text.as_ref() {
+            if text.chars().count() > max_len {
+                let end = text
+                    .char_indices()
+                    .nth(max_len)
+                    .map_or(text.len(), |(idx, _)| idx);
+                label.set_text(&format!("{}...", &text[..end]));
+            }
+        }
+    }
+
     row_box.append(&label);
 
     if meta.config.content_halign().eq(&config::Align::Start)
@@ -1392,7 +1449,7 @@ fn create_menu_row<T: Clone + 'static + Send>(
     let element_clone = element_to_add.clone();
 
     let click = GestureClick::new();
-    click.set_button(gdk::BUTTON_PRIMARY);
+    click.set_button(gtk4::gdk::BUTTON_PRIMARY);
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
         if n_press == 2 {
             if let Err(e) = handle_selected_item(

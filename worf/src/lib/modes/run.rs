@@ -1,12 +1,18 @@
-use crate::config::{Config, SortOrder};
-use crate::desktop::{is_executable, save_cache_file};
-use crate::gui::{ItemProvider, MenuItem};
-use crate::modes::load_cache;
-use crate::{Error, gui};
-use std::collections::{HashMap, HashSet};
-use std::ffi::CString;
-use std::path::PathBuf;
-use std::{env, fs};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+    ffi::CString,
+    fs,
+    path::PathBuf,
+};
+
+use crate::{
+    Error,
+    config::{Config, SortOrder},
+    desktop::{is_executable, save_cache_file},
+    gui::{self, ItemProvider, MenuItem},
+    modes::load_cache,
+};
 
 impl ItemProvider<i32> for RunProvider {
     fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<i32>>) {

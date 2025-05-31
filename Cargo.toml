@@ -2,6 +2,7 @@
 members = [
     "worf",
     "examples/worf-warden",
+    "examples/worf-hyprswitch",
 ]
 
 resolver = "3"

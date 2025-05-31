@@ -1,9 +1,13 @@
-use crate::config::{Config, SortOrder};
-use crate::desktop::spawn_fork;
-use crate::gui::{ItemProvider, MenuItem};
-use crate::{Error, gui};
-use regex::Regex;
 use std::fs;
+
+use regex::Regex;
+
+use crate::{
+    Error,
+    config::{Config, SortOrder},
+    desktop::spawn_fork,
+    gui::{self, ItemProvider, MenuItem},
+};
 
 #[derive(Clone)]
 pub(crate) struct SshProvider<T: Clone> {

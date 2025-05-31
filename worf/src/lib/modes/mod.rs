@@ -1,6 +1,6 @@
+use std::{collections::HashMap, path::PathBuf};
+
 use crate::desktop::{create_file_if_not_exists, load_cache_file};
-use std::collections::HashMap;
-use std::path::PathBuf;
 
 pub mod auto;
 pub mod dmenu;

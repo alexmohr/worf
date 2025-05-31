@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-use std::env;
-use std::process::Command;
-use std::thread::sleep;
-use std::time::Duration;
-use worf_lib::config::{Config, CustomKeyHintLocation};
-use worf_lib::desktop::{copy_to_clipboard, spawn_fork};
-use worf_lib::gui::{CustomKeyHint, CustomKeys, ItemProvider, Key, KeyBinding, MenuItem, Modifier};
-use worf_lib::{config, gui};
+use std::{collections::HashMap, env, process::Command, thread::sleep, time::Duration};
+
+use worf_lib::{
+    config::{self, Config, CustomKeyHintLocation},
+    desktop::{copy_to_clipboard, spawn_fork},
+    gui::{self, CustomKeyHint, CustomKeys, ItemProvider, Key, KeyBinding, MenuItem, Modifier},
+};
 
 #[derive(Clone)]
 struct MenuItemMetaData {
@@ -178,7 +176,7 @@ fn key_type_all() -> KeyBinding {
 
 fn key_type_all_and_enter() -> KeyBinding {
     KeyBinding {
-        key: Key::Exclamation,
+        key: Key::Num1,
         modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
         label: String::new(),
         visible: false,
@@ -196,7 +194,7 @@ fn key_type_user() -> KeyBinding {
 
 fn key_type_user_and_enter() -> KeyBinding {
     KeyBinding {
-        key: Key::At,
+        key: Key::Num2,
         modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
         label: String::new(),
         visible: false,
@@ -214,7 +212,7 @@ fn key_type_password() -> KeyBinding {
 
 fn key_type_password_and_enter() -> KeyBinding {
     KeyBinding {
-        key: Key::Hash,
+        key: Key::Num3,
         modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
         label: String::new(),
         visible: false,
@@ -232,7 +230,7 @@ fn key_type_totp() -> KeyBinding {
 
 fn key_type_totp_and_enter() -> KeyBinding {
     KeyBinding {
-        key: Key::Dollar,
+        key: Key::Num4,
         modifiers: vec![Modifier::Alt, Modifier::Shift].into_iter().collect(),
         label: String::new(),
         visible: false,
@@ -249,11 +247,11 @@ fn key_sync() -> KeyBinding {
 }
 
 /// copies totp to clipboard
-fn key_totp() -> KeyBinding {
+fn key_totp_to_clipboard() -> KeyBinding {
     KeyBinding {
         key: Key::T,
         modifiers: vec![Modifier::Alt].into_iter().collect(),
-        label: "<b>Alt+t</b> Totp".to_string(),
+        label: "<b>Alt+t</b> Copy Totp".to_string(),
         visible: true,
     }
 }
@@ -284,7 +282,7 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
                 key_type_totp(),
                 key_type_totp_and_enter(),
                 key_sync(),
-                key_totp(),
+                key_totp_to_clipboard(),
                 key_lock(),
             ],
             hint: Some(CustomKeyHint {
@@ -317,7 +315,7 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
                         rbw("lock", None)?;
                     } else if key == key_sync() {
                         rbw("sync", None)?;
-                    } else if key == key_totp() {
+                    } else if key == key_totp_to_clipboard() {
                         rbw_get_totp(id, true)?;
                     }
 

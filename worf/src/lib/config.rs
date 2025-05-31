@@ -1,13 +1,11 @@
-use crate::Error;
+use std::{env, fs, path::PathBuf, str::FromStr};
+
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::str::FromStr;
-use std::{env, fs};
 use thiserror::Error;
+
+use crate::Error;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub enum Anchor {
@@ -89,6 +87,28 @@ pub enum Mode {
 
     /// Emoji browser
     Emoji,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Layer {
+    Background,
+    Bottom,
+    Top,
+    Overlay,
+}
+
+impl FromStr for Layer {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Background" => Ok(Layer::Background),
+            "Bottom" => Ok(Layer::Bottom),
+            "Top" => Ok(Layer::Top),
+            "Overlay" => Ok(Layer::Overlay),
+            _ => Err(format!("{s} is not a valid layer.")),
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -188,7 +208,8 @@ pub struct Config {
 
     /// Prints the version and then exits
     #[clap(short = 'v', long = "version")]
-    version: Option<bool>,
+    #[serde(default = "default_false")]
+    version: bool,
 
     /// Defines the style sheet to be loaded.
     /// Defaults to `$XDG_CONF_DIR/worf/style.css`
@@ -345,9 +366,13 @@ pub struct Config {
     /// If set to `true` the search field willOption<> be hidden.
     #[clap(long = "hide-search")]
     hide_search: Option<bool>,
+
     #[clap(long = "dynamic-lines")]
-    dynamic_lines: Option<bool>, // todo support this
-    layer: Option<String>,     // todo support this
+    dynamic_lines: Option<bool>,
+
+    #[clap(long = "layer")]
+    layer: Option<Layer>,
+
     copy_exec: Option<String>, // todo support this
     #[clap(long = "single_click")]
     single_click: Option<bool>, // todo support this
@@ -362,14 +387,29 @@ pub struct Config {
     #[clap(long = "row-box-orientation")]
     row_box_orientation: Option<Orientation>,
 
+    /// Defines if lines should wrap.
+    /// Can be None, Inherit, Word
+    /// Defaults to None
     #[clap(long = "line-wrap")]
     line_wrap: Option<WrapMode>,
+
+    /// Truncate labels after reaching this amount of chars.
+    #[clap(long = "line-max-chars")]
+    line_max_chars: Option<usize>,
+
+    /// Defines the maximum width of a label in chars.
+    /// After reaching this, lines will break into a new line.
+    /// Does not truncate.
+    #[clap(long = "line-max-width-chars")]
+    line_max_width_chars: Option<i32>,
 
     /// Display only icon in emoji mode
     #[clap(long = "emoji-hide-string")]
     emoji_hide_label: Option<bool>,
 
-    #[clap(long = "keyboard-detection-type")]
+    /// Defines the key detection type.
+    /// See `KeyDetectionType` for details.
+    #[clap(long = "key-detection-type")]
     key_detection_type: Option<KeyDetectionType>,
 }
 
@@ -491,6 +531,16 @@ impl Config {
     }
 
     #[must_use]
+    pub fn line_max_chars(&self) -> Option<usize> {
+        self.line_max_chars
+    }
+
+    #[must_use]
+    pub fn line_max_width_chars(&self) -> Option<i32> {
+        self.line_max_width_chars
+    }
+
+    #[must_use]
     pub fn term(&self) -> Option<String> {
         self.term.clone().or_else(|| {
             let terminals = [
@@ -578,7 +628,17 @@ impl Config {
 
     #[must_use]
     pub fn version(&self) -> bool {
-        self.version.unwrap_or(false)
+        self.version
+    }
+
+    #[must_use]
+    pub fn layer(&self) -> Layer {
+        self.layer.clone().unwrap_or(Layer::Top)
+    }
+
+    #[must_use]
+    pub fn dynamic_lines(&self) -> bool {
+        self.dynamic_lines.unwrap_or(false)
     }
 }
 
@@ -588,83 +648,6 @@ fn default_false() -> bool {
 
 // fn default_true() -> bool {
 //     true
-// }
-
-//
-// // TODO
-// // GtkOrientation orientation = config_get_mnemonic(config, "orientation", "vertical", 2, "vertical", "horizontal");
-// // outer_orientation = config_get_mnemonic(cstoonfig, "orientation", "vertical", 2, "horizontal", "vertical");
-// // GtkAlign halign = config_get_mnemonic(config, "halign", "fill", 4, "fill", "start", "end", "center");
-// // content_halign = config_get_mnemonic(config, "content_halign", "fill", 4, "fill", "start", "end", "center");
-// // char* default_valign = "start";
-// // if(outer_orientation == GTK_ORIENTATION_HORIZONTAL) {
-// // default_valign = "center";
-// // }
-// // GtkAlign valign = config_get_mnemonic(config, "valign", default_valign, 4, "fill", "start", "end", "center");
-// // char* prompt = config_get(config, "prompt", mode);
-// // uint64_t filter_rate = strtol(config_get(config, "filter_rate", "100"), NULL, 10);
-// // allow_markup = strcmp(config_get(config, "allow_markup", "false"), "true") == 0;
-// // image_size = strtol(config_get(config, "image_size", "32"), NULL, 10);
-// // cache_file = map_get(config, "cache_file");
-// // config_dir = map_get(config, "config_dir");
-// // terminal = map_get(config, "term");
-// // exec_search = strcmp(config_get(config, "exec_search", "false"), "true") == 0;
-// // bool hide_scroll = strcmp(config_get(config, "hide_scroll", "false"), "true") == 0;
-// // matching = config_get_mnemonic(config, "matching", "contains", 3, "contains", "multi-contains", "fuzzy");
-// // insensitive = strcmp(config_get(config, "insensitive", "false"), "true") == 0;
-// // parse_search = strcmp(config_get(config, "parse_search", "false"), "true") == 0;
-// // location = config_get_mnemonic(config, "location", "center", 18,
-// // "center", "top_left", "top", "top_right", "right", "bottom_right", "bottom", "bottom_left", "left",
-// // "0", "1", "2", "3", "4", "5", "6", "7", "8");
-// // no_actions = strcmp(config_get(config, "no_actions", "false"), "true") == 0;
-// // lines = strtol(config_get(config, "lines", "0"), NULL, 10);
-// // max_lines = lines;
-// // columns = strtol(config_get(config, "columns", "1"), NULL, 10);
-// // sort_order = config_get_mnemonic(config, "sort_order", "default", 2, "default", "alphabetical");
-// // bool global_coords = strcmp(config_get(config, "global_coords", "false"), "true") == 0;
-// // hide_search = strcmp(config_get(config, "hide_search", "false"), "true") == 0;
-// // char* search = map_get(config, "search");
-// // dynamic_lines = strcmp(config_get(config, "dynamic_lines", "false"), "true") == 0;
-// // char* monitor = map_get(config, "monitor");
-// // char* layer = config_get(config, "layer", "top");
-// // copy_exec = config_get(config, "copy_exec", "wl-copy");
-// // pre_display_cmd = map_get(config, "pre_display_cmd");
-// // pre_display_exec = strcmp(config_get(config, "pre_display_exec", "false"), "true") == 0;
-// // single_click = strcmp(config_get(config, "single_click", "false"), "true") == 0;
-// //
-// // keys = map_init_void();
-// // mods = map_init_void();
-// //
-// // map_put_void(mods, "Shift", &shift_mask);
-// // map_put_void(mods, "Ctrl", &ctrl_mask);
-// // map_put_void(mods, "Alt", &alt_mask);
-// //
-// // key_default = "Up";
-// // char* key_up = (i == 0) ? "Up" : config_get(config, "key_up", key_default);
-// // key_default = "Down";
-// // char* key_down = (i == 0) ? key_default : config_get(config, "key_down", key_default);
-// // key_default = "Left";
-// // char* key_left = (i == 0) ? key_default : config_get(config, "key_left", key_default);
-// // key_default = "Right";
-// // char* key_right = (i == 0) ? key_default : config_get(config, "key_right", key_default);
-// // key_default = "Tab";
-// // char* key_forward = (i == 0) ? key_default : config_get(config, "key_forward", key_default);
-// // key_default = "Shift-ISO_Left_Tab";
-// // char* key_backward = (i == 0) ? key_default : config_get(config, "key_backward", key_default);
-// // key_default = "Return";
-// // char* key_submit = (i == 0) ? key_default : config_get(config, "key_submit", key_default);
-// // key_default = "Escape";
-// // char* key_exit = (i == 0) ? key_default : config_get(config, "key_exit", key_default);
-// // key_default = "Page_Up";
-// // char* key_pgup = (i == 0) ? key_default : config_get(config, "key_pgup", key_default);
-// // key_default = "Page_Down";
-// // char* key_pgdn = (i == 0) ? key_default : config_get(config, "key_pgdn", key_default);
-// // key_default = "";
-// // char* key_expand = (i == 0) ? key_default: config_get(config, "key_expand", key_default);
-// // key_default = "";
-// // char* key_hide_search = (i == 0) ? key_default: config_get(config, "key_hide_search", key_default);
-// // key_default = "Ctrl-c";
-// // char* key_copy = (i == 0) ? key_default : config_get(config, "key_copy", key_default);
 // }
 
 #[must_use]
@@ -804,31 +787,17 @@ fn merge_json(a: &mut Value, b: &Value) {
     }
 }
 
-/// Fork into background if configured
-/// # Panics
-/// Panics if preexec and or setsid do not work
-pub fn fork_if_configured(config: &Config) {
-    let fork_env_var = "WORF_PROCESS_IS_FORKED";
-    if config.fork() && env::var(fork_env_var).is_err() {
-        let mut cmd = Command::new(env::current_exe().expect("Failed to get current executable"));
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        for arg in env::args().skip(1) {
-            cmd.arg(arg);
-        }
+    #[test]
+    fn test_parse_keyboard_type() {
+        let toml_str = r#"
+        key_detection_type="Code"
+    "#;
 
-        cmd.env(fork_env_var, "1");
-        cmd.stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::setsid();
-                Ok(())
-            });
-        }
-
-        cmd.spawn().expect("Failed to fork to background");
-        std::process::exit(0);
+        let config: Config = toml::from_str(toml_str).expect("Failed to parse TOML");
+        assert_eq!(config.key_detection_type(), KeyDetectionType::Code);
     }
 }

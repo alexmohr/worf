@@ -1,13 +1,18 @@
-use crate::config::Config;
-use crate::desktop::spawn_fork;
-use crate::gui::{ItemProvider, MenuItem};
-use crate::modes::drun::{DRunProvider, update_drun_cache_and_run};
-use crate::modes::file::FileItemProvider;
-use crate::modes::math::MathProvider;
-use crate::modes::ssh;
-use crate::modes::ssh::SshProvider;
-use crate::{Error, gui};
 use regex::Regex;
+
+use crate::{
+    Error,
+    config::Config,
+    desktop::spawn_fork,
+    gui::{self, ItemProvider, MenuItem},
+    modes::{
+        drun::{DRunProvider, update_drun_cache_and_run},
+        file::FileItemProvider,
+        math::MathProvider,
+        ssh,
+        ssh::SshProvider,
+    },
+};
 
 #[derive(Debug, Clone, PartialEq)]
 enum AutoRunType {
@@ -30,7 +35,12 @@ struct AutoItemProvider {
 impl AutoItemProvider {
     fn new(config: &Config) -> Self {
         AutoItemProvider {
-            drun: DRunProvider::new(AutoRunType::DRun, config.no_actions(), config.sort_order()),
+            drun: DRunProvider::new(
+                AutoRunType::DRun,
+                config.no_actions(),
+                config.sort_order(),
+                config.term(),
+            ),
             file: FileItemProvider::new(AutoRunType::File, config.sort_order()),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh, &config.sort_order()),

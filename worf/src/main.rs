@@ -1,8 +1,8 @@
 use std::env;
 
 use anyhow::anyhow;
-use worf_lib::config::{Mode, fork_if_configured};
-use worf_lib::{Error, config, modes};
+
+use worf_lib::{Error, config, config::Mode, desktop::fork_if_configured, modes};
 
 fn main() -> anyhow::Result<()> {
     env_logger::Builder::new()
@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    fork_if_configured(&config);
+    fork_if_configured(&config); // may exit the program
 
     if let Some(show) = &config.show() {
         let result = match show {
