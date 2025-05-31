@@ -6,3 +6,5 @@ content_halign="Center"
 height="70%"
 width="60%"
 valign="Start"
+#line_wrap="Word"
+line_max_chars=32
