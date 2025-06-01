@@ -1160,7 +1160,9 @@ fn sort_menu_items_by_score<T: Clone>(
 }
 
 fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>>) {
-    let Some(geometry) = get_monitor_geometry(ui) else { return };
+    let Some(geometry) = get_monitor_geometry(ui) else {
+        return;
+    };
 
     // Calculate target width from config, return early if not set
     let Some(target_width) = percent_or_absolute(&config.width(), geometry.width()) else {
@@ -1188,7 +1190,11 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
     }
 }
 
-fn calculate_dynamic_lines_window_height<T: Clone + 'static>(config: &Config, ui: &UiElements<T>, geometry: Rectangle) -> i32 {
+fn calculate_dynamic_lines_window_height<T: Clone + 'static>(
+    config: &Config,
+    ui: &UiElements<T>,
+    geometry: Rectangle,
+) -> i32 {
     if config.dynamic_lines_limit() {
         calculate_row_height(ui, visible_row_count(ui), config)
             .min(percent_or_absolute(&config.height(), geometry.height()).unwrap_or(0))
@@ -1231,7 +1237,7 @@ fn calculate_row_height<T: Clone + 'static>(
                 if baseline > 0 {
                     let factor = if lines > 1 {
                         1.4 // todo find a better way to do this
-                        // most likely it will not work with all styles
+                    // most likely it will not work with all styles
                     } else {
                         1.0
                     };
@@ -1277,7 +1283,7 @@ fn visible_row_count<T: Clone + 'static>(ui: &UiElements<T>) -> i32 {
             .filter(|(_, menu)| menu.visible)
             .count(),
     )
-        .unwrap_or(i32::MAX)
+    .unwrap_or(i32::MAX)
 }
 
 fn handle_selected_item<T>(
@@ -1416,10 +1422,10 @@ fn create_menu_row<T: Clone + 'static + Send>(
             element_to_add.icon_path.as_ref().map(AsRef::as_ref),
             &meta.config,
         )
-            .or(lookup_icon(
-                label_img.as_ref().map(AsRef::as_ref),
-                &meta.config,
-            ));
+        .or(lookup_icon(
+            label_img.as_ref().map(AsRef::as_ref),
+            &meta.config,
+        ));
 
         if let Some(image) = img {
             image.set_widget_name("img");
