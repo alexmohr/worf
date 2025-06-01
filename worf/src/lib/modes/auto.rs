@@ -1,5 +1,6 @@
 use regex::Regex;
 
+use crate::modes::search::SearchProvider;
 use crate::{
     Error,
     config::Config,
@@ -20,7 +21,7 @@ enum AutoRunType {
     DRun,
     File,
     Ssh,
-    // WebSearch,
+    WebSearch,
 }
 
 #[derive(Clone)]
@@ -29,6 +30,7 @@ struct AutoItemProvider {
     file: FileItemProvider<AutoRunType>,
     math: MathProvider<AutoRunType>,
     ssh: SshProvider<AutoRunType>,
+    search: SearchProvider<AutoRunType>,
     last_mode: Option<AutoRunType>,
 }
 
@@ -44,6 +46,7 @@ impl AutoItemProvider {
             file: FileItemProvider::new(AutoRunType::File, config.sort_order()),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh, &config.sort_order()),
+            search: SearchProvider::new(AutoRunType::WebSearch, config.search_query()),
             last_mode: None,
         }
     }
@@ -66,7 +69,7 @@ impl AutoItemProvider {
 
 fn contains_math_functions_or_starts_with_number(input: &str) -> bool {
     // Regex for function names (word boundaries to match whole words)
-    let math_functions = r"\b(sqrt|abs|exp|ln|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|floor|ceil|round|signum|min|max|pi|e)\b";
+    let math_functions = r"\b(sqrt|abs|exp|ln|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|floor|ceil|round|signum|min|max|pi|e|0x|0b|\||&|<<|>>|\^)\b";
 
     // Regex for strings that start with a number (including decimals)
     let starts_with_number = r"^\s*[+-]?(\d+(\.\d*)?|\.\d+)";
@@ -90,6 +93,13 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
             (AutoRunType::File, self.file.get_elements(search_opt))
         } else if search.starts_with("ssh") {
             (AutoRunType::Ssh, self.ssh.get_elements(search_opt))
+        } else if search.starts_with('?') {
+            let re = Regex::new(r"^\?\s*").unwrap();
+            let query = re.replace(search, "");
+            (
+                AutoRunType::WebSearch,
+                self.search.get_elements(Some(&query)),
+            )
         } else {
             return self.default_auto_elements(search_opt);
         };
@@ -131,7 +141,7 @@ pub fn show(config: &Config) -> Result<(), Error> {
             provider.clone(),
             true,
             Some(
-                vec!["ssh", "emoji", "^\\$\\w+"]
+                vec!["ssh", "emoji", "^\\$\\w+", "^\\?\\s*"]
                     .into_iter()
                     .map(|s| Regex::new(s).unwrap())
                     .collect(),
@@ -158,6 +168,12 @@ pub fn show(config: &Config) -> Result<(), Error> {
                     }
                     AutoRunType::Ssh => {
                         ssh::launch(&selection_result, config)?;
+                        break;
+                    }
+                    AutoRunType::WebSearch => {
+                        if let Some(action) = selection_result.action {
+                            spawn_fork(&action, None)?;
+                        }
                         break;
                     }
                 }

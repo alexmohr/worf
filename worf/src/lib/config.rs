@@ -86,6 +86,9 @@ pub enum Mode {
 
     /// Emoji browser
     Emoji,
+
+    /// Open search engine.
+    WebSearch,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -136,6 +139,7 @@ impl FromStr for Mode {
             "math" => Ok(Mode::Math),
             "ssh" => Ok(Mode::Ssh),
             "emoji" => Ok(Mode::Emoji),
+            "websearch" => Ok(Mode::WebSearch),
             "auto" => Ok(Mode::Auto),
             _ => Err(Error::InvalidArgument(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
@@ -412,6 +416,11 @@ pub struct Config {
     /// See `KeyDetectionType` for details.
     #[clap(long = "key-detection-type")]
     key_detection_type: Option<KeyDetectionType>,
+
+    /// Defines the search query to use.
+    /// Defaults to `<https://duckduckgo.com/?q=>`
+    #[clap(long = "search-query")]
+    search_query: Option<String>,
 }
 
 impl Config {
@@ -499,6 +508,7 @@ impl Config {
                     Mode::Auto => "auto".to_owned(),
                     Mode::Ssh => "ssh".to_owned(),
                     Mode::Emoji => "emoji".to_owned(),
+                    Mode::WebSearch => "websearch".to_owned(),
                 },
             },
 
@@ -645,6 +655,13 @@ impl Config {
     #[must_use]
     pub fn dynamic_lines_limit(&self) -> bool {
         self.dynamic_lines_limit.unwrap_or(true)
+    }
+
+    #[must_use]
+    pub fn search_query(&self) -> String {
+        self.search_query
+            .clone()
+            .unwrap_or_else(|| "https://duckduckgo.com/?q=".to_owned())
     }
 }
 

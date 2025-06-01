@@ -41,6 +41,7 @@ fn main() -> anyhow::Result<()> {
             Mode::Ssh => modes::ssh::show(&config),
             Mode::Emoji => modes::emoji::show(&config),
             Mode::Auto => modes::auto::show(&config),
+            Mode::WebSearch => modes::search::show(&config),
         };
 
         if let Err(err) = result {
