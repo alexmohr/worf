@@ -1173,7 +1173,7 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
     let target_height = if let Some(lines) = config.lines() {
         Some(calculate_row_height(ui, lines, config))
     } else if config.dynamic_lines() {
-        Some(calculate_dynamic_lines_window_height(&config, ui, geometry))
+        Some(calculate_dynamic_lines_window_height(config, ui, geometry))
     } else if let Some(height) = percent_or_absolute(&config.height(), geometry.height()) {
         Some(height)
     } else {
@@ -1205,14 +1205,10 @@ fn calculate_dynamic_lines_window_height<T: Clone + 'static>(
 
 fn get_monitor_geometry<T: Clone>(ui: &UiElements<T>) -> Option<Rectangle> {
     // Get the surface and associated monitor geometry
-    let Some(surface) = ui.window.surface() else {
-        return None;
-    };
+    let surface = ui.window.surface()?;
 
     let display = surface.display();
-    let Some(monitor) = display.monitor_at_surface(&surface) else {
-        return None;
-    };
+    let monitor = display.monitor_at_surface(&surface)?;
     let geometry = monitor.geometry();
     Some(geometry)
 }
