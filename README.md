@@ -9,17 +9,13 @@ Worf has more features than wofi though, so there won't be 100% compatibility.
 Broken compatibility with wofi is not considered a bug, but issues regarding that will be accepted if you 
 would rather use worf than wofi.
 
-**While the main branch in general is stable and I am using this on a daily basis, it is not ready yet
-to be used as a library, a lot of things are still moving around.**
-
 It supports various modes:
 * Math
 * DRun
 * File
 * Ssh
 * Run
-* Emoji 
-* // WebSearch --> tracked by https://github.com/alexmohr/worf/issues/55
+* Emoji
 * Auto
 
 Auto mode tries to detect the desired mode automatically, to achieve this some modes require a prefix in the search.
