@@ -3,7 +3,6 @@ use std::{env, fs, path::PathBuf, str::FromStr};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use thiserror::Error;
 
 use crate::Error;
 
@@ -111,12 +110,6 @@ impl FromStr for Layer {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum ArgsError {
-    #[error("input is not valid {0}")]
-    InvalidParameter(String),
-}
-
 impl FromStr for Anchor {
     type Err = String;
 
@@ -132,7 +125,7 @@ impl FromStr for Anchor {
 }
 
 impl FromStr for Mode {
-    type Err = ArgsError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -144,7 +137,7 @@ impl FromStr for Mode {
             "ssh" => Ok(Mode::Ssh),
             "emoji" => Ok(Mode::Emoji),
             "auto" => Ok(Mode::Auto),
-            _ => Err(ArgsError::InvalidParameter(
+            _ => Err(Error::InvalidArgument(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
             )),
         }
@@ -152,14 +145,14 @@ impl FromStr for Mode {
 }
 
 impl FromStr for WrapMode {
-    type Err = ArgsError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "none" => Ok(WrapMode::None),
             "word" => Ok(WrapMode::Word),
             "inherit" => Ok(WrapMode::Inherit),
-            _ => Err(ArgsError::InvalidParameter(
+            _ => Err(Error::InvalidArgument(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
             )),
         }
@@ -167,13 +160,13 @@ impl FromStr for WrapMode {
 }
 
 impl FromStr for SortOrder {
-    type Err = ArgsError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "alphabetical" => Ok(SortOrder::Alphabetical),
             "default" => Ok(SortOrder::Default),
-            _ => Err(ArgsError::InvalidParameter(
+            _ => Err(Error::InvalidArgument(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
             )),
         }
@@ -181,13 +174,13 @@ impl FromStr for SortOrder {
 }
 
 impl FromStr for KeyDetectionType {
-    type Err = ArgsError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "value" => Ok(KeyDetectionType::Value),
             "code" => Ok(KeyDetectionType::Code),
-            _ => Err(ArgsError::InvalidParameter(
+            _ => Err(Error::InvalidArgument(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
             )),
         }

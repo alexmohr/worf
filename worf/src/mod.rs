@@ -1,4 +1,5 @@
 use std::fmt;
+use thiserror::Error;
 
 /// Configuration and command line parsing
 #[path = "lib/config.rs"]
@@ -13,9 +14,8 @@ pub mod gui;
 #[path = "lib/modes/mod.rs"]
 pub mod modes;
 
-
 /// Defines error the lib can encounter
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Error)]
 pub enum Error {
     /// Failed to update a cache file with the given reason.
     UpdateCacheError(String),
@@ -42,6 +42,8 @@ pub enum Error {
     Graphics(String),
     /// Nothing selected
     NoSelection,
+    /// Invalid argument
+    InvalidArgument(String),
 }
 
 impl fmt::Display for Error {
@@ -75,6 +77,7 @@ impl fmt::Display for Error {
             Error::NoSelection => {
                 write!(f, "NoSelection")
             }
+            Error::InvalidArgument(s) => write!(f, "Invalid argument {s}"),
         }
     }
 }
