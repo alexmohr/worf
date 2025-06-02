@@ -1,16 +1,17 @@
 * {
-  font-family: DejaVu;
+font-family: DejaVu;
+    transition: opacity 500ms ease;
 }
 
 #background {
-  background-color: rgba(33, 33, 33, 0.1);
+  background-color: rgba(33, 33, 33, 0.1); 
 }
 
-#window {
+#window { 
   all: unset;
   background-color: rgba(33, 33, 33, 0.8); /* Matches #212121BB */
-  border-radius: 0;
-}
+  border-radius: 0px;
+} 
 
 #window #outer-box {
   /* The name of the search bar */
@@ -32,41 +33,54 @@
   background-color: rgba(32, 32, 32, 0.6);
   color: #f2f2f2;
   border-bottom: 2px solid rgba(214, 174, 2, 1);
+  padding: 1.2rem;
+  padding-left: 1rem;
   font-size: 1rem;
 }
 
+#window #outer-box #scroll {
+  border-top: 2px solid rgba(214, 174, 0, 1);
+}
+#window #outer-box #scroll #inner-box {
+  /* The name of all entries */
+  /* The name of all boxes shown when expanding  */
+  /* entries with multiple actions */
+}
 #window #outer-box #scroll #inner-box #entry {
   color: #fff;
   background-color: rgba(32, 32, 32, 0.1);
-  padding: 1rem;
-  margin: 1rem;
-  border-radius: 0.5rem;
-  border-bottom: 5px solid rgba(32, 32, 32, 0.1);
-
+  padding: 0.6rem 1rem;
+  /* The name of all images in entries displayed in image mode */
+  /* The name of all the text in entries */
 }
 #window #outer-box #scroll #inner-box #entry #img {
   margin-right: 0.5rem;
 }
-
 #window #outer-box #scroll #inner-box #entry:selected {
   color: #fff;
   background-color: rgba(255, 255, 255, 0.1);
   outline: none;
-  border-bottom: 5px solid rgba(214, 174, 0, 1);
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
 }
 
 #row:hover {
   background-color:  rgba(255, 255, 255, 0);
   outline: inherit;
+  outline-color: inherit;
 }
 #window #outer-box #scroll #inner-box #entry:hover {
   background-color: rgba(255, 255, 255, 0.1);
   outline: inherit;
+  outline-color: inherit;
 }
 
-#text {
-  margin-top: 1rem;
-  margin-bottom: 0;
+#custom-key-label-box {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+  border-right: 1px solid rgba(214, 174, 0, 1);
+  border-left: 1px solid rgba(214, 174, 0, 1);
+  padding-left: 1em;
+}
+
+#custom-key-hint-text {
+  margin-left: 0.75em;
 }

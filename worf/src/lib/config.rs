@@ -421,6 +421,11 @@ pub struct Config {
     /// Defaults to `<https://duckduckgo.com/?q=>`
     #[clap(long = "search-query")]
     search_query: Option<String>,
+
+    /// Blur the background of the screen
+    /// can be style via `background`
+    #[clap(long = "blurred-background")]
+    blurred_background: Option<bool>,
 }
 
 impl Config {
@@ -662,6 +667,11 @@ impl Config {
         self.search_query
             .clone()
             .unwrap_or_else(|| "https://duckduckgo.com/?q=".to_owned())
+    }
+
+    #[must_use]
+    pub fn blurred_background(&self) -> bool {
+        self.blurred_background.unwrap_or(false)
     }
 }
 
