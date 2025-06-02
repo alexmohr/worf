@@ -354,7 +354,9 @@ fn main() -> Result<(), String> {
     }
 
     // will exit if there is a daemon running already, so it's fine to call this everytime.
-    spawn_fork("ydotoold", None).expect("failed to spawn ydotoold");
+    if let Err(e) = spawn_fork("ydotoold", None) {
+            log::error!("Failed to start ydotool daemon: {e}");
+    }
 
     // todo eventually use a propper rust client for this, for now rbw is good enough
     let provider = PasswordProvider::new(&config)?;
