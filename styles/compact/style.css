@@ -1,6 +1,10 @@
 * {
-font-family: DejaVu;
-    transition: opacity 500ms ease;
+  font-family: DejaVu;
+  transition: opacity 500ms ease;
+}
+
+#background {
+  background-color: rgba(33, 33, 33, 0.1);
 }
 
 #window { 

@@ -2,6 +2,10 @@
   font-family: DejaVu;
 }
 
+#background {
+  background-color: rgba(33, 33, 33, 0.1);
+}
+
 #window {
   all: unset;
   background-color: rgba(33, 33, 33, 0.8); /* Matches #212121BB */

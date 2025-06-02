@@ -355,7 +355,7 @@ fn main() -> Result<(), String> {
 
     // will exit if there is a daemon running already, so it's fine to call this everytime.
     if let Err(e) = spawn_fork("ydotoold", None) {
-            log::error!("Failed to start ydotool daemon: {e}");
+        log::error!("Failed to start ydotool daemon: {e}");
     }
 
     // todo eventually use a propper rust client for this, for now rbw is good enough

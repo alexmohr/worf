@@ -6,5 +6,5 @@ content_halign="Center"
 height="70%"
 width="60%"
 valign="Start"
-#line_wrap="Word"
+blurred_background=true
 line_max_chars=32

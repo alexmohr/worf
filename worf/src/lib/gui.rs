@@ -680,8 +680,6 @@ fn build_ui<T, P>(
 
     log::debug!("keyboard ready after {:?}", start.elapsed());
 
-    ui_elements.window.set_widget_name("window");
-
     if !config.normal_window() {
         // Initialize the window as a layer
         ui_elements.window.init_layer_shell();
@@ -689,8 +687,10 @@ fn build_ui<T, P>(
         ui_elements
             .window
             .set_keyboard_mode(KeyboardMode::Exclusive);
-        ui_elements.window.set_namespace(Some("worf"));
     }
+
+    ui_elements.window.set_widget_name("window");
+    ui_elements.window.set_namespace(Some("worf"));
 
     if let Some(location) = config.location() {
         for anchor in location {
@@ -742,6 +742,21 @@ fn build_ui<T, P>(
 
     let window_start = Instant::now();
     ui_elements.window.present();
+    if config.blurred_background() {
+        let background = ApplicationWindow::builder()
+            .decorated(false)
+            .resizable(false)
+            .fullscreened(true)
+            // arbitrary huge window so it fills the whole screen
+            .default_width(100_000)
+            .default_height(100_000)
+            .build();
+        background.set_widget_name("background");
+        background.set_namespace(Some("worf"));
+
+        background.present();
+    }
+
     log::debug!("window show took {:?}", window_start.elapsed());
 
     log::debug!("Building UI took {:?}", start.elapsed(),);
