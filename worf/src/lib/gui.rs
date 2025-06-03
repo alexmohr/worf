@@ -558,6 +558,7 @@ struct MetaData<T: Clone + Send> {
 struct UiElements<T: Clone> {
     app: Application,
     window: ApplicationWindow,
+    background: Option<ApplicationWindow>,
     search: SearchEntry,
     main_box: FlowBox,
     menu_rows: ArcMenuMap<T>,
@@ -663,9 +664,12 @@ fn build_ui<T, P>(
         .default_height(1)
         .build();
 
+    let background = create_background(config);
+
     let ui_elements = Rc::new(UiElements {
         app,
         window,
+        background,
         search: SearchEntry::new(),
         main_box: FlowBox::new(),
         menu_rows: Arc::new(RwLock::new(HashMap::new())),
@@ -742,6 +746,16 @@ fn build_ui<T, P>(
 
     let window_start = Instant::now();
     ui_elements.window.present();
+    if let Some(background) = &ui_elements.background {
+        background.present();
+    }
+
+    log::debug!("window show took {:?}", window_start.elapsed());
+
+    log::debug!("Building UI took {:?}", start.elapsed(),);
+}
+
+fn create_background(config: &Config) -> Option<ApplicationWindow> {
     if config.blurred_background() {
         let background = ApplicationWindow::builder()
             .decorated(false)
@@ -753,14 +767,12 @@ fn build_ui<T, P>(
             .build();
         background.set_widget_name("background");
         background.set_namespace(Some("worf"));
-
-        background.present();
+        Some(background)
+    } else {
+        None
     }
-
-    log::debug!("window show took {:?}", window_start.elapsed());
-
-    log::debug!("Building UI took {:?}", start.elapsed(),);
 }
+
 fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElements<T>>) {
     ui_elements.main_box.set_widget_name("inner-box");
     ui_elements.main_box.set_css_classes(&["inner-box"]);
@@ -1359,6 +1371,9 @@ fn send_selected_item<T>(
             log::error!("failed to send message {e}");
         }
     });
+    if let Some(background) = &ui.background {
+        background.hide();
+    }
     ui.window.hide();
     close_gui(&ui_clone.app);
 }

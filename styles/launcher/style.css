@@ -16,7 +16,7 @@
 }
 
 #background {
-  background-color: rgba(33, 33, 33, 0.25);
+  background-color: rgba(33, 33, 33, 0.1);
   backdrop-filter: blur(12px);
   width: 100vw;
   height: 100vh;
@@ -29,16 +29,13 @@
 
 #window {
   all: unset;
-  background-color: rgba(33, 33, 33, 0.1); /* #212121BB */
+  background-color: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 100%;
   max-width: 1200px;
-  margin-top: 2em;
-  margin-left: 15em;
-  margin-right: 15em;
-  margin-bottom: 5em;
+  margin: 2em 15em 5em;
 }
 
 /* Outer-box is the app container grid */
@@ -63,10 +60,7 @@
   border-radius: 6px;
   text-align: center;
   outline: none;
-  margin-left: 25em;
-  margin-right: 25em;
-  margin-bottom: 5em;
-  margin-top: 2em;
+  margin: 2em 25em 5em;
 }
 
 #input:focus,
