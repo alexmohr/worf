@@ -1,0 +1,86 @@
+* {
+  font-family: "JetBrains Mono", "Inter", sans-serif;
+  transition: all 200ms ease;
+  background-color: rgba(14, 17, 23, 0);
+  color: #e6f1ff;
+}
+
+#background {
+  background-color: rgba(14, 17, 23, 0.95);
+}
+
+#window {
+  all: unset;
+  background-color: rgba(14, 17, 23, 0.95);
+  border-radius: 18px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.6);
+  padding: 1rem;
+}
+
+#window #outer-box {
+  margin: 0;
+}
+
+#window #outer-box #input {
+  background-color: rgba(20, 24, 31, 0.95);
+  color: #e6f1ff;
+  border: 1px solid rgba(109, 223, 255, 0.4);
+  border-radius: 10px;
+  padding: 0.8rem 1.1rem;
+  font-size: 1rem;
+  outline: none;
+}
+
+#window #outer-box #input:focus,
+#window #outer-box #input:focus-visible {
+  background-color: rgba(26, 30, 40, 0.98);
+  border: 1px solid #6ddfff;
+  box-shadow: 0 0 6px #6ddfff33;
+}
+
+#window #outer-box #scroll {
+  border-top: 1px solid rgba(109, 223, 255, 0.2);
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+#window #outer-box #scroll #inner-box #entry {
+  background-color: rgba(255, 255, 255, 0.02);
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  transition: background-color 150ms ease;
+}
+
+#window #outer-box #scroll #inner-box #entry:hover {
+  background-color: rgba(109, 223, 255, 0.08);
+}
+
+#window #outer-box #scroll #inner-box #entry:selected {
+  background-color: rgba(187, 154, 255, 0.2);
+  outline: none;
+}
+
+#window #outer-box #scroll #inner-box #entry #img {
+  margin-right: 0.6rem;
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.85;
+}
+
+#custom-key-label-box {
+  background: rgba(36, 42, 56, 0.9);
+  border-radius: 10px;
+  padding: 0.5rem 1rem;
+  margin: 0.5rem 0;
+  color: #d0e9ff;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.05);
+}
+
+#custom-key-hint-text {
+  margin-left: 0.75rem;
+  font-size: 0.9rem;
+  opacity: 0.7;
+}
