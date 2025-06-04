@@ -1,102 +1,179 @@
-# Worf - Wayland Optimized Run Facilitator
+# 🚀 Worf - Wayland Optimized Run Facilitator
 
-Worf is yet another style launcher, heavily inspired by wofi, rofi and walker.
-Worf is written in Rust on top of GTK4. 
+> 🎯 Application launcher for Wayland, written in Rust with GTK4
 
-It started out as a drop in replacement for wofi, so styles and config in most part (should) be compatible, 
-with a few exception documented below. 
-Worf has more features than wofi though, so there won't be 100% compatibility. 
-Broken compatibility with wofi is not considered a bug, but issues regarding that will be accepted if you 
-would rather use worf than wofi.
+[![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![GTK4](https://img.shields.io/badge/GTK4-4A90E2?style=for-the-badge&logo=gtk&logoColor=white)](https://gtk.org/)
+[![Wayland](https://img.shields.io/badge/Wayland-FFB71B?style=for-the-badge&logo=wayland&logoColor=black)](https://wayland.freedesktop.org/)
 
-It supports various modes:
-* Math
-* DRun
-* File
-* Ssh
-* Run
-* Emoji
-* Auto
+---
 
-Auto mode tries to detect the desired mode automatically, to achieve this some modes require a prefix in the search.
-The standard view will show `ssh` and `drun`, for other modes the following prefixes are available:
-* `ssh` (optional)
-* `?` web search
-* `/`, `$` or `~` for files
+## ✨ Features
 
-<img src="images/demo.gif">
+Worf is yet another style launcher, heavily inspired by **wofi**, **rofi**, and **walker**. Built from the ground up with Rust and GTK4, it offers exceptional performance and modern styling capabilities.
 
+### 🎪 Multiple Modes Support
 
-## Additional functionality compared to Wofi
-* Window switcher for hyprland and bitwarden client (see examples)
-* All arguments expect show are supported by config and args
+- 🧮 **Math** - Including binary/hex conversion and bitwise operations (`&`, `|`, `^`, `<<`, `>>`)
+- 🚀 **DRun** - Desktop application launcher
+- 📁 **File** - File browser and launcher
+- 🖥️E **SSH** - Quick SSH connection launcher
+- ⚡ **Run** - Command execution
+- 😊 **Emoji** - Emoji picker
+- 🔍 **Web Search** - Quick web searches
+- 🤖 **Auto** - Intelligent mode detection
 
-### New config / command line options
-* fuzzy-length: Defines how long a string must be to be considered for fuzzy match
-* row-box-orientation: Allows aligning values vertically to place the label below the icon
+### 🧠 Smart Auto Mode
 
-## Styling
+Auto mode intelligently detects what you're trying to do! Use these prefixes for quick access:
 
-Styling names and classes are inspired by wofi, so most of the documentation and styling is the same
+| Prefix | Mode | Description |
+|--------|------|-------------|
+| `ssh` | SSH | Connect to servers (optional prefix) |
+| `?` | Web Search | Search the web |
+| `/`, `$`, `~` | Files | Browse filesystem |
 
-### Selectors
+![Demo](images/demo.gif)
 
-| name                    | description                                                   |
-|-------------------------|---------------------------------------------------------------|
-| `window`                | Entire main window.                                           |
-| `outer-box`             | A box that everything else sits inside of.                    |
-| `input`                 | Text box for filtering items.                                 |
-| `scroll`                | Scrollable container that holds the `inner-box`.              |
-| `inner-box`             | Box containing the menu entries.                              |
-| `entry`                 | Box containing the text and optionally the image of an entry. |
-| `text`                  | Name of the program/option displayed in an entry.             |
-| `img`                   | Image displayed in an entry (optional).                       |
-| `row`                   | Row containing the entry, used to control hover effects.      |
-| `custom-key-label-text` | The label for custom keys                                     |
-| `custom-key-label-box`  | Box containing the label, can be used for borders etc.        |
-| `custom-key-hint-text`  | The label for custom keys hint                                |
-| `custom-key-hint-box`   | Box containing the hint, can be used for borders etc.         |
+---
 
+## 🎨 Styling & Theming
 
-Checkout more showcases in the [styles directory of this repo](styles).
+Styling is **wofi-compatible** with enhanced GTK4 features! Customize every aspect of your launcher.
 
-![](styles/compact/example.png)
+### 🏷️ Available Selectors
 
+| Selector                | Description                   |
+|-------------------------|-------------------------------|
+| `window`                | Main application window       |
+| `outer-box`             | Container for all elements    |
+| `input`                 | Search input field            |
+| `scroll`                | Scrollable results container  |
+| `inner-box`             | Menu entries container        |
+| `entry`                 | Individual result entry       |
+| `text`                  | Entry text content            |
+| `img`                   | Entry icons                   |
+| `row`                   | Entry row (for hover effects) |
+| `custom-key-label-text` | Custom key labels             |
+| `custom-key-label-box`  | Custom key label container    |
+| `custom-key-hint-text`  | Custom key hints              |
+| `custom-key-hint-box`   | Custom key hint container     |
 
-## Setup
+---
 
-### Hyprland
+## ⚙️ Setup
 
-Allow blur for Worf
-```
+### 🌊 Hyprland Integration
+
+Enable beautiful blur effects for Worf:
+
+```bash
 layerrule = blur, worf
 ```
 
+---
 
-## Library
+## 📚 Library Usage
 
-The launcher and UI can be used to build any launcher, as the ui, config and run logic is available as a separate crate.
-This library is not available publicly yet as the interface is not stable enough.
+🔧 **Developer-Friendly**: Worf's launcher and UI components are available as a separate crate for building custom launchers.
 
-## Wofi compatibility
+> ⚠️ **Note**: The library API is currently in development and not yet available on crates.io.
 
-### Breaking changes
-* Runtime behaviour is not guaranteed to be the same and won't ever be, this includes error messages and themes.
-* Themes in general are mostly compatible. Worf is using the same entity ids, 
-  because worf is build on GTK4 instead of GTK3 there will be differences in the look and feel.
-* Configuration files are not 100% compatible, Worf is using toml files instead, for most part this only means strings have to be quoted
-* Color files are not supported
-* `line_wrap` is now called `line-wrap`
-* Wofi has a C-API, that is not and won't be supported, but Worf can be used as a rust library.
-* Most boolean options now need `true` or `false` as argument, as Worf is using the same struct for config and command line arguments and this is the only way to merge both data sources
+---
 
-### Dropped arguments / config values
-* `mode`, use show
-* `dmenu`, use show
-* `D`, arguments are the same as config in worf, no need to have this flag.
-* `dark`, dark setting from theme is used now.
-* `filter-rate`, worf is fast enough not to need this debounce
+## 🎯 Examples & Use Cases
 
-### Dropped configuration options
-* stylesheet -> use style instead
-* color / colors -> GTK4 does not support color files
+The possibilities are endless! Here are some powerful examples of what you can build with Worf:
+
+### worf-hyprland-exit
+*Full-screen exit menu for Hyprland*
+
+![Hyprland Exit](examples/images/hyprland-exit.png)
+
+- Full screen exit menu
+- Shell script using dmenu mode
+- Desktop hiding with background display
+- Uses launcher theme styling
+
+### worf-hyprswitch
+*Elegant window switcher*
+
+![Hyprland Switch](examples/images/hyprland-switch.png)
+
+- Advanced window selector
+- Written in Rust using Worf API
+- Featuring AmberNight theme with centered content
+
+### 🔐 worf-warden
+*Beautiful Bitwarden frontend*
+
+![Worf Warden](examples/images/worf-warden.png)
+
+- Bitwarden integration via [rbw](https://github.com/doy/rbw)
+- Additional dependencies required ([see readme](examples/worf-warden/Readme.md))
+- Showcasing GlacierPrism theme with blurred background
+
+### worf-rtw
+*Time tracking made simple*
+
+![Worf RTW](examples/images/worf-rtw.png)
+
+- Time tracking with [rtw](https://github.com/PicoJr/rtw)
+- Using AmberNight theme with custom positioning
+
+---
+
+## 🔄 Wofi Migration Guide
+
+### ✅ What's Compatible
+
+- **Themes**: Mostly compatible with existing wofi themes
+- **Selectors**: Same entity IDs for easy migration
+- **Core Functionality**: Similar behavior and features
+
+### ⚠️ Breaking Changes
+
+| Area         | Change                           |
+|--------------|----------------------------------|
+| **Runtime**  | Behavior differences             |
+| **Themes**   | GTK4 vs GTK3 differences         |
+| **Config**   | TOML format (quoted strings)     |
+| **Colors**   | Color files not supported        |
+| **Options**  | line_wrap` → `line-wrap`         |
+| **API**      | Rust library only                |
+| **Booleans** | Explicit `true`/`false` required |
+
+### 🗑️ Removed Features
+
+#### Command Line Arguments
+- `mode` → Use `show` instead
+- `dmenu` → Use `show` instead
+- `D` → Arguments = config now
+- `dark` → Auto-detected from theme
+- `filter-rate` → No longer needed, Worf is fast enough
+
+#### Configuration Options
+- `stylesheet` → Use `style` instead
+- `color`/`colors` → Use GTK4 CSS instead
+
+---
+
+## 🤝 Contributing
+
+Found a compatibility issue? We welcome feedback and contributions! While 100% wofi compatibility isn't guaranteed, we're happy to help you transition to Worf.
+
+---
+
+## 📄 License
+
+GPL V3, see [Copying](COPYING.md)                      
+
+---
+
+<div align="center">
+
+**Made with ❤️ and 🦀**
+
+*Star ⭐ this repo if you find it useful!*
+
+</div>
