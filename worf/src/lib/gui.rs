@@ -777,7 +777,7 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
     ui_elements.main_box.set_widget_name("inner-box");
     ui_elements.main_box.set_css_classes(&["inner-box"]);
     ui_elements.main_box.set_hexpand(true);
-    ui_elements.main_box.set_vexpand(false);
+    ui_elements.main_box.set_vexpand(config.content_vcenter());
 
     ui_elements
         .main_box
@@ -1258,15 +1258,10 @@ fn calculate_row_height<T: Clone + 'static>(
             .find_map(|(fb, _)| {
                 let (_, _, _, baseline) = fb.measure(Orientation::Vertical, MEAS_SIZE);
                 if baseline > 0 {
-                    let factor = if lines > 1 {
-                        1.4 // todo find a better way to do this
-                    // most likely it will not work with all styles
-                    } else {
-                        1.0
-                    };
+                    let factor = config.lines_size_factor();
 
                     if config.allow_images() && baseline < i32::from(config.image_size()) {
-                        Some(i32::from(config.image_size()))
+                        Some((f64::from(i32::from(config.image_size())) * factor) as i32)
                     } else {
                         Some((f64::from(baseline) * factor) as i32)
                     }
@@ -1283,7 +1278,7 @@ fn calculate_row_height<T: Clone + 'static>(
     };
 
     log::debug!(
-        "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}"
+        "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}, lines {lines:?}"
     );
 
     height_box

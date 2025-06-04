@@ -13,6 +13,7 @@
 * {
   font-family: var(--font);
   box-sizing: border-box;
+  outline: none;
 }
 
 #background {
@@ -79,8 +80,6 @@
   background-color: rgba(32, 32, 32, 0);
   padding: 1rem;
   margin: 1rem;
-  border-radius: 0.5rem;
-  border-bottom: 5px solid rgba(32, 32, 32, 0.1);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -96,7 +95,7 @@
 #entry:selected {
   color: #fff;
   background-color: var(--entry-selected);
-  border-bottom: 5px solid var(--search-border);
+  border-bottom: 3px solid var(--search-border);
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -120,4 +119,5 @@
 #row:hover {
   background-color: transparent;
   outline: inherit;
+  border-width: 0;
 }

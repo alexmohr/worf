@@ -3,3 +3,4 @@ allow_images=true
 term="kitty -e"
 insensitive=true
 key_detection_type="Code"
+lines_size_factor=1.9
