@@ -30,7 +30,7 @@ body {
 /* Container */
 #window {
   all: unset;
-  background-color: #1c1c1c;
+  background-color:  rgba(32, 32, 32, 0.75);
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   padding: 1rem;

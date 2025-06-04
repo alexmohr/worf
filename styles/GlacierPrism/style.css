@@ -22,7 +22,7 @@
 }
 
 #window #outer-box #input {
-  background-color: rgba(20, 24, 31, 0.95);
+  background-color: rgba(20, 24, 31, 0.75);
   color: #e6f1ff;
   border: 1px solid rgba(109, 223, 255, 0.4);
   border-radius: 10px;
