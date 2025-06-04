@@ -307,6 +307,10 @@ pub struct Config {
     #[clap(long = "line-additional-space")]
     lines_additional_space: Option<i32>,
 
+    /// factor to multiple the line height with.
+    #[clap(long = "lines-size-factor")]
+    lines_size_factor: Option<f64>,
+
     #[clap(short = 'w', long = "columns")]
     columns: Option<u32>,
 
@@ -332,6 +336,10 @@ pub struct Config {
     /// Alignment of content
     #[clap(long = "content-halign")]
     content_halign: Option<Align>,
+
+    /// center content on vertical axis
+    #[clap(long = "content-vcenter")]
+    content_vcenter: Option<bool>,
 
     /// Vertical alignment
     #[clap(long = "valign")]
@@ -491,6 +499,11 @@ impl Config {
     }
 
     #[must_use]
+    pub fn content_vcenter(&self) -> bool {
+        self.content_vcenter.unwrap_or(false)
+    }
+
+    #[must_use]
     pub fn valign(&self) -> Align {
         self.valign.unwrap_or(Align::Center)
     }
@@ -640,6 +653,11 @@ impl Config {
     #[must_use]
     pub fn lines_additional_space(&self) -> i32 {
         self.lines_additional_space.unwrap_or(0)
+    }
+
+    #[must_use]
+    pub fn lines_size_factor(&self) -> f64 {
+        self.lines_size_factor.unwrap_or(1.4)
     }
 
     #[must_use]
