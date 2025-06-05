@@ -63,6 +63,38 @@ Styling is **wofi-compatible** with enhanced GTK4 features! Customize every aspe
 
 ## ⚙️ Setup
 
+### ⚒️ Dependencies
+
+* GTK4
+* Wayland
+* GTK4 layer shell
+
+#### Arch
+
+```bash
+sudo pacman -S gtk4 gtk4-layer-shell
+```
+
+#### Ubuntu
+Ubuntu does not ship gtk4-layer-shell in a supported version. 
+Therefore it must be build manually
+
+```bash
+sudo apt install -y librust-gdk4-sys-dev \
+    libglib2.0-dev libgtk-layer-shell-dev libgtk-layer-shell0 gir1.2-gtklayershell-0.1 \
+    libgtk-4-dev gobject-introspection libgirepository1.0-dev gtk-doc-tools python3 valac \
+    git cmake gcc meson ninja-build
+    
+cd /tmp
+git clone https://github.com/wmww/gtk4-layer-shell
+cd gtk4-layer-shell
+meson setup -Dexamples=true -Ddocs=true -Dtests=true build
+ninja -C build
+sudo ninja -C build install
+sudo ldconfig
+```
+
+
 ### 🌊 Hyprland Integration
 
 Enable beautiful blur effects for Worf:
@@ -75,7 +107,7 @@ layerrule = blur, worf
 
 ## 📚 Library Usage
 
-🔧 **Developer-Friendly**: Worf's launcher and UI components are available as a separate crate for building custom launchers.
+🔧 **Developer-Friendly**: Worfs launcher and UI components are available as a separate crate for building custom launchers.
 
 > ⚠️ **Note**: The library API is currently in development and not yet available on crates.io.
 
