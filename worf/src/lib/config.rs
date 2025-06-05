@@ -230,12 +230,6 @@ pub struct Config {
     #[clap(short = 'p', long = "prompt")]
     prompt: Option<String>,
 
-    #[clap(short = 'x', long = "xoffset")]
-    xoffset: Option<i32>, // todo support this
-
-    #[clap(short = 'y', long = "yoffset")]
-    yoffset: Option<i32>, // todo support this
-
     /// If true a normal window instead of a layer shell will be used
     #[clap(short = 'n', long = "normal-window")]
     #[serde(default = "default_false")]
@@ -263,7 +257,7 @@ pub struct Config {
     /// * terminator
     ///
     /// Must be configured including the needed arguments to launch something
-    /// i.e. 'kitty -c'
+    /// i.e. '--term "kitty -c"'
     #[clap(short = 't', long = "term")]
     term: Option<String>,
 
@@ -349,25 +343,23 @@ pub struct Config {
     #[clap(long = "image-size")]
     image_size: Option<u16>,
 
-    key_up: Option<String>,          // todo support this
-    key_down: Option<String>,        // todo support this
-    key_left: Option<String>,        // todo support this
-    key_right: Option<String>,       // todo support this
-    key_forward: Option<String>,     // todo support this
-    key_backward: Option<String>,    // todo support this
-    key_submit: Option<String>,      // todo support this
-    key_exit: Option<String>,        // todo support this
-    key_pgup: Option<String>,        // todo support this
-    key_pgdn: Option<String>,        // todo support this
-    key_expand: Option<String>,      // todo support this
-    key_hide_search: Option<String>, // todo support this
-    key_copy: Option<String>,        // todo support this
+    // key_up: Option<String>,          // todo support this
+    // key_down: Option<String>,        // todo support this
+    // key_left: Option<String>,        // todo support this
+    // key_right: Option<String>,       // todo support this
+    // key_forward: Option<String>,     // todo support this
+    // key_backward: Option<String>,    // todo support this
+    // key_submit: Option<String>,      // todo support this
+    // key_exit: Option<String>,        // todo support this
+    // key_pgup: Option<String>,        // todo support this
+    // key_pgdn: Option<String>,        // todo support this
+    // key_expand: Option<String>,      // todo support this
+    // key_hide_search: Option<String>, // todo support this
+    // key_copy: Option<String>,        // todo support this
 
     // todo re-add this
     // #[serde(flatten)]
     // key_custom: Option<HashMap<String, String>>,
-    global_coords: Option<bool>, // todo support this
-
     /// If set to `true` the search field willOption<> be hidden.
     #[clap(long = "hide-search")]
     hide_search: Option<bool>,
@@ -388,8 +380,6 @@ pub struct Config {
     /// defaults to `Top`
     #[clap(long = "layer")]
     layer: Option<Layer>,
-
-    copy_exec: Option<String>, // todo support this
 
     /// If set to `true` single click instead of double click will select
     /// Defaults to `false`

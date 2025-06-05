@@ -133,26 +133,24 @@ The possibilities are endless! Here are some powerful examples of what you can b
 
 ### ⚠️ Breaking Changes
 
-| Area         | Change                           |
-|--------------|----------------------------------|
-| **Runtime**  | Behavior differences             |
-| **Themes**   | GTK4 vs GTK3 differences         |
-| **Config**   | TOML format (quoted strings)     |
-| **Colors**   | Color files not supported        |
-| **Options**  | line_wrap` → `line-wrap`         |
-| **API**      | Rust library only                |
-| **Booleans** | Explicit `true`/`false` required |
+- Runtime behaviour is not guaranteed to be the same and won't ever be, this includes error messages and themes.
+- Themes in general are mostly compatible. Worf is using the same entity ids, because worf is build on GTK4 instead of GTK3 there will be differences in the look and feel.
+- Configuration files are not 100% compatible, Worf is using toml files instead, for most part this only means strings have to be quoted
+- Color files are not supported
+- line_wrap is now called line-wrap
+- Wofi has a C-API, that is not and won't be supported, but Worf can be used as a rust library.
+- Most boolean options now need true or false as argument, as Worf is using the same struct for config and command line arguments and this is the only way to merge both data sources
+- Removed x,y offset and global coords as GTK4 does not support this anymore, similar results can be achieved with `--location`
+- Removed copy_exec as we are not executing a binary to copy data into the clipboard
 
-### 🗑️ Removed Features
-
-#### Command Line Arguments
+#### Removed Command Line Arguments
 - `mode` → Use `show` instead
 - `dmenu` → Use `show` instead
 - `D` → Arguments = config now
 - `dark` → Auto-detected from theme
 - `filter-rate` → No longer needed, Worf is fast enough
 
-#### Configuration Options
+#### Removed configuration Options
 - `stylesheet` → Use `style` instead
 - `color`/`colors` → Use GTK4 CSS instead
 
