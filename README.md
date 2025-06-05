@@ -27,11 +27,11 @@ Worf is yet another style launcher, heavily inspired by **wofi**, **rofi**, and 
 
 Auto mode intelligently detects what you're trying to do! Use these prefixes for quick access:
 
-| Prefix | Mode | Description |
-|--------|------|-------------|
-| `ssh` | SSH | Connect to servers (optional prefix) |
-| `?` | Web Search | Search the web |
-| `/`, `$`, `~` | Files | Browse filesystem |
+| Prefix        | Mode       | Description                          |
+|---------------|------------|--------------------------------------|
+| `ssh`         | SSH        | Connect to servers (optional prefix) |
+| `?`           | Web Search | Search the web                       |
+| `/`, `$`, `~` | Files      | Browse filesystem                    |
 
 ![Demo](images/demo.gif)
 

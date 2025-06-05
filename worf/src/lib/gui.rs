@@ -1490,8 +1490,11 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     let click = GestureClick::new();
     click.set_button(gtk4::gdk::BUTTON_PRIMARY);
+
+    let presses = if meta.config.single_click() { 1 } else { 2 };
+
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
-        if n_press == 2 {
+        if n_press == presses {
             if let Err(e) = handle_selected_item(
                 &click_ui,
                 Rc::<MetaData<T>>::clone(&click_meta),
