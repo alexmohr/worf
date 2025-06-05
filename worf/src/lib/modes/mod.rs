@@ -9,6 +9,7 @@ pub mod emoji;
 pub mod file;
 pub mod math;
 pub mod run;
+pub mod search;
 pub mod ssh;
 
 pub(crate) fn load_cache(cache_path: Option<PathBuf>) -> (Option<PathBuf>, HashMap<String, i64>) {

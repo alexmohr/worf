@@ -558,6 +558,7 @@ struct MetaData<T: Clone + Send> {
 struct UiElements<T: Clone> {
     app: Application,
     window: ApplicationWindow,
+    background: Option<ApplicationWindow>,
     search: SearchEntry,
     main_box: FlowBox,
     menu_rows: ArcMenuMap<T>,
@@ -663,9 +664,12 @@ fn build_ui<T, P>(
         .default_height(1)
         .build();
 
+    let background = create_background(config);
+
     let ui_elements = Rc::new(UiElements {
         app,
         window,
+        background,
         search: SearchEntry::new(),
         main_box: FlowBox::new(),
         menu_rows: Arc::new(RwLock::new(HashMap::new())),
@@ -680,8 +684,6 @@ fn build_ui<T, P>(
 
     log::debug!("keyboard ready after {:?}", start.elapsed());
 
-    ui_elements.window.set_widget_name("window");
-
     if !config.normal_window() {
         // Initialize the window as a layer
         ui_elements.window.init_layer_shell();
@@ -689,8 +691,10 @@ fn build_ui<T, P>(
         ui_elements
             .window
             .set_keyboard_mode(KeyboardMode::Exclusive);
-        ui_elements.window.set_namespace(Some("worf"));
     }
+
+    ui_elements.window.set_widget_name("window");
+    ui_elements.window.set_namespace(Some("worf"));
 
     if let Some(location) = config.location() {
         for anchor in location {
@@ -742,15 +746,38 @@ fn build_ui<T, P>(
 
     let window_start = Instant::now();
     ui_elements.window.present();
+    if let Some(background) = &ui_elements.background {
+        background.present();
+    }
+
     log::debug!("window show took {:?}", window_start.elapsed());
 
     log::debug!("Building UI took {:?}", start.elapsed(),);
 }
+
+fn create_background(config: &Config) -> Option<ApplicationWindow> {
+    if config.blurred_background() {
+        let background = ApplicationWindow::builder()
+            .decorated(false)
+            .resizable(false)
+            .fullscreened(true)
+            // arbitrary huge window so it fills the whole screen
+            .default_width(100_000)
+            .default_height(100_000)
+            .build();
+        background.set_widget_name("background");
+        background.set_namespace(Some("worf"));
+        Some(background)
+    } else {
+        None
+    }
+}
+
 fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElements<T>>) {
     ui_elements.main_box.set_widget_name("inner-box");
     ui_elements.main_box.set_css_classes(&["inner-box"]);
     ui_elements.main_box.set_hexpand(true);
-    ui_elements.main_box.set_vexpand(false);
+    ui_elements.main_box.set_vexpand(config.content_vcenter());
 
     ui_elements
         .main_box
@@ -1231,15 +1258,10 @@ fn calculate_row_height<T: Clone + 'static>(
             .find_map(|(fb, _)| {
                 let (_, _, _, baseline) = fb.measure(Orientation::Vertical, MEAS_SIZE);
                 if baseline > 0 {
-                    let factor = if lines > 1 {
-                        1.4 // todo find a better way to do this
-                    // most likely it will not work with all styles
-                    } else {
-                        1.0
-                    };
+                    let factor = config.lines_size_factor();
 
                     if config.allow_images() && baseline < i32::from(config.image_size()) {
-                        Some(i32::from(config.image_size()))
+                        Some((f64::from(i32::from(config.image_size())) * factor) as i32)
                     } else {
                         Some((f64::from(baseline) * factor) as i32)
                     }
@@ -1256,7 +1278,7 @@ fn calculate_row_height<T: Clone + 'static>(
     };
 
     log::debug!(
-        "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}"
+        "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}, lines {lines:?}"
     );
 
     height_box
@@ -1344,6 +1366,9 @@ fn send_selected_item<T>(
             log::error!("failed to send message {e}");
         }
     });
+    if let Some(background) = &ui.background {
+        background.hide();
+    }
     ui.window.hide();
     close_gui(&ui_clone.app);
 }
@@ -1465,8 +1490,11 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     let click = GestureClick::new();
     click.set_button(gtk4::gdk::BUTTON_PRIMARY);
+
+    let presses = if meta.config.single_click() { 1 } else { 2 };
+
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
-        if n_press == 2 {
+        if n_press == presses {
             if let Err(e) = handle_selected_item(
                 &click_ui,
                 Rc::<MetaData<T>>::clone(&click_meta),

@@ -86,6 +86,9 @@ pub enum Mode {
 
     /// Emoji browser
     Emoji,
+
+    /// Open search engine.
+    WebSearch,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -136,6 +139,7 @@ impl FromStr for Mode {
             "math" => Ok(Mode::Math),
             "ssh" => Ok(Mode::Ssh),
             "emoji" => Ok(Mode::Emoji),
+            "websearch" => Ok(Mode::WebSearch),
             "auto" => Ok(Mode::Auto),
             _ => Err(Error::InvalidArgument(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
@@ -226,12 +230,6 @@ pub struct Config {
     #[clap(short = 'p', long = "prompt")]
     prompt: Option<String>,
 
-    #[clap(short = 'x', long = "xoffset")]
-    xoffset: Option<i32>, // todo support this
-
-    #[clap(short = 'y', long = "yoffset")]
-    yoffset: Option<i32>, // todo support this
-
     /// If true a normal window instead of a layer shell will be used
     #[clap(short = 'n', long = "normal-window")]
     #[serde(default = "default_false")]
@@ -259,7 +257,7 @@ pub struct Config {
     /// * terminator
     ///
     /// Must be configured including the needed arguments to launch something
-    /// i.e. 'kitty -c'
+    /// i.e. '--term "kitty -c"'
     #[clap(short = 't', long = "term")]
     term: Option<String>,
 
@@ -303,6 +301,10 @@ pub struct Config {
     #[clap(long = "line-additional-space")]
     lines_additional_space: Option<i32>,
 
+    /// factor to multiple the line height with.
+    #[clap(long = "lines-size-factor")]
+    lines_size_factor: Option<f64>,
+
     #[clap(short = 'w', long = "columns")]
     columns: Option<u32>,
 
@@ -329,6 +331,10 @@ pub struct Config {
     #[clap(long = "content-halign")]
     content_halign: Option<Align>,
 
+    /// center content on vertical axis
+    #[clap(long = "content-vcenter")]
+    content_vcenter: Option<bool>,
+
     /// Vertical alignment
     #[clap(long = "valign")]
     valign: Option<Align>,
@@ -337,25 +343,23 @@ pub struct Config {
     #[clap(long = "image-size")]
     image_size: Option<u16>,
 
-    key_up: Option<String>,          // todo support this
-    key_down: Option<String>,        // todo support this
-    key_left: Option<String>,        // todo support this
-    key_right: Option<String>,       // todo support this
-    key_forward: Option<String>,     // todo support this
-    key_backward: Option<String>,    // todo support this
-    key_submit: Option<String>,      // todo support this
-    key_exit: Option<String>,        // todo support this
-    key_pgup: Option<String>,        // todo support this
-    key_pgdn: Option<String>,        // todo support this
-    key_expand: Option<String>,      // todo support this
-    key_hide_search: Option<String>, // todo support this
-    key_copy: Option<String>,        // todo support this
+    // key_up: Option<String>,          // todo support this
+    // key_down: Option<String>,        // todo support this
+    // key_left: Option<String>,        // todo support this
+    // key_right: Option<String>,       // todo support this
+    // key_forward: Option<String>,     // todo support this
+    // key_backward: Option<String>,    // todo support this
+    // key_submit: Option<String>,      // todo support this
+    // key_exit: Option<String>,        // todo support this
+    // key_pgup: Option<String>,        // todo support this
+    // key_pgdn: Option<String>,        // todo support this
+    // key_expand: Option<String>,      // todo support this
+    // key_hide_search: Option<String>, // todo support this
+    // key_copy: Option<String>,        // todo support this
 
     // todo re-add this
     // #[serde(flatten)]
     // key_custom: Option<HashMap<String, String>>,
-    global_coords: Option<bool>, // todo support this
-
     /// If set to `true` the search field willOption<> be hidden.
     #[clap(long = "hide-search")]
     hide_search: Option<bool>,
@@ -371,12 +375,17 @@ pub struct Config {
     #[clap(long = "dynamic-lines-limit")]
     dynamic_lines_limit: Option<bool>,
 
+    /// Defines the layer worf is running on.
+    /// Has no effect when normal window is used.
+    /// defaults to `Top`
     #[clap(long = "layer")]
     layer: Option<Layer>,
 
-    copy_exec: Option<String>, // todo support this
-    #[clap(long = "single_click")]
-    single_click: Option<bool>, // todo support this
+    /// If set to `true` single click instead of double click will select
+    /// Defaults to `false`
+    #[clap(long = "single-click")]
+    single_click: Option<bool>,
+
     #[clap(long = "pre-display-exec")]
     pre_display_exec: Option<bool>, // todo support this
 
@@ -412,6 +421,16 @@ pub struct Config {
     /// See `KeyDetectionType` for details.
     #[clap(long = "key-detection-type")]
     key_detection_type: Option<KeyDetectionType>,
+
+    /// Defines the search query to use.
+    /// Defaults to `<https://duckduckgo.com/?q=>`
+    #[clap(long = "search-query")]
+    search_query: Option<String>,
+
+    /// Blur the background of the screen
+    /// can be style via `background`
+    #[clap(long = "blurred-background")]
+    blurred_background: Option<bool>,
 }
 
 impl Config {
@@ -428,6 +447,11 @@ impl Config {
     #[must_use]
     pub fn match_method(&self) -> MatchMethod {
         self.matching.unwrap_or(MatchMethod::Contains)
+    }
+
+    #[must_use]
+    pub fn single_click(&self) -> bool {
+        self.single_click.unwrap_or(false)
     }
 
     #[must_use]
@@ -477,6 +501,11 @@ impl Config {
     }
 
     #[must_use]
+    pub fn content_vcenter(&self) -> bool {
+        self.content_vcenter.unwrap_or(false)
+    }
+
+    #[must_use]
     pub fn valign(&self) -> Align {
         self.valign.unwrap_or(Align::Center)
     }
@@ -499,6 +528,7 @@ impl Config {
                     Mode::Auto => "auto".to_owned(),
                     Mode::Ssh => "ssh".to_owned(),
                     Mode::Emoji => "emoji".to_owned(),
+                    Mode::WebSearch => "websearch".to_owned(),
                 },
             },
 
@@ -628,6 +658,11 @@ impl Config {
     }
 
     #[must_use]
+    pub fn lines_size_factor(&self) -> f64 {
+        self.lines_size_factor.unwrap_or(1.4)
+    }
+
+    #[must_use]
     pub fn version(&self) -> bool {
         self.version
     }
@@ -645,6 +680,18 @@ impl Config {
     #[must_use]
     pub fn dynamic_lines_limit(&self) -> bool {
         self.dynamic_lines_limit.unwrap_or(true)
+    }
+
+    #[must_use]
+    pub fn search_query(&self) -> String {
+        self.search_query
+            .clone()
+            .unwrap_or_else(|| "https://duckduckgo.com/?q=".to_owned())
+    }
+
+    #[must_use]
+    pub fn blurred_background(&self) -> bool {
+        self.blurred_background.unwrap_or(false)
     }
 }
 

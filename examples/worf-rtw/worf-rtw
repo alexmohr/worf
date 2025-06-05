@@ -1,0 +1,22 @@
+#!/bin/bash
+
+result=$(rtw summary | rev | cut -d ' ' -f 4- | rev | sort | uniq | \
+  worf --blurred-background false \
+  --location=top \
+  --width "800" \
+  --content-halign center \
+  --dynamic-lines true  \
+  --dynamic-lines-limit false \
+  --lines-size-factor 1.9 \
+  --show dmenu \
+  -p "Tracking $(rtw status)" --style $HOME/.config/worf/AmberNight/style.css | xargs)
+if [ "$result" = "" ]; then
+  exit
+fi
+
+i=$(rtw summary | rev | cut -d ' ' -f 4- | rev | wc -l)
+found=false
+
+rtw stop
+
+rtw start "$result"

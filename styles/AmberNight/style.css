@@ -1,0 +1,114 @@
+:root {
+  --md-primary: #3f51b5;
+  --md-primary-light: #6573c3;
+  --md-primary-dark: #303f9f;
+  --md-on-primary: #ffffff;
+  --md-surface: #121212;
+  --md-surface-variant: #1f1f1f;
+  --md-outline: rgba(255, 255, 255, 0.12);
+  --md-focus: rgba(63, 81, 181, 0.3);
+  --md-border-radius: 12px;
+}
+
+* {
+  font-family: "Inter", "Segoe UI", sans-serif;
+  transition: all 250ms ease;
+  box-sizing: border-box;
+  color: #e0e0e0;
+  background-color: rgba(33, 33, 33, 0); /* base transparent */
+}
+
+body {
+  background-color: var(--md-surface);
+  margin: 0;
+  padding: 0;
+}
+
+#background {
+}
+
+/* Container */
+#window {
+  all: unset;
+  background-color:  rgba(32, 32, 32, 0.75);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 1rem;
+  max-width: 600px;
+  margin: 2rem auto;
+}
+
+#window #outer-box {
+  margin: 0;
+}
+
+#window #outer-box #input {
+  background-color: #282828;
+  color: #f9f9f9;
+  border: 1px solid rgba(100, 100, 100, 0.4);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 1rem;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+#window #outer-box #input:focus,
+#window #outer-box #input:focus-visible,
+#window #outer-box #input:active {
+  background-color: #2d2d2d;
+  border: 1px solid var(--md-primary);
+  box-shadow: 0 0 0 3px var(--md-focus);
+  outline: none;
+}
+
+#window #outer-box #scroll {
+  border-top: 1px solid rgba(255, 204, 0, 0.4);
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+#window #outer-box #scroll #inner-box #entry {
+  color: #ffffff;
+  background-color: rgba(50, 50, 50, 0.3);
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  transition: background-color 250ms ease;
+  cursor: pointer;
+}
+
+#window #outer-box #scroll #inner-box #entry:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+#window #outer-box #scroll #inner-box #entry:selected {
+  background-color: rgba(255, 204, 0, 0.2);
+}
+
+#window #outer-box #scroll #inner-box #entry #img {
+  margin-right: 0.6rem;
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+#custom-key-label-box {
+  background-color: #2e2e2e; /* solid background */
+  border-radius: 8px;
+  padding: 0.5em 1em;
+  margin: 0.5em 0 0.5em 0.5em; /* margin to separate from entry bg */
+  font-weight: 500;
+  color: #f0f0f0;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+#custom-key-hint-text {
+  margin-left: 0.75em;
+  opacity: 0.7;
+  font-size: 0.95rem;
+}

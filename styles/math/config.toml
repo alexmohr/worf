@@ -1,0 +1,8 @@
+image_size=28
+allow_images=false
+term="kitty -e"
+insensitive=true
+key_detection_type="Code"
+blurred_background=false
+location=["Top"]
+lines=3

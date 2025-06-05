@@ -1,0 +1,49 @@
+#!/bin/bash
+
+option_logout="img:/usr/share/icons/Paper/512x512/actions/system-log-out.png:text:Logout"
+option_reboot="img:/usr/share/icons/Paper/512x512@2x/actions/system-reboot.png:text:Restart / Reboot"
+option_suspend="img:/usr/share/icons/Paper/512x512@2x/actions/system-suspend-hibernate.png:Suspend then hibernate"
+option_shutdown="img:/usr/share/icons/Paper/512x512@2x/actions/system-shutdown.png:text:Shutdown"
+theme="$HOME/.config/worf/launcher"
+result=`echo -e "$option_reboot\n$option_suspend\n$option_shutdown\n$option_logout" | \
+  worf --show dmenu -i true -p "Exit" \
+  --style $theme/style.css \
+  --conf $theme/config.toml \
+  --sort-order default \
+  --image-size 64 \
+  --orientation horizontal \
+  --hide-search true \
+  --content-vcenter true \
+  --blurred-background true `
+
+case "$result" in
+  "$option_logout")
+    hyprctl dispatch exit
+    ;;
+
+  "$option_reboot")
+    reboot
+    ;;
+
+  "$option_suspend")
+    hyprlock & systemctl suspend-then-hibernate
+    ;;
+
+  "$option_shutdown")
+    TOKEN="$(cat ~/.homeassistant_token)"
+
+    curl -X POST -H "Authorization: Bearer $TOKEN" \
+      -d '{ "key": "value" }' \
+      https://assistant.home.mohr.io/api/webhook/on-computer-shutdown-rMG8tbTS3Gg8NlrFiJ-MNYYh
+    rtw stop
+
+    #cd $HOME/time/log_work
+    #$HOME/time/log_work
+    shutdown now
+    ;;
+
+  *)
+    exit 1
+esac
+
+
