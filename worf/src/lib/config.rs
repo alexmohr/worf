@@ -383,12 +383,19 @@ pub struct Config {
     #[clap(long = "dynamic-lines-limit")]
     dynamic_lines_limit: Option<bool>,
 
+    /// Defines the layer worf is running on.
+    /// Has no effect when normal window is used.
+    /// defaults to `Top`
     #[clap(long = "layer")]
     layer: Option<Layer>,
 
     copy_exec: Option<String>, // todo support this
-    #[clap(long = "single_click")]
-    single_click: Option<bool>, // todo support this
+
+    /// If set to `true` single click instead of double click will select
+    /// Defaults to `false`
+    #[clap(long = "single-click")]
+    single_click: Option<bool>,
+
     #[clap(long = "pre-display-exec")]
     pre_display_exec: Option<bool>, // todo support this
 
@@ -450,6 +457,11 @@ impl Config {
     #[must_use]
     pub fn match_method(&self) -> MatchMethod {
         self.matching.unwrap_or(MatchMethod::Contains)
+    }
+
+    #[must_use]
+    pub fn single_click(&self) -> bool {
+        self.single_click.unwrap_or(false)
     }
 
     #[must_use]
