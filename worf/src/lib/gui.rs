@@ -760,11 +760,14 @@ fn create_background(config: &Config) -> Option<ApplicationWindow> {
         let background = ApplicationWindow::builder()
             .decorated(false)
             .resizable(false)
-            .fullscreened(true)
+            .fullscreened(false)
             // arbitrary huge window so it fills the whole screen
             .default_width(100_000)
             .default_height(100_000)
             .build();
+        if !config.normal_window() {
+            background.set_layer(config.layer().into());
+        }
         background.set_widget_name("background");
         background.set_namespace(Some("worf"));
         Some(background)
