@@ -19,6 +19,7 @@ pub enum MatchMethod {
     Fuzzy,
     Contains,
     MultiContains,
+    None,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug, Serialize, Deserialize)]

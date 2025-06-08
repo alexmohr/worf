@@ -1650,6 +1650,9 @@ fn set_menu_visibility_for_search<T: Clone>(
                     let contains = query.split(' ').all(|x| menu_item_search.contains(x));
                     (if contains { 1.0 } else { 0.0 }, contains)
                 }
+                MatchMethod::None => {
+                    (1.0, true) // items are always shown
+                }
             };
 
             menu_item.search_sort_score = search_sort_score + menu_item.initial_sort_score;
