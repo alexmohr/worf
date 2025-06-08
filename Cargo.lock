@@ -2907,12 +2907,14 @@ dependencies = [
 name = "worf-hyprswitch"
 version = "0.1.0"
 dependencies = [
+ "dirs 6.0.0",
  "env_logger",
  "freedesktop-icons",
  "hyprland",
  "log",
  "rayon",
  "sysinfo",
+ "toml",
  "worf",
 ]
 
