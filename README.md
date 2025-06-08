@@ -134,7 +134,6 @@ The possibilities are endless! Here are some powerful examples of what you can b
 
 - Advanced window selector
 - Written in Rust using Worf API
-- Featuring AmberNight theme with centered content
 
 ### 🔐 worf-warden
 *Beautiful Bitwarden frontend*
@@ -143,7 +142,7 @@ The possibilities are endless! Here are some powerful examples of what you can b
 
 - Bitwarden integration via [rbw](https://github.com/doy/rbw)
 - Additional dependencies required ([see readme](examples/worf-warden/Readme.md))
-- Showcasing GlacierPrism theme with blurred background
+- Showcasing GlacierPrism theme
 
 ### worf-rtw
 *Time tracking made simple*

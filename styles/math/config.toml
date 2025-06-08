@@ -6,3 +6,4 @@ key_detection_type="Code"
 blurred_background=false
 location=["Top"]
 lines=3
+matching="None"
