@@ -3,7 +3,7 @@
   --md-on-primary: rgba(255, 255, 255, 1);
   --md-surface: rgba(18, 18, 18, 1);
   --md-surface-variant: rgba(26, 26, 26, 0.5);
-  --md-outline: rgba(255, 255, 255, 0.1);
+  --md-outline: rgba(39, 37, 164, 1);
   --md-hover: rgba(56, 56, 56, 0.7);
   --md-entry-bg: rgba(38, 38, 38, 0.3);
   --md-label-bg: rgba(42, 42, 42, 0.5);
@@ -30,7 +30,7 @@ body {
 
 #window {
   all: unset;
-  background-color:  rgba(0, 0, 0, 0.4);
+  background-color:  rgba(0, 0, 0, 0.7);
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   padding: 1rem;
