@@ -37,12 +37,7 @@ struct AutoItemProvider {
 impl AutoItemProvider {
     fn new(config: &Config) -> Self {
         AutoItemProvider {
-            drun: DRunProvider::new(
-                AutoRunType::DRun,
-                config.no_actions(),
-                config.sort_order(),
-                config.term(),
-            ),
+            drun: DRunProvider::new(AutoRunType::DRun, config),
             file: FileItemProvider::new(AutoRunType::File, config.sort_order()),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh, &config.sort_order()),
@@ -157,7 +152,7 @@ pub fn show(config: &Config) -> Result<(), Error> {
                         provider.math.elements.push(selection_result);
                     }
                     AutoRunType::DRun => {
-                        update_drun_cache_and_run(cache_path, &mut cache, selection_result)?;
+                        update_drun_cache_and_run(&cache_path, &mut cache, selection_result)?;
                         break;
                     }
                     AutoRunType::File => {

@@ -1,6 +1,7 @@
+use crate::Error;
+use crate::config::Config;
+use crate::desktop::{cache_file_path, create_file_if_not_exists, load_cache_file};
 use std::{collections::HashMap, path::PathBuf};
-
-use crate::desktop::{create_file_if_not_exists, load_cache_file};
 
 pub mod auto;
 pub mod dmenu;
@@ -12,15 +13,17 @@ pub mod run;
 pub mod search;
 pub mod ssh;
 
-pub(crate) fn load_cache(cache_path: Option<PathBuf>) -> (Option<PathBuf>, HashMap<String, i64>) {
+pub(crate) fn load_cache(
+    name: &str,
+    config: &Config,
+) -> Result<(PathBuf, HashMap<String, i64>), Error> {
+    let cache_path = cache_file_path(config, name)?;
     let cache = {
-        if let Some(ref cache_path) = cache_path {
-            if let Err(e) = create_file_if_not_exists(cache_path) {
-                log::warn!("No drun cache file and cannot create: {e:?}");
-            }
+        if let Err(e) = create_file_if_not_exists(&cache_path) {
+            log::warn!("No drun cache file and cannot create: {e:?}");
         }
 
-        load_cache_file(cache_path.as_ref()).unwrap_or_default()
+        load_cache_file(&cache_path).unwrap_or_default()
     };
-    (cache_path, cache)
+    Ok((cache_path, cache))
 }
