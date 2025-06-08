@@ -1,0 +1,9 @@
+image_size=64
+columns=6
+orientation="Vertical"
+row_box_orientation="Vertical"
+content_halign="Center"
+height="70%"
+width="60%"
+valign="Start"
+emoji_hide_label=true
