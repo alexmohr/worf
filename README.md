@@ -192,6 +192,41 @@ The possibilities are endless! Here are some powerful examples of what you can b
 
 Found a compatibility issue? We welcome feedback and contributions! While 100% wofi compatibility isn't guaranteed, we're happy to help you transition to Worf.
 
+
+## Styles
+
+The background image used for all screenshots can be found in `images/background.jpg` and is taken in Arthurs Pass New Zealand.
+
+### Dmenu
+![Dmenu](styles/dmenu/example.png)
+
+### Launcher
+![launcher](styles/launcher/example.png)
+
+### Compact
+![compact](styles/compact/example.png)
+
+### IndigoEdge
+![IndigoEdge](styles/IndigoEdge/example.png)
+
+### Emoji
+![emoji](styles/emoji/example.png)
+
+### GlacierPrism
+![GlacierPrism](styles/GlacierPrism/example.png)
+
+### Math
+![math](styles/math/example.png)
+
+### AmberNight
+![AmberNight](styles/AmberNight/example.png)
+
+### Relaxed
+![relaxed](styles/relaxed/example.png)
+                                          
+### DarkBlue
+![darkblue](styles/DarkBlue/example.png)
+
 ---
 
 ## 📄 License
