@@ -46,7 +46,7 @@ impl<T: Clone> ItemProvider<T> for SearchProvider<T> {
     }
 }
 
-/// Shows the emoji mode
+/// Shows the web search mode
 /// # Errors
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
