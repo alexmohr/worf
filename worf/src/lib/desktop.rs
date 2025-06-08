@@ -219,6 +219,22 @@ fn start_forked_cmd(mut cmd: Command) -> Result<(), Error> {
     Ok(())
 }
 
+/// Get the path of a given cache file
+/// # Errors
+/// Will return Error if the cache file cannot be created or not found.
+pub fn cache_file_path(config: &Config, name: &str) -> Result<PathBuf, Error> {
+    let path = if let Some(cfg) = config.cache_file() {
+        PathBuf::from(cfg)
+    } else {
+        dirs::cache_dir()
+            .map(|x| x.join(name))
+            .ok_or_else(|| Error::UpdateCacheError("cannot read cache file".to_owned()))?
+    };
+
+    create_file_if_not_exists(&path)?;
+    Ok(path)
+}
+
 /// Parse a simple toml cache file from the format below
 /// "Key"=score
 /// i.e.
@@ -227,13 +243,9 @@ fn start_forked_cmd(mut cmd: Command) -> Result<(), Error> {
 /// "Files"=50
 /// # Errors
 /// Returns an Error when the given file is not found or did not parse.
-pub fn load_cache_file(cache_path: Option<&PathBuf>) -> Result<HashMap<String, i64>, Error> {
-    let Some(path) = cache_path else {
-        return Err(Error::MissingFile);
-    };
-
+pub fn load_cache_file(cache_path: &PathBuf) -> Result<HashMap<String, i64>, Error> {
     let toml_content =
-        fs::read_to_string(path).map_err(|e| Error::UpdateCacheError(format!("{e}")))?;
+        fs::read_to_string(cache_path).map_err(|e| Error::UpdateCacheError(format!("{e}")))?;
     let parsed: toml::Value = toml_content
         .parse()
         .map_err(|_| Error::ParsingError("failed to parse cache".to_owned()))?;

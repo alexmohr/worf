@@ -5,6 +5,7 @@ use hyprland::{
 };
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::{env, fs, sync::Arc, thread};
 use sysinfo::{Pid, System};
 use worf::{
@@ -115,21 +116,12 @@ impl ItemProvider<Window> for WindowProvider {
     }
 }
 
-fn load_icon_cache(cache_path: &String) -> Result<HashMap<String, String>, Error> {
+fn load_icon_cache(cache_path: &PathBuf) -> Result<HashMap<String, String>, Error> {
     let toml_content =
         fs::read_to_string(cache_path).map_err(|e| Error::UpdateCacheError(format!("{e}")))?;
     let cache: HashMap<String, String> = toml::from_str(&toml_content)
         .map_err(|_| Error::ParsingError("failed to parse cache".to_owned()))?;
     Ok(cache)
-}
-
-fn cache_path() -> Result<String, Error> {
-    let path = dirs::cache_dir()
-        .map(|x| x.join("worf-hyprswitch"))
-        .ok_or_else(|| Error::UpdateCacheError("cannot read cache file".to_owned()))?;
-
-    desktop::create_file_if_not_exists(&path)?;
-    Ok(path.to_string_lossy().into_owned())
 }
 
 fn main() -> Result<(), String> {
@@ -141,7 +133,8 @@ fn main() -> Result<(), String> {
     let args = config::parse_args();
     let config = config::load_config(Some(&args)).unwrap_or(args);
 
-    let cache_path = cache_path().map_err(|err| err.to_string())?;
+    let cache_path =
+        desktop::cache_file_path(&config, "worf-hyprswitch").map_err(|err| err.to_string())?;
     let mut cache = load_icon_cache(&cache_path).map_err(|e| e.to_string())?;
 
     let provider = WindowProvider::new(&config, &cache)?;

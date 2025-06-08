@@ -245,7 +245,7 @@ pub struct Config {
     allow_markup: Option<bool>,
 
     #[clap(short = 'k', long = "cache-file")]
-    cache_file: Option<String>, // todo support this
+    cache_file: Option<String>,
 
     /// Defines which terminal to use. defaults to the first one found:
     /// * kitty
@@ -291,6 +291,7 @@ pub struct Config {
     )]
     location: Option<Vec<Anchor>>,
 
+    /// If set to `true` sub actions will be disabled
     #[clap(short = 'a', long = "no-actions")]
     no_actions: Option<bool>,
 
@@ -619,6 +620,11 @@ impl Config {
     #[must_use]
     pub fn allow_markup(&self) -> bool {
         self.allow_markup.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn cache_file(&self) -> Option<String> {
+        self.cache_file.clone()
     }
 
     #[must_use]

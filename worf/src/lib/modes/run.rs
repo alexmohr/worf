@@ -30,20 +30,20 @@ impl ItemProvider<i32> for RunProvider {
 #[derive(Clone)]
 struct RunProvider {
     items: Option<Vec<MenuItem<i32>>>,
-    cache_path: Option<PathBuf>,
+    cache_path: PathBuf,
     cache: HashMap<String, i64>,
     sort_order: SortOrder,
 }
 
 impl RunProvider {
-    fn new(sort_order: SortOrder) -> Self {
-        let (cache_path, d_run_cache) = load_run_cache();
-        RunProvider {
+    fn new(config: &Config) -> Result<Self, Error> {
+        let (cache_path, d_run_cache) = load_cache("worf-run", config)?;
+        Ok(RunProvider {
             items: None,
             cache_path,
             cache: d_run_cache,
-            sort_order,
-        }
+            sort_order: config.sort_order(),
+        })
     }
 
     #[allow(clippy::cast_possible_truncation)]
@@ -98,21 +98,14 @@ impl RunProvider {
     }
 }
 
-fn load_run_cache() -> (Option<PathBuf>, HashMap<String, i64>) {
-    let cache_path = dirs::cache_dir().map(|x| x.join("worf-run"));
-    load_cache(cache_path)
-}
-
 fn update_run_cache_and_run<T: Clone>(
-    cache_path: Option<PathBuf>,
+    cache_path: &PathBuf,
     cache: &mut HashMap<String, i64>,
     selection_result: MenuItem<T>,
 ) -> Result<(), Error> {
-    if let Some(cache_path) = cache_path {
-        *cache.entry(selection_result.label).or_insert(0) += 1;
-        if let Err(e) = save_cache_file(&cache_path, cache) {
-            log::warn!("cannot save run cache {e:?}");
-        }
+    *cache.entry(selection_result.label).or_insert(0) += 1;
+    if let Err(e) = save_cache_file(cache_path, cache) {
+        log::warn!("cannot save run cache {e:?}");
     }
 
     if let Some(action) = selection_result.action {
@@ -132,13 +125,12 @@ fn update_run_cache_and_run<T: Clone>(
 ///
 /// Will return `Err` if it was not able to spawn the process
 pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = RunProvider::new(config.sort_order());
+    let provider = RunProvider::new(config)?;
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
-
     let selection_result = gui::show(config.clone(), provider, false, None, None);
     match selection_result {
-        Ok(s) => update_run_cache_and_run(cache_path, &mut cache, s.menu)?,
+        Ok(s) => update_run_cache_and_run(&cache_path, &mut cache, s.menu)?,
         Err(_) => {
             log::error!("No item selected");
         }
