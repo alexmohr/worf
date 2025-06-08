@@ -123,9 +123,9 @@ The possibilities are endless! Here are some powerful examples of what you can b
 ![Hyprland Exit](examples/images/hyprland-exit.png)
 
 - Full screen exit menu
-- Shell script using dmenu mode
 - Desktop hiding with background display
 - Uses launcher theme styling
+- Shell script using dmenu mode
 
 ### worf-hyprswitch
 *Elegant window switcher*
@@ -143,6 +143,7 @@ The possibilities are endless! Here are some powerful examples of what you can b
 - Bitwarden integration via [rbw](https://github.com/doy/rbw)
 - Additional dependencies required ([see readme](examples/worf-warden/Readme.md))
 - Showcasing GlacierPrism theme
+- Written in Rust using Worf API
 
 ### worf-rtw
 *Time tracking made simple*
@@ -151,6 +152,7 @@ The possibilities are endless! Here are some powerful examples of what you can b
 
 - Time tracking with [rtw](https://github.com/PicoJr/rtw)
 - Using AmberNight theme with custom positioning
+- Bash script using dmenu
 
 ---
 
