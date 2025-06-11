@@ -14,6 +14,7 @@ result=`echo -e "$option_reboot\n$option_suspend\n$option_shutdown\n$option_logo
   --orientation horizontal \
   --hide-search true \
   --content-vcenter true \
+  --blurred-background-fullscreen true \
   --blurred-background true `
 
 case "$result" in
@@ -45,5 +46,3 @@ case "$result" in
   *)
     exit 1
 esac
-
-
