@@ -50,35 +50,38 @@ impl WindowProvider {
                     .map(|x| x.name().to_string_lossy().into_owned());
 
                 process_name.map(|process_name| {
-                    let icon = cache.get(&process_name).cloned().or_else(|| {
-                        freedesktop_icons::lookup(&process_name)
-                            .with_size(cfg.image_size())
-                            .with_scale(1)
-                            .find()
-                            .map(|icon| icon.to_string_lossy().to_string())
-                            .or_else(|| {
-                                desktop_files
-                                    .iter()
-                                    .find_map(|d| match &d.entry.entry_type {
-                                        EntryType::Application(app) => {
-                                            if app.startup_wm_class.as_ref().is_some_and(
-                                                |wm_class| {
-                                                    *wm_class.to_lowercase()
-                                                        == c.initial_class.to_lowercase()
-                                                },
-                                            ) {
-                                                d.entry
-                                                    .icon
-                                                    .as_ref()
-                                                    .map(|icon| icon.content.clone())
-                                            } else {
-                                                None
+                    let icon =
+                        cache.get(&process_name).cloned().or_else(|| {
+                            freedesktop_icons::lookup(&process_name)
+                                .with_size(cfg.image_size())
+                                .with_scale(1)
+                                .find()
+                                .map(|icon| icon.to_string_lossy().to_string())
+                                .or_else(|| {
+                                    desktop_files
+                                        .iter()
+                                        .find_map(|d| match &d.entry.entry_type {
+                                            EntryType::Application(app) => {
+                                                if app.startup_wm_class.as_ref().is_some_and(
+                                                    |wm_class| {
+                                                        *wm_class.to_lowercase()
+                                                            == c.initial_class.to_lowercase()
+                                                    },
+                                                ) || app.exec.as_ref().is_some_and(|app| {
+                                                    app.starts_with(&process_name)
+                                                }) {
+                                                    d.entry
+                                                        .icon
+                                                        .as_ref()
+                                                        .map(|icon| icon.content.clone())
+                                                } else {
+                                                    None
+                                                }
                                             }
-                                        }
-                                        _ => None,
-                                    })
-                            })
-                    });
+                                            _ => None,
+                                        })
+                                })
+                        });
 
                     MenuItem::new(
                         format!(
@@ -99,7 +102,6 @@ impl WindowProvider {
                 })
             })
             .collect();
-
         Ok(Self {
             windows: menu_items,
         })
@@ -139,6 +141,7 @@ fn main() -> Result<(), String> {
 
     let provider = WindowProvider::new(&config, &cache)?;
     let windows = provider.windows.clone();
+    let result = gui::show(config, provider, false, None, None).map_err(|e| e.to_string())?;
     let update_cache = thread::spawn(move || {
         windows.iter().for_each(|item| {
             if let Some(window) = &item.data {
@@ -155,7 +158,6 @@ fn main() -> Result<(), String> {
             Err(e) => Err(Error::UpdateCacheError(e.to_string())),
         }
     });
-    let result = gui::show(config, provider, false, None, None).map_err(|e| e.to_string())?;
 
     if let Some(window) = result.menu.data {
         hyprland::dispatch::Dispatch::call(DispatchType::FocusWindow(WindowIdentifier::Address(
