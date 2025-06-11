@@ -31,15 +31,6 @@ case "$result" in
     ;;
 
   "$option_shutdown")
-    TOKEN="$(cat ~/.homeassistant_token)"
-
-    curl -X POST -H "Authorization: Bearer $TOKEN" \
-      -d '{ "key": "value" }' \
-      https://assistant.home.mohr.io/api/webhook/on-computer-shutdown-rMG8tbTS3Gg8NlrFiJ-MNYYh
-    rtw stop
-
-    #cd $HOME/time/log_work
-    #$HOME/time/log_work
     shutdown now
     ;;
 
