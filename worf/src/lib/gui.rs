@@ -760,7 +760,7 @@ fn create_background(config: &Config) -> Option<ApplicationWindow> {
         let background = ApplicationWindow::builder()
             .decorated(false)
             .resizable(false)
-            .fullscreened(false)
+            .fullscreened(config.blurred_background_fullscreen())
             // arbitrary huge window so it fills the whole screen
             .default_width(100_000)
             .default_height(100_000)

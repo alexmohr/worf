@@ -430,9 +430,16 @@ pub struct Config {
     search_query: Option<String>,
 
     /// Blur the background of the screen
-    /// can be style via `background`
+    /// can be styled via `background`
     #[clap(long = "blurred-background")]
     blurred_background: Option<bool>,
+
+    /// Set the background to full screen.
+    /// Might look better for some things, but
+    /// there can only be one fullscreened app at the time.
+    /// Defaults to false.
+    #[clap(long = "blurred-background-fullscreen")]
+    blurred_background_fullscreen: Option<bool>,
 }
 
 impl Config {
@@ -699,6 +706,11 @@ impl Config {
     #[must_use]
     pub fn blurred_background(&self) -> bool {
         self.blurred_background.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn blurred_background_fullscreen(&self) -> bool {
+        self.blurred_background_fullscreen.unwrap_or(false)
     }
 }
 
