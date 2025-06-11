@@ -1,6 +1,5 @@
 use regex::Regex;
 
-use crate::modes::search::SearchProvider;
 use crate::{
     Error,
     config::Config,
@@ -10,6 +9,7 @@ use crate::{
         drun::{DRunProvider, update_drun_cache_and_run},
         file::FileItemProvider,
         math::MathProvider,
+        search::SearchProvider,
         ssh,
         ssh::SshProvider,
     },
