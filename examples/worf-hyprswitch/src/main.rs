@@ -1,12 +1,11 @@
+use std::{collections::HashMap, env, fs, path::PathBuf, sync::Arc, thread};
+
 use hyprland::{
     dispatch::{DispatchType, WindowIdentifier},
     prelude::HyprData,
     shared::Address,
 };
 use rayon::prelude::*;
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::{env, fs, sync::Arc, thread};
 use sysinfo::{Pid, System};
 use worf::{
     Error,

@@ -1,7 +1,10 @@
-use crate::Error;
-use crate::config::Config;
-use crate::desktop::{cache_file_path, create_file_if_not_exists, load_cache_file};
 use std::{collections::HashMap, path::PathBuf};
+
+use crate::{
+    Error,
+    config::Config,
+    desktop::{cache_file_path, create_file_if_not_exists, load_cache_file},
+};
 
 pub mod auto;
 pub mod dmenu;
