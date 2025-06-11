@@ -1,10 +1,8 @@
 use std::env;
 
-use anyhow::anyhow;
-
 use worf::{Error, config, config::Mode, desktop::fork_if_configured, modes};
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     env_logger::Builder::new()
         .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
         .format_timestamp_micros()
@@ -23,7 +21,7 @@ fn main() -> anyhow::Result<()> {
 
     if config.version() {
         println!("worf version {}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
+        return;
     }
 
     fork_if_configured(&config); // may exit the program
@@ -49,13 +47,11 @@ fn main() -> anyhow::Result<()> {
                 log::info!("no selection made");
             } else {
                 log::error!("Error occurred {err:?}");
-                return Err(anyhow!("Error occurred {err:?}"));
+                std::process::exit(1);
             }
         }
-
-        Ok(())
     } else {
         log::error!("No mode provided");
-        Ok(())
+        std::process::exit(1);
     }
 }

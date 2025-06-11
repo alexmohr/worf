@@ -836,9 +836,10 @@ pub fn expand_path(input: &str) -> PathBuf {
 /// # Errors
 ///
 /// Will return Err when it fails to merge the config with the arguments.
-pub fn merge_config_with_args(config: &mut Config, args: &Config) -> anyhow::Result<Config> {
-    let args_json = serde_json::to_value(args)?;
-    let mut config_json = serde_json::to_value(config)?;
+pub fn merge_config_with_args(config: &mut Config, args: &Config) -> Result<Config, Error> {
+    let args_json = serde_json::to_value(args).map_err(|e| Error::ParsingError(e.to_string()))?;
+    let mut config_json =
+        serde_json::to_value(config).map_err(|e| Error::ParsingError(e.to_string()))?;
 
     merge_json(&mut config_json, &args_json);
     Ok(serde_json::from_value(config_json).unwrap_or_default())
