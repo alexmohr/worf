@@ -176,6 +176,8 @@ The possibilities are endless! Here are some powerful examples of what you can b
 - Removed x,y offset and global coords as GTK4 does not support this anymore, similar results can be achieved with `--location`
 - Removed copy_exec as we are not executing a binary to copy data into the clipboard
 - `exec-search` not supported
+- All custom keys that change the default bindings for navigation like up, down, page, etc.
+- key_custom_(n) is not supported, such specialized behaviour can be achieved via the API though.
 
 #### Removed Command Line Arguments
 - `mode` → Use `show` instead

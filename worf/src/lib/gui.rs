@@ -30,9 +30,10 @@ use regex::Regex;
 use crate::{
     Error,
     config::{
-        self, Anchor, Config, CustomKeyHintLocation, KeyDetectionType, MatchMethod, SortOrder,
+        self, Anchor, Config, CustomKeyHintLocation, Key, KeyDetectionType, MatchMethod, SortOrder,
         WrapMode,
     },
+    desktop,
     desktop::known_image_extension_regex_pattern,
 };
 
@@ -122,225 +123,6 @@ pub struct MenuItem<T: Clone> {
     search_sort_score: f64,
     /// True if the item is visible
     visible: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Key {
-    None,
-
-    // Letters
-    A,
-    B,
-    C,
-    D,
-    E,
-    F,
-    G,
-    H,
-    I,
-    J,
-    K,
-    L,
-    M,
-    N,
-    O,
-    P,
-    Q,
-    R,
-    S,
-    T,
-    U,
-    V,
-    W,
-    X,
-    Y,
-    Z,
-
-    // Numbers
-    Num0,
-    Num1,
-    Num2,
-    Num3,
-    Num4,
-    Num5,
-    Num6,
-    Num7,
-    Num8,
-    Num9,
-
-    // Function Keys
-    F1,
-    F2,
-    F3,
-    F4,
-    F5,
-    F6,
-    F7,
-    F8,
-    F9,
-    F10,
-    F11,
-    F12,
-
-    // Navigation / Editing
-    Escape,
-    Enter,
-    Space,
-    Tab,
-    Backspace,
-    Insert,
-    Delete,
-    Home,
-    End,
-    PageUp,
-    PageDown,
-    Left,
-    Right,
-    Up,
-    Down,
-
-    // Special characters
-    Exclamation,  // !
-    At,           // @
-    Hash,         // #
-    Dollar,       // $
-    Percent,      // %
-    Caret,        // ^
-    Ampersand,    // &
-    Asterisk,     // *
-    LeftParen,    // (
-    RightParen,   // )
-    Minus,        // -
-    Underscore,   // _
-    Equal,        // =
-    Plus,         // +
-    LeftBracket,  // [
-    RightBracket, // ]
-    LeftBrace,    // {
-    RightBrace,   // }
-    Backslash,    // \
-    Pipe,         // |
-    Semicolon,    // ;
-    Colon,        // :
-    Apostrophe,   // '
-    Quote,        // "
-    Comma,        // ,
-    Period,       // .
-    Slash,        // /
-    Question,     // ?
-    Grave,        // `
-    Tilde,        // ~
-}
-
-impl From<String> for Key {
-    fn from(value: String) -> Self {
-        match value.as_str() {
-            // Letters
-            "A" | "a" => Key::A,
-            "B" | "b" => Key::B,
-            "C" | "c" => Key::C,
-            "D" | "d" => Key::D,
-            "E" | "e" => Key::E,
-            "F" | "f" => Key::F,
-            "G" | "g" => Key::G,
-            "H" | "h" => Key::H,
-            "I" | "i" => Key::I,
-            "J" | "j" => Key::J,
-            "K" | "k" => Key::K,
-            "L" | "l" => Key::L,
-            "M" | "m" => Key::M,
-            "N" | "n" => Key::N,
-            "O" | "o" => Key::O,
-            "P" | "p" => Key::P,
-            "Q" | "q" => Key::Q,
-            "R" | "r" => Key::R,
-            "S" | "s" => Key::S,
-            "T" | "t" => Key::T,
-            "U" | "u" => Key::U,
-            "V" | "v" => Key::V,
-            "W" | "w" => Key::W,
-            "X" | "x" => Key::X,
-            "Y" | "y" => Key::Y,
-            "Z" | "z" => Key::Z,
-
-            // Numbers
-            "0" => Key::Num0,
-            "1" => Key::Num1,
-            "2" => Key::Num2,
-            "3" => Key::Num3,
-            "4" => Key::Num4,
-            "5" => Key::Num5,
-            "6" => Key::Num6,
-            "7" => Key::Num7,
-            "8" => Key::Num8,
-            "9" => Key::Num9,
-
-            // Function keys
-            "F1" => Key::F1,
-            "F2" => Key::F2,
-            "F3" => Key::F3,
-            "F4" => Key::F4,
-            "F5" => Key::F5,
-            "F6" => Key::F6,
-            "F7" => Key::F7,
-            "F8" => Key::F8,
-            "F9" => Key::F9,
-            "F10" => Key::F10,
-            "F11" => Key::F11,
-            "F12" => Key::F12,
-
-            // Navigation / Editing
-            "Escape" => Key::Escape,
-            "Enter" => Key::Enter,
-            "Space" => Key::Space,
-            "Tab" => Key::Tab,
-            "Backspace" => Key::Backspace,
-            "Insert" => Key::Insert,
-            "Delete" => Key::Delete,
-            "Home" => Key::Home,
-            "End" => Key::End,
-            "PageUp" => Key::PageUp,
-            "PageDown" => Key::PageDown,
-            "Left" => Key::Left,
-            "Right" => Key::Right,
-            "Up" => Key::Up,
-            "Down" => Key::Down,
-
-            // Special characters
-            "!" => Key::Exclamation,
-            "@" => Key::At,
-            "#" => Key::Hash,
-            "$" => Key::Dollar,
-            "%" => Key::Percent,
-            "^" => Key::Caret,
-            "&" => Key::Ampersand,
-            "*" => Key::Asterisk,
-            "(" => Key::LeftParen,
-            ")" => Key::RightParen,
-            "-" => Key::Minus,
-            "_" => Key::Underscore,
-            "=" => Key::Equal,
-            "+" => Key::Plus,
-            "[" => Key::LeftBracket,
-            "]" => Key::RightBracket,
-            "{" => Key::LeftBrace,
-            "}" => Key::RightBrace,
-            "\\" => Key::Backslash,
-            "|" => Key::Pipe,
-            ";" => Key::Semicolon,
-            ":" => Key::Colon,
-            "'" => Key::Apostrophe,
-            "\"" => Key::Quote,
-            "," => Key::Comma,
-            "." => Key::Period,
-            "/" => Key::Slash,
-            "?" => Key::Question,
-            "`" => Key::Grave,
-            "~" => Key::Tilde,
-
-            _ => Key::None,
-        }
-    }
 }
 
 impl From<gtk4::gdk::Key> for Key {
@@ -933,7 +715,7 @@ fn build_search_entry<T: Clone + Send>(
         ui_elements.search.set_visible(false);
     }
     if let Some(search) = config.search() {
-        set_search_text(&search, ui_elements, meta);
+        set_search_text(ui_elements, meta, &search);
     }
 }
 
@@ -1008,17 +790,17 @@ fn build_custom_key_view(custom_keys: &CustomKeys, outer_box: &gtk4::Box, inner_
     outer_box.append(inner_box);
 }
 
-fn set_search_text<T: Clone + Send>(text: &str, ui: &UiElements<T>, meta: &MetaData<T>) {
+fn set_search_text<T: Clone + Send>(ui: &UiElements<T>, meta: &MetaData<T>, query: &str) {
     let mut lock = ui.search_text.lock().unwrap();
-    text.clone_into(&mut lock);
+    query.clone_into(&mut lock);
     if let Some(pw) = meta.config.password() {
         let mut ui_text = String::new();
-        for _ in 0..text.len() {
+        for _ in 0..query.len() {
             ui_text += &pw;
         }
         ui.search.set_text(&ui_text);
     } else {
-        ui.search.set_text(text);
+        ui.search.set_text(query);
     }
 }
 
@@ -1112,14 +894,13 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
     ui.window.add_controller(key_controller);
 }
 
-fn is_key_match_from_str_opt(
-    str_key_opt: Option<String>,
+fn is_key_match(
+    key_opt: Option<Key>,
     key_detection_type: &KeyDetectionType,
     key_code: u32,
     gdk_key: gdk4::Key,
 ) -> bool {
-    if let Some(str_key) = str_key_opt {
-        let key: Key = str_key.into();
+    if let Some(key) = key_opt {
         if key_detection_type == &KeyDetectionType::Code {
             key == key_code.into()
         } else {
@@ -1130,7 +911,6 @@ fn is_key_match_from_str_opt(
     }
 }
 
-#[allow(clippy::too_many_lines)] // todo fix this.
 fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
@@ -1139,33 +919,6 @@ fn handle_key_press<T: Clone + 'static + Send>(
     modifier_type: gdk4::ModifierType,
     custom_keys: Option<&CustomKeys>,
 ) -> Propagation {
-    let update_view = |query: &String| {
-        let mut lock = ui.menu_rows.write().unwrap();
-        set_menu_visibility_for_search(
-            query,
-            &mut lock,
-            &meta.config,
-            meta.search_ignored_words.as_ref(),
-        );
-
-        select_first_visible_child(&*lock, &ui.main_box);
-        drop(lock);
-        if meta.config.dynamic_lines() {
-            if let Some(geometry) = get_monitor_geometry(ui) {
-                let height = calculate_dynamic_lines_window_height(&meta.config, ui, geometry);
-                ui.window.set_height_request(height);
-            }
-        }
-    };
-
-    let update_view_from_provider = |query: &String| {
-        let (changed, filtered_list) = meta.item_provider.lock().unwrap().get_elements(Some(query));
-        if changed {
-            build_ui_from_menu_items(ui, meta, filtered_list);
-        }
-        update_view(query);
-    };
-
     log::debug!("received key. code: {key_code}, key: {keyboard_key:?}");
 
     let detection_type = meta.config.key_detection_type();
@@ -1196,89 +949,202 @@ fn handle_key_press<T: Clone + 'static + Send>(
         }
     }
 
-    if is_key_match_from_str_opt(
+    // hide search
+    let propagate = if is_key_match(
         meta.config.key_hide_search(),
         &detection_type,
         key_code,
         keyboard_key,
     ) {
-        ui.search.set_visible(!ui.search.is_visible());
+        handle_key_hide_search(ui)
+    // submit
+    } else if is_key_match(
+        Some(meta.config.key_submit()),
+        &detection_type,
+        key_code,
+        keyboard_key,
+    ) {
+        handle_key_submit(ui, meta)
+    }
+    // exit
+    else if is_key_match(
+        Some(meta.config.key_exit()),
+        &detection_type,
+        key_code,
+        keyboard_key,
+    ) {
+        handle_key_exit(ui, meta)
+    // copy
+    } else if is_key_match(
+        meta.config.key_copy(),
+        &detection_type,
+        key_code,
+        keyboard_key,
+    ) {
+        handle_key_copy(ui, meta)
+    // expand
+    } else if is_key_match(
+        Some(meta.config.key_expand()),
+        &detection_type,
+        key_code,
+        keyboard_key,
+    ) {
+        handle_key_expand(ui, meta)
+    } else {
+        Propagation::Proceed
+    };
+
+    if propagate == Propagation::Stop {
+        return propagate;
     }
 
     match keyboard_key {
-        gdk4::Key::Escape => {
-            if let Err(e) = meta.selected_sender.send(Err(Error::NoSelection)) {
-                log::error!("failed to send message {e}");
-            }
-            close_gui(&ui.app);
-        }
-        gdk4::Key::Return => {
-            let search_lock = ui.search_text.lock().unwrap();
-            if let Err(e) = handle_selected_item(
-                ui,
-                Rc::<MetaData<T>>::clone(meta),
-                Some(&search_lock),
-                None,
-                meta.new_on_empty,
-                None,
-            ) {
-                log::error!("{e}");
-            }
-        }
         gdk4::Key::BackSpace => {
             let mut query = ui.search_text.lock().unwrap().to_string();
             if !query.is_empty() {
                 query.pop();
 
-                set_search_text(&query, ui, meta);
-                update_view_from_provider(&query);
+                set_search_text(ui, meta, &query);
+                update_view_from_provider(ui, meta, &query);
             }
-        }
-        gdk4::Key::Tab => {
-            if let Some(fb) = ui.main_box.selected_children().first() {
-                if let Some(child) = fb.child() {
-                    let expander = child.downcast::<Expander>().ok();
-                    if let Some(expander) = expander {
-                        expander.set_expanded(true);
-                    } else {
-                        let opt_changed = {
-                            let lock = ui.menu_rows.read().unwrap();
-                            let menu_item = lock.get(fb);
-                            menu_item.map(|menu_item| {
-                                (
-                                    meta.item_provider
-                                        .lock()
-                                        .unwrap()
-                                        .get_sub_elements(menu_item),
-                                    menu_item.label.clone(),
-                                )
-                            })
-                        };
-
-                        if let Some(changed) = opt_changed {
-                            let items = changed.0.1.unwrap_or_default();
-                            if changed.0.0 {
-                                build_ui_from_menu_items(ui, meta, items);
-                            }
-
-                            let query = changed.1;
-                            set_search_text(&query, ui, meta);
-                            update_view(&query);
-                        }
-                    }
-                }
-            }
-            return Propagation::Stop;
         }
         _ => {
             if let Some(c) = keyboard_key.to_unicode() {
                 let query = format!("{}{c}", ui.search_text.lock().unwrap());
-                set_search_text(&query, ui, meta);
-                update_view_from_provider(&query);
+                set_search_text(ui, meta, &query);
+                update_view_from_provider(ui, meta, &query);
             }
         }
     }
     Propagation::Proceed
+}
+
+fn update_view_from_provider<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, query: &str)
+where
+    T: Clone + Send + 'static,
+{
+    let (changed, filtered_list) = meta.item_provider.lock().unwrap().get_elements(Some(query));
+    if changed {
+        build_ui_from_menu_items(ui, meta, filtered_list);
+    }
+    update_view(ui, meta, query);
+}
+
+fn update_view<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, query: &str)
+where
+    T: Clone + Send + 'static,
+{
+    let mut lock = ui.menu_rows.write().unwrap();
+    set_menu_visibility_for_search(
+        query,
+        &mut lock,
+        &meta.config,
+        meta.search_ignored_words.as_ref(),
+    );
+
+    select_first_visible_child(&*lock, &ui.main_box);
+    drop(lock);
+    if meta.config.dynamic_lines() {
+        if let Some(geometry) = get_monitor_geometry(ui) {
+            let height = calculate_dynamic_lines_window_height(&meta.config, ui, geometry);
+            ui.window.set_height_request(height);
+        }
+    }
+}
+
+fn handle_key_exit<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>) -> Propagation
+where
+    T: Clone + Send + 'static,
+{
+    if let Err(e) = meta.selected_sender.send(Err(Error::NoSelection)) {
+        log::error!("failed to send message {e}");
+    }
+    close_gui(&ui.app);
+    Propagation::Stop
+}
+
+fn handle_key_expand<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>) -> Propagation
+where
+    T: Clone + Send + 'static,
+{
+    if let Some(fb) = ui.main_box.selected_children().first() {
+        if let Some(child) = fb.child() {
+            let expander = child.downcast::<Expander>().ok();
+            if let Some(expander) = expander {
+                expander.set_expanded(true);
+            } else {
+                let opt_changed = {
+                    let lock = ui.menu_rows.read().unwrap();
+                    let menu_item = lock.get(fb);
+                    menu_item.map(|menu_item| {
+                        (
+                            meta.item_provider
+                                .lock()
+                                .unwrap()
+                                .get_sub_elements(menu_item),
+                            menu_item.label.clone(),
+                        )
+                    })
+                };
+
+                if let Some(changed) = opt_changed {
+                    let items = changed.0.1.unwrap_or_default();
+                    if changed.0.0 {
+                        build_ui_from_menu_items(ui, meta, items);
+                    }
+
+                    let query = changed.1;
+                    set_search_text(ui, meta, &query);
+                    update_view(ui, meta, &query);
+                }
+            }
+        }
+    }
+    Propagation::Stop
+}
+
+fn handle_key_copy<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>) -> Propagation
+where
+    T: Clone + Send + 'static,
+{
+    if let Some(item) = get_selected_item(ui) {
+        if let Some(action) = item.action {
+            if let Err(e) = desktop::copy_to_clipboard(action, None) {
+                log::error!("failed to copy to clipboard: {e}");
+            }
+        }
+    }
+    if let Err(e) = meta.selected_sender.send(Err(Error::NoSelection)) {
+        log::error!("failed to send message {e}");
+    }
+    close_gui(&ui.app);
+    Propagation::Stop
+}
+
+fn handle_key_submit<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>) -> Propagation
+where
+    T: Clone + Send + 'static,
+{
+    let search_lock = ui.search_text.lock().unwrap();
+    if let Err(e) = handle_selected_item(
+        ui,
+        Rc::<MetaData<T>>::clone(meta),
+        Some(&search_lock),
+        None,
+        meta.new_on_empty,
+        None,
+    ) {
+        log::error!("{e}");
+    }
+    Propagation::Stop
+}
+
+fn handle_key_hide_search<T>(ui: &Rc<UiElements<T>>) -> Propagation
+where
+    T: Clone + Send + 'static,
+{
+    ui.search.set_visible(!ui.search.is_visible());
+    Propagation::Stop
 }
 
 fn sort_flow_box_childs<T: Clone>(
@@ -1446,6 +1312,22 @@ fn visible_row_count<T: Clone + 'static>(ui: &UiElements<T>) -> i32 {
     .unwrap_or(i32::MAX)
 }
 
+fn get_selected_item<T>(ui: &UiElements<T>) -> Option<MenuItem<T>>
+where
+    T: Clone + Send + 'static,
+{
+    if let Some(s) = ui.main_box.selected_children().into_iter().next() {
+        let list_items = ui.menu_rows.read().unwrap();
+        let item = list_items.get(&s);
+        if let Some(selected_item) = item {
+            if selected_item.visible {
+                return Some(selected_item.clone());
+            }
+        }
+    }
+
+    None
+}
 fn handle_selected_item<T>(
     ui: &Rc<UiElements<T>>,
     meta: Rc<MetaData<T>>,
@@ -1460,15 +1342,9 @@ where
     if let Some(selected_item) = item {
         send_selected_item(ui, meta, custom_key.cloned(), selected_item);
         return Ok(());
-    } else if let Some(s) = ui.main_box.selected_children().into_iter().next() {
-        let list_items = ui.menu_rows.read().unwrap();
-        let item = list_items.get(&s);
-        if let Some(selected_item) = item {
-            if selected_item.visible {
-                send_selected_item(ui, meta, custom_key.cloned(), selected_item.clone());
-                return Ok(());
-            }
-        }
+    } else if let Some(item) = get_selected_item(ui) {
+        send_selected_item(ui, meta, custom_key.cloned(), item);
+        return Ok(());
     }
 
     if new_on_empty {

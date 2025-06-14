@@ -192,6 +192,233 @@ impl FromStr for KeyDetectionType {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+pub enum Key {
+    None,
+
+    // Letters
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    M,
+    N,
+    O,
+    P,
+    Q,
+    R,
+    S,
+    T,
+    U,
+    V,
+    W,
+    X,
+    Y,
+    Z,
+
+    // Numbers
+    Num0,
+    Num1,
+    Num2,
+    Num3,
+    Num4,
+    Num5,
+    Num6,
+    Num7,
+    Num8,
+    Num9,
+
+    // Function Keys
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+
+    // Navigation / Editing
+    Escape,
+    Enter,
+    Space,
+    Tab,
+    Backspace,
+    Insert,
+    Delete,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Left,
+    Right,
+    Up,
+    Down,
+
+    // Special characters
+    Exclamation,  // !
+    At,           // @
+    Hash,         // #
+    Dollar,       // $
+    Percent,      // %
+    Caret,        // ^
+    Ampersand,    // &
+    Asterisk,     // *
+    LeftParen,    // (
+    RightParen,   // )
+    Minus,        // -
+    Underscore,   // _
+    Equal,        // =
+    Plus,         // +
+    LeftBracket,  // [
+    RightBracket, // ]
+    LeftBrace,    // {
+    RightBrace,   // }
+    Backslash,    // \
+    Pipe,         // |
+    Semicolon,    // ;
+    Colon,        // :
+    Apostrophe,   // '
+    Quote,        // "
+    Comma,        // ,
+    Period,       // .
+    Slash,        // /
+    Question,     // ?
+    Grave,        // `
+    Tilde,        // ~
+}
+
+impl FromStr for Key {
+    type Err = Error;
+
+    #[allow(clippy::too_many_lines)] // won't fix, need all of them
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let key = match s {
+            // Letters
+            "A" | "a" => Key::A,
+            "B" | "b" => Key::B,
+            "C" | "c" => Key::C,
+            "D" | "d" => Key::D,
+            "E" | "e" => Key::E,
+            "F" | "f" => Key::F,
+            "G" | "g" => Key::G,
+            "H" | "h" => Key::H,
+            "I" | "i" => Key::I,
+            "J" | "j" => Key::J,
+            "K" | "k" => Key::K,
+            "L" | "l" => Key::L,
+            "M" | "m" => Key::M,
+            "N" | "n" => Key::N,
+            "O" | "o" => Key::O,
+            "P" | "p" => Key::P,
+            "Q" | "q" => Key::Q,
+            "R" | "r" => Key::R,
+            "S" | "s" => Key::S,
+            "T" | "t" => Key::T,
+            "U" | "u" => Key::U,
+            "V" | "v" => Key::V,
+            "W" | "w" => Key::W,
+            "X" | "x" => Key::X,
+            "Y" | "y" => Key::Y,
+            "Z" | "z" => Key::Z,
+
+            // Numbers
+            "0" => Key::Num0,
+            "1" => Key::Num1,
+            "2" => Key::Num2,
+            "3" => Key::Num3,
+            "4" => Key::Num4,
+            "5" => Key::Num5,
+            "6" => Key::Num6,
+            "7" => Key::Num7,
+            "8" => Key::Num8,
+            "9" => Key::Num9,
+
+            // Function keys
+            "F1" => Key::F1,
+            "F2" => Key::F2,
+            "F3" => Key::F3,
+            "F4" => Key::F4,
+            "F5" => Key::F5,
+            "F6" => Key::F6,
+            "F7" => Key::F7,
+            "F8" => Key::F8,
+            "F9" => Key::F9,
+            "F10" => Key::F10,
+            "F11" => Key::F11,
+            "F12" => Key::F12,
+
+            // Navigation / Editing
+            "Escape" => Key::Escape,
+            "Enter" => Key::Enter,
+            "Space" => Key::Space,
+            "Tab" => Key::Tab,
+            "Backspace" => Key::Backspace,
+            "Insert" => Key::Insert,
+            "Delete" => Key::Delete,
+            "Home" => Key::Home,
+            "End" => Key::End,
+            "PageUp" => Key::PageUp,
+            "PageDown" => Key::PageDown,
+            "Left" => Key::Left,
+            "Right" => Key::Right,
+            "Up" => Key::Up,
+            "Down" => Key::Down,
+
+            // Special characters
+            "!" => Key::Exclamation,
+            "@" => Key::At,
+            "#" => Key::Hash,
+            "$" => Key::Dollar,
+            "%" => Key::Percent,
+            "^" => Key::Caret,
+            "&" => Key::Ampersand,
+            "*" => Key::Asterisk,
+            "(" => Key::LeftParen,
+            ")" => Key::RightParen,
+            "-" => Key::Minus,
+            "_" => Key::Underscore,
+            "=" => Key::Equal,
+            "+" => Key::Plus,
+            "[" => Key::LeftBracket,
+            "]" => Key::RightBracket,
+            "{" => Key::LeftBrace,
+            "}" => Key::RightBrace,
+            "\\" => Key::Backslash,
+            "|" => Key::Pipe,
+            ";" => Key::Semicolon,
+            ":" => Key::Colon,
+            "'" => Key::Apostrophe,
+            "\"" => Key::Quote,
+            "," => Key::Comma,
+            "." => Key::Period,
+            "/" => Key::Slash,
+            "?" => Key::Question,
+            "`" => Key::Grave,
+            "~" => Key::Tilde,
+            _ => Key::None,
+        };
+
+        if key == Key::None {
+            Err(Error::InvalidArgument(format!("{s} is not a valid key")))
+        } else {
+            Ok(key)
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, Parser)]
 #[clap(about = "Worf is a wofi clone written in rust, it aims to be a drop-in replacement")]
 #[derive(Default)]
@@ -353,28 +580,30 @@ pub struct Config {
     #[clap(long = "hide-search")]
     hide_search: Option<bool>,
 
-    /// can be set to a button to toggle the search bar.
+    /// can be set to a key to toggle the search bar.
     /// default is not set.
     #[clap(long = "key-hide-search")]
-    key_hide_search: Option<String>,
+    key_hide_search: Option<Key>,
 
-    // key_up: Option<String>,          // todo support this
-    // key_down: Option<String>,        // todo support this
-    // key_left: Option<String>,        // todo support this
-    // key_right: Option<String>,       // todo support this
-    // key_forward: Option<String>,     // todo support this
-    // key_backward: Option<String>,    // todo support this
-    // key_submit: Option<String>,      // todo support this
-    // key_exit: Option<String>,        // todo support this
-    // key_pgup: Option<String>,        // todo support this
-    // key_pgdn: Option<String>,        // todo support this
-    // key_expand: Option<String>,      // todo support this
+    /// Key to run the associated thing.
+    /// Defaults to enter
+    #[clap(long = "key-submit")]
+    key_submit: Option<Key>,
 
-    // key_copy: Option<String>,        // todo support this
+    /// Key to close the window.
+    /// Defaults to escape
+    #[clap(long = "key-exit")]
+    key_exit: Option<Key>,
 
-    // todo re-add this
-    // #[serde(flatten)]
-    // key_custom: Option<HashMap<String, String>>,
+    /// Can be set to a Key which copies the action to the clipboard.
+    /// Copying to clipboard does not affect any cache file
+    #[clap(long = "key-copy")]
+    key_copy: Option<Key>,
+
+    /// Used to expand or autocomplete entries. Defaults to tab
+    #[clap(long = "key-expand")]
+    key_expand: Option<Key>,
+
     /// If enabled, worf will resize according to the amount of displayed rows
     /// defaults to false
     #[clap(long = "dynamic-lines")]
@@ -629,8 +858,28 @@ impl Config {
     }
 
     #[must_use]
-    pub fn key_hide_search(&self) -> Option<String> {
-        self.key_hide_search.clone()
+    pub fn key_hide_search(&self) -> Option<Key> {
+        self.key_hide_search
+    }
+
+    #[must_use]
+    pub fn key_submit(&self) -> Key {
+        self.key_submit.unwrap_or(Key::Enter)
+    }
+
+    #[must_use]
+    pub fn key_exit(&self) -> Key {
+        self.key_exit.unwrap_or(Key::Escape)
+    }
+
+    #[must_use]
+    pub fn key_copy(&self) -> Option<Key> {
+        self.key_copy
+    }
+
+    #[must_use]
+    pub fn key_expand(&self) -> Key {
+        self.key_expand.unwrap_or(Key::Tab)
     }
 
     #[must_use]
