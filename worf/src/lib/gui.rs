@@ -232,6 +232,117 @@ pub enum Key {
     Tilde,        // ~
 }
 
+impl From<String> for Key {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            // Letters
+            "A" | "a" => Key::A,
+            "B" | "b" => Key::B,
+            "C" | "c" => Key::C,
+            "D" | "d" => Key::D,
+            "E" | "e" => Key::E,
+            "F" | "f" => Key::F,
+            "G" | "g" => Key::G,
+            "H" | "h" => Key::H,
+            "I" | "i" => Key::I,
+            "J" | "j" => Key::J,
+            "K" | "k" => Key::K,
+            "L" | "l" => Key::L,
+            "M" | "m" => Key::M,
+            "N" | "n" => Key::N,
+            "O" | "o" => Key::O,
+            "P" | "p" => Key::P,
+            "Q" | "q" => Key::Q,
+            "R" | "r" => Key::R,
+            "S" | "s" => Key::S,
+            "T" | "t" => Key::T,
+            "U" | "u" => Key::U,
+            "V" | "v" => Key::V,
+            "W" | "w" => Key::W,
+            "X" | "x" => Key::X,
+            "Y" | "y" => Key::Y,
+            "Z" | "z" => Key::Z,
+
+            // Numbers
+            "0" => Key::Num0,
+            "1" => Key::Num1,
+            "2" => Key::Num2,
+            "3" => Key::Num3,
+            "4" => Key::Num4,
+            "5" => Key::Num5,
+            "6" => Key::Num6,
+            "7" => Key::Num7,
+            "8" => Key::Num8,
+            "9" => Key::Num9,
+
+            // Function keys
+            "F1" => Key::F1,
+            "F2" => Key::F2,
+            "F3" => Key::F3,
+            "F4" => Key::F4,
+            "F5" => Key::F5,
+            "F6" => Key::F6,
+            "F7" => Key::F7,
+            "F8" => Key::F8,
+            "F9" => Key::F9,
+            "F10" => Key::F10,
+            "F11" => Key::F11,
+            "F12" => Key::F12,
+
+            // Navigation / Editing
+            "Escape" => Key::Escape,
+            "Enter" => Key::Enter,
+            "Space" => Key::Space,
+            "Tab" => Key::Tab,
+            "Backspace" => Key::Backspace,
+            "Insert" => Key::Insert,
+            "Delete" => Key::Delete,
+            "Home" => Key::Home,
+            "End" => Key::End,
+            "PageUp" => Key::PageUp,
+            "PageDown" => Key::PageDown,
+            "Left" => Key::Left,
+            "Right" => Key::Right,
+            "Up" => Key::Up,
+            "Down" => Key::Down,
+
+            // Special characters
+            "!" => Key::Exclamation,
+            "@" => Key::At,
+            "#" => Key::Hash,
+            "$" => Key::Dollar,
+            "%" => Key::Percent,
+            "^" => Key::Caret,
+            "&" => Key::Ampersand,
+            "*" => Key::Asterisk,
+            "(" => Key::LeftParen,
+            ")" => Key::RightParen,
+            "-" => Key::Minus,
+            "_" => Key::Underscore,
+            "=" => Key::Equal,
+            "+" => Key::Plus,
+            "[" => Key::LeftBracket,
+            "]" => Key::RightBracket,
+            "{" => Key::LeftBrace,
+            "}" => Key::RightBrace,
+            "\\" => Key::Backslash,
+            "|" => Key::Pipe,
+            ";" => Key::Semicolon,
+            ":" => Key::Colon,
+            "'" => Key::Apostrophe,
+            "\"" => Key::Quote,
+            "," => Key::Comma,
+            "." => Key::Period,
+            "/" => Key::Slash,
+            "?" => Key::Question,
+            "`" => Key::Grave,
+            "~" => Key::Tilde,
+
+            _ => Key::None,
+        }
+    }
+}
+
 impl From<gtk4::gdk::Key> for Key {
     fn from(value: gdk4::Key) -> Self {
         match value {
@@ -1001,6 +1112,24 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
     ui.window.add_controller(key_controller);
 }
 
+fn is_key_match_from_str_opt(
+    str_key_opt: Option<String>,
+    key_detection_type: &KeyDetectionType,
+    key_code: u32,
+    gdk_key: gdk4::Key,
+) -> bool {
+    if let Some(str_key) = str_key_opt {
+        let key: Key = str_key.into();
+        if key_detection_type == &KeyDetectionType::Code {
+            key == key_code.into()
+        } else {
+            key == gdk_key.to_upper().into()
+        }
+    } else {
+        false
+    }
+}
+
 #[allow(clippy::too_many_lines)] // todo fix this.
 fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
@@ -1039,10 +1168,11 @@ fn handle_key_press<T: Clone + 'static + Send>(
 
     log::debug!("received key. code: {key_code}, key: {keyboard_key:?}");
 
+    let detection_type = meta.config.key_detection_type();
     if let Some(custom_keys) = custom_keys {
         let mods = modifiers_from_mask(modifier_type);
         for custom_key in &custom_keys.bindings {
-            let custom_key_match = if meta.config.key_detection_type() == KeyDetectionType::Code {
+            let custom_key_match = if detection_type == KeyDetectionType::Code {
                 custom_key.key == key_code.into()
             } else {
                 custom_key.key == keyboard_key.to_upper().into()
@@ -1064,6 +1194,15 @@ fn handle_key_press<T: Clone + 'static + Send>(
                 }
             }
         }
+    }
+
+    if is_key_match_from_str_opt(
+        meta.config.key_hide_search(),
+        &detection_type,
+        key_code,
+        keyboard_key,
+    ) {
+        ui.search.set_visible(!ui.search.is_visible());
     }
 
     match keyboard_key {

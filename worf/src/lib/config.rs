@@ -265,9 +265,6 @@ pub struct Config {
     #[clap(short = 'P', long = "password")]
     password: Option<String>,
 
-    #[clap(short = 'e', long = "exec-search")]
-    exec_search: Option<bool>, // todo support this
-
     /// Defines whether the scrollbar is visible
     #[clap(short = 'b', long = "hide-scroll")]
     hide_scroll: Option<bool>,
@@ -307,21 +304,28 @@ pub struct Config {
     #[clap(long = "lines-size-factor")]
     lines_size_factor: Option<f64>,
 
+    /// How many columns to display at most in the window
+    /// Shows less and wraps if not enough space is available
     #[clap(short = 'w', long = "columns")]
     columns: Option<u32>,
 
+    /// Defines how elements are sorted
+    /// Options:
+    /// * Alphabetical
+    /// * Default (no sort applied)
     #[clap(short = 'O', long = "sort-order")]
     sort_order: Option<SortOrder>,
 
+    /// Search for given value at startup
     #[clap(short = 'Q', long = "search")]
     search: Option<String>,
 
-    #[clap(short = 'o', long = "monitor")]
-    monitor: Option<String>, // todo support this
+    //  #[clap(short = 'o', long = "monitor")]
+    //  monitor: Option<String>, // todo support this
 
-    #[clap(short = 'r', long = "pre-display-cmd")]
-    pre_display_cmd: Option<String>, // todo support this
-
+    //  #[clap(short = 'r', long = "pre-display-cmd")]
+    //  pre_display_cmd: Option<String>, // todo support this
+    /// Defines if window is aligned vertically or horizontally.
     #[clap(long = "orientation")]
     orientation: Option<Orientation>,
 
@@ -345,6 +349,15 @@ pub struct Config {
     #[clap(long = "image-size")]
     image_size: Option<u16>,
 
+    /// If set to `true` the search field will be hidden.
+    #[clap(long = "hide-search")]
+    hide_search: Option<bool>,
+
+    /// can be set to a button to toggle the search bar.
+    /// default is not set.
+    #[clap(long = "key-hide-search")]
+    key_hide_search: Option<String>,
+
     // key_up: Option<String>,          // todo support this
     // key_down: Option<String>,        // todo support this
     // key_left: Option<String>,        // todo support this
@@ -356,16 +369,12 @@ pub struct Config {
     // key_pgup: Option<String>,        // todo support this
     // key_pgdn: Option<String>,        // todo support this
     // key_expand: Option<String>,      // todo support this
-    // key_hide_search: Option<String>, // todo support this
+
     // key_copy: Option<String>,        // todo support this
 
     // todo re-add this
     // #[serde(flatten)]
     // key_custom: Option<HashMap<String, String>>,
-    /// If set to `true` the search field willOption<> be hidden.
-    #[clap(long = "hide-search")]
-    hide_search: Option<bool>,
-
     /// If enabled, worf will resize according to the amount of displayed rows
     /// defaults to false
     #[clap(long = "dynamic-lines")]
@@ -617,6 +626,11 @@ impl Config {
     #[must_use]
     pub fn hide_search(&self) -> bool {
         self.hide_search.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn key_hide_search(&self) -> Option<String> {
+        self.key_hide_search.clone()
     }
 
     #[must_use]

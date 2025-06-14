@@ -175,6 +175,7 @@ The possibilities are endless! Here are some powerful examples of what you can b
 - Most boolean options now need true or false as argument, as Worf is using the same struct for config and command line arguments and this is the only way to merge both data sources
 - Removed x,y offset and global coords as GTK4 does not support this anymore, similar results can be achieved with `--location`
 - Removed copy_exec as we are not executing a binary to copy data into the clipboard
+- `exec-search` not supported
 
 #### Removed Command Line Arguments
 - `mode` → Use `show` instead
