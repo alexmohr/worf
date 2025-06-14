@@ -14,6 +14,7 @@ result=`echo -e "$option_reboot\n$option_suspend\n$option_shutdown\n$option_logo
   --orientation horizontal \
   --hide-search true \
   --content-vcenter true \
+  --blurred-background-fullscreen true \
   --blurred-background true `
 
 case "$result" in
@@ -30,20 +31,9 @@ case "$result" in
     ;;
 
   "$option_shutdown")
-    TOKEN="$(cat ~/.homeassistant_token)"
-
-    curl -X POST -H "Authorization: Bearer $TOKEN" \
-      -d '{ "key": "value" }' \
-      https://assistant.home.mohr.io/api/webhook/on-computer-shutdown-rMG8tbTS3Gg8NlrFiJ-MNYYh
-    rtw stop
-
-    #cd $HOME/time/log_work
-    #$HOME/time/log_work
     shutdown now
     ;;
 
   *)
     exit 1
 esac
-
-

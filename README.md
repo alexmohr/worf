@@ -123,9 +123,9 @@ The possibilities are endless! Here are some powerful examples of what you can b
 ![Hyprland Exit](examples/images/hyprland-exit.png)
 
 - Full screen exit menu
-- Shell script using dmenu mode
 - Desktop hiding with background display
 - Uses launcher theme styling
+- Shell script using dmenu mode
 
 ### worf-hyprswitch
 *Elegant window switcher*
@@ -134,7 +134,6 @@ The possibilities are endless! Here are some powerful examples of what you can b
 
 - Advanced window selector
 - Written in Rust using Worf API
-- Featuring AmberNight theme with centered content
 
 ### 🔐 worf-warden
 *Beautiful Bitwarden frontend*
@@ -143,7 +142,8 @@ The possibilities are endless! Here are some powerful examples of what you can b
 
 - Bitwarden integration via [rbw](https://github.com/doy/rbw)
 - Additional dependencies required ([see readme](examples/worf-warden/Readme.md))
-- Showcasing GlacierPrism theme with blurred background
+- Showcasing GlacierPrism theme
+- Written in Rust using Worf API
 
 ### worf-rtw
 *Time tracking made simple*
@@ -152,6 +152,7 @@ The possibilities are endless! Here are some powerful examples of what you can b
 
 - Time tracking with [rtw](https://github.com/PicoJr/rtw)
 - Using AmberNight theme with custom positioning
+- Bash script using dmenu
 
 ---
 
@@ -174,6 +175,9 @@ The possibilities are endless! Here are some powerful examples of what you can b
 - Most boolean options now need true or false as argument, as Worf is using the same struct for config and command line arguments and this is the only way to merge both data sources
 - Removed x,y offset and global coords as GTK4 does not support this anymore, similar results can be achieved with `--location`
 - Removed copy_exec as we are not executing a binary to copy data into the clipboard
+- `exec-search` not supported
+- All custom keys that change the default bindings for navigation like up, down, page, etc.
+- key_custom_(n) is not supported, such specialized behaviour can be achieved via the API though.
 
 #### Removed Command Line Arguments
 - `mode` → Use `show` instead

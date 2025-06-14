@@ -28,7 +28,7 @@ struct DRunCache {
 #[derive(Clone)]
 pub(crate) struct DRunProvider<T: Clone> {
     items: Option<Vec<MenuItem<T>>>,
-    pub(crate) cache_path: Option<PathBuf>,
+    pub(crate) cache_path: PathBuf,
     pub(crate) cache: HashMap<String, i64>,
     data: T,
     no_actions: bool,
@@ -50,21 +50,16 @@ impl<T: Clone + Send + Sync> ItemProvider<T> for DRunProvider<T> {
 }
 
 impl<T: Clone + Send + Sync> DRunProvider<T> {
-    pub(crate) fn new(
-        menu_item_data: T,
-        no_actions: bool,
-        sort_order: SortOrder,
-        terminal: Option<String>,
-    ) -> Self {
-        let (cache_path, d_run_cache) = load_d_run_cache();
+    pub(crate) fn new(menu_item_data: T, config: &Config) -> Self {
+        let (cache_path, d_run_cache) = load_cache("drun_cache", config).unwrap();
         DRunProvider {
             items: None,
             cache_path,
             cache: d_run_cache,
             data: menu_item_data,
-            no_actions,
-            sort_order,
-            terminal,
+            no_actions: config.no_actions(),
+            sort_order: config.sort_order(),
+            terminal: config.term(),
         }
     }
 
@@ -195,21 +190,14 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
     }
 }
 
-fn load_d_run_cache() -> (Option<PathBuf>, HashMap<String, i64>) {
-    let cache_path = dirs::cache_dir().map(|x| x.join("worf-drun"));
-    load_cache(cache_path)
-}
-
 pub(crate) fn update_drun_cache_and_run<T: Clone>(
-    cache_path: Option<PathBuf>,
+    cache_path: &PathBuf,
     cache: &mut HashMap<String, i64>,
     selection_result: MenuItem<T>,
-) -> Result<(), Error> {
-    if let Some(cache_path) = cache_path {
-        *cache.entry(selection_result.label).or_insert(0) += 1;
-        if let Err(e) = save_cache_file(&cache_path, cache) {
-            log::warn!("cannot save drun cache {e:?}");
-        }
+) -> Result<(), crate::Error> {
+    *cache.entry(selection_result.label).or_insert(0) += 1;
+    if let Err(e) = save_cache_file(cache_path, cache) {
+        log::warn!("cannot save drun cache {e:?}");
     }
 
     if let Some(action) = selection_result.action {
@@ -224,14 +212,14 @@ pub(crate) fn update_drun_cache_and_run<T: Clone>(
 ///
 /// Will return `Err` if it was not able to spawn the process
 pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = DRunProvider::new(0, config.no_actions(), config.sort_order(), config.term());
+    let provider = DRunProvider::new(0, config);
     let cache_path = provider.cache_path.clone();
     let mut cache = provider.cache.clone();
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(config.clone(), provider, false, None, None);
     match selection_result {
-        Ok(s) => update_drun_cache_and_run(cache_path, &mut cache, s.menu)?,
+        Ok(s) => update_drun_cache_and_run(&cache_path, &mut cache, s.menu)?,
         Err(_) => {
             log::error!("No item selected");
         }

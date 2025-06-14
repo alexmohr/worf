@@ -51,7 +51,7 @@ body {
 }
 
 #window #outer-box #scroll {
-  border-top: 1px solid rgb(26, 35, 126);
+  border-top: 3px solid rgb(26, 35, 126);
   padding-top: 0.5rem;
   margin-top: 0.5rem;
 }
@@ -73,7 +73,7 @@ body {
 }
 
 #window #outer-box #scroll #inner-box #entry:selected {
-  background-color: rgba(26, 35, 126, 1);
+  background-color: rgba(40, 53, 147, 0.7);
   color: rgba(255, 255, 255, 1);
   outline: none;
 }
