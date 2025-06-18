@@ -7,6 +7,8 @@ use std::{
 };
 
 use crossbeam::channel::{self, Sender};
+use gdk4::glib::SignalHandlerId;
+use gdk4::prelude::ObjectExt;
 use gdk4::{
     Display, Rectangle,
     gio::File,
@@ -456,6 +458,7 @@ struct UiElements<T: Clone> {
     main_box: FlowBox,
     menu_rows: ArcMenuMap<T>,
     search_text: Arc<Mutex<String>>,
+    search_delete_event: Arc<Mutex<Option<SignalHandlerId>>>,
     outer_box: gtk4::Box,
     scroll: ScrolledWindow,
     custom_key_box: gtk4::Box,
@@ -567,6 +570,7 @@ fn build_ui<T, P>(
         main_box: FlowBox::new(),
         menu_rows: Arc::new(RwLock::new(HashMap::new())),
         search_text: Arc::new(Mutex::new(String::new())),
+        search_delete_event: Arc::new(Mutex::new(None)),
         outer_box: gtk4::Box::new(config.orientation().into(), 0),
         scroll: ScrolledWindow::new(),
         custom_key_box: gtk4::Box::new(Orientation::Vertical, 0),
@@ -707,10 +711,10 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
     });
 }
 
-fn build_search_entry<T: Clone + Send>(
+fn build_search_entry<T: Clone + Send + 'static>(
     config: &Config,
-    ui_elements: &UiElements<T>,
-    meta: &MetaData<T>,
+    ui_elements: &Rc<UiElements<T>>,
+    meta: &Rc<MetaData<T>>,
 ) {
     ui_elements.search.set_widget_name("input");
     ui_elements.search.set_css_classes(&["input"]);
@@ -718,11 +722,35 @@ fn build_search_entry<T: Clone + Send>(
         .search
         .set_placeholder_text(Some(config.prompt().as_ref()));
     ui_elements.search.set_can_focus(false);
+    search_start_listen_delete_event(ui_elements, meta);
+
     if config.hide_search() {
         ui_elements.search.set_visible(false);
     }
     if let Some(search) = config.search() {
         set_search_text(ui_elements, meta, &search);
+    }
+}
+
+fn search_start_listen_delete_event<T: Clone + Send + 'static>(
+    ui_elements: &Rc<UiElements<T>>,
+    meta: &Rc<MetaData<T>>,
+) {
+    let ui_clone = Rc::clone(ui_elements);
+    let meta_clone = Rc::clone(meta);
+    *ui_elements.search_delete_event.lock().unwrap() =
+        Some(ui_elements.search.connect_text_notify(move |se| {
+            if se.text().is_empty() {
+                ui_clone.search_text.lock().unwrap().clear();
+                update_view_from_provider(&ui_clone, &meta_clone, "");
+            }
+        }));
+}
+
+fn search_stop_listen_delete_event<T: Clone + Send + 'static>(ui_elements: &UiElements<T>) {
+    let mut lock = ui_elements.search_delete_event.lock().unwrap();
+    if let Some(id) = lock.take() {
+        ui_elements.search.disconnect(id);
     }
 }
 
@@ -797,7 +825,12 @@ fn build_custom_key_view(custom_keys: &CustomKeys, outer_box: &gtk4::Box, inner_
     outer_box.append(inner_box);
 }
 
-fn set_search_text<T: Clone + Send>(ui: &UiElements<T>, meta: &MetaData<T>, query: &str) {
+fn set_search_text<T: Clone + Send + 'static>(
+    ui: &Rc<UiElements<T>>,
+    meta: &Rc<MetaData<T>>,
+    query: &str,
+) {
+    search_stop_listen_delete_event(ui);
     let mut lock = ui.search_text.lock().unwrap();
     query.clone_into(&mut lock);
     if let Some(pw) = meta.config.password() {
@@ -809,6 +842,7 @@ fn set_search_text<T: Clone + Send>(ui: &UiElements<T>, meta: &MetaData<T>, quer
     } else {
         ui.search.set_text(query);
     }
+    search_start_listen_delete_event(ui, meta);
 }
 
 fn build_ui_from_menu_items<T: Clone + 'static + Send>(
@@ -918,6 +952,7 @@ fn is_key_match(
     }
 }
 
+#[allow(clippy::cast_sign_loss)] // ok because we only need positive values
 fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
@@ -928,33 +963,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
 ) -> Propagation {
     log::debug!("received key. code: {key_code}, key: {keyboard_key:?}");
 
-    let detection_type = meta.config.key_detection_type();
-    if let Some(custom_keys) = custom_keys {
-        let mods = modifiers_from_mask(modifier_type);
-        for custom_key in &custom_keys.bindings {
-            let custom_key_match = if detection_type == KeyDetectionType::Code {
-                custom_key.key == key_code.into()
-            } else {
-                custom_key.key == keyboard_key.to_upper().into()
-            } && mods.is_subset(&custom_key.modifiers);
-
-            log::debug!("custom key {custom_key:?}, match {custom_key_match}");
-
-            if custom_key_match {
-                let search_lock = ui.search_text.lock().unwrap();
-                if let Err(e) = handle_selected_item(
-                    ui,
-                    Rc::<MetaData<T>>::clone(meta),
-                    Some(&search_lock),
-                    None,
-                    meta.new_on_empty,
-                    Some(custom_key),
-                ) {
-                    log::error!("{e}");
-                }
-            }
-        }
-    }
+    let detection_type =
+        handle_custom_keys(ui, meta, keyboard_key, key_code, modifier_type, custom_keys);
 
     // hide search
     let propagate = if is_key_match(
@@ -1006,24 +1016,102 @@ fn handle_key_press<T: Clone + 'static + Send>(
     }
 
     match keyboard_key {
-        gdk4::Key::BackSpace => {
-            let mut query = ui.search_text.lock().unwrap().to_string();
+        gdk4::Key::BackSpace | gdk4::Key::Delete => {
+            let mut query = {
+                let search_text = ui.search_text.lock().unwrap();
+                search_text.clone()
+            };
+
             if !query.is_empty() {
-                query.pop();
+                let pos = ui.search.position();
+                let del_pos = if keyboard_key == gdk4::Key::BackSpace {
+                    pos - 1
+                } else {
+                    pos
+                };
+                if let Some((start, ch)) = query.char_indices().nth((del_pos) as usize) {
+                    let end = start + ch.len_utf8();
+                    query.replace_range(start..end, "");
+                }
 
                 set_search_text(ui, meta, &query);
+                ui.search.set_position(pos - 1);
                 update_view_from_provider(ui, meta, &query);
+            }
+        }
+        gdk4::Key::Home => {
+            ui.search.set_position(0);
+        }
+        gdk4::Key::Left => {
+            ui.search.set_position(ui.search.position() - 1);
+        }
+        gdk4::Key::Right => {
+            ui.search.set_position(ui.search.position() + 1);
+        }
+        gdk4::Key::End => {
+            if let Ok(i) = i32::try_from(ui.search_text.lock().unwrap().len() + 1) {
+                ui.search.set_position(i);
             }
         }
         _ => {
             if let Some(c) = keyboard_key.to_unicode() {
-                let query = format!("{}{c}", ui.search_text.lock().unwrap());
+                let mut query = {
+                    let search_text = ui.search_text.lock().unwrap();
+                    search_text.clone()
+                };
+
+                let pos = ui.search.position();
+                let byte_idx = query
+                    .char_indices()
+                    .nth(pos as usize)
+                    .map_or_else(|| query.len(), |(i, _)| i);
+
+                query.insert(byte_idx, c);
                 set_search_text(ui, meta, &query);
+                ui.search.set_position(pos + 1);
                 update_view_from_provider(ui, meta, &query);
             }
         }
     }
     Propagation::Proceed
+}
+
+fn handle_custom_keys<T: Clone + 'static + Send>(
+    ui: &Rc<UiElements<T>>,
+    meta: &Rc<MetaData<T>>,
+    keyboard_key: gdk4::Key,
+    key_code: u32,
+    modifier_type: gdk4::ModifierType,
+    custom_keys: Option<&CustomKeys>,
+) -> KeyDetectionType {
+    let detection_type = meta.config.key_detection_type();
+    if let Some(custom_keys) = custom_keys {
+        let mods = modifiers_from_mask(modifier_type);
+        for custom_key in &custom_keys.bindings {
+            let custom_key_match = if detection_type == KeyDetectionType::Code {
+                custom_key.key == key_code.into()
+            } else {
+                custom_key.key == keyboard_key.to_upper().into()
+            } && mods.is_subset(&custom_key.modifiers);
+
+            log::debug!("custom key {custom_key:?}, match {custom_key_match}");
+
+            if custom_key_match {
+                let search_lock = ui.search_text.lock().unwrap();
+                if let Err(e) = handle_selected_item(
+                    ui,
+                    Rc::<MetaData<T>>::clone(meta),
+                    Some(&search_lock),
+                    None,
+                    meta.new_on_empty,
+                    Some(custom_key),
+                ) {
+                    log::error!("{e}");
+                }
+            }
+        }
+    }
+    detection_type
 }
 
 fn update_view_from_provider<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, query: &str)
