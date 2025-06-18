@@ -471,6 +471,9 @@ pub struct Config {
     #[clap(short = 'm', long = "allow-markup")]
     allow_markup: Option<bool>,
 
+    /// If set to a value a custom cache file will be used
+    /// instead the default one associated with the selected mode.
+    /// May also be for usage in the api
     #[clap(short = 'k', long = "cache-file")]
     cache_file: Option<String>,
 

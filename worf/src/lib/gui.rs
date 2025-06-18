@@ -654,15 +654,22 @@ fn create_background(config: &Config) -> Option<ApplicationWindow> {
             .decorated(false)
             .resizable(false)
             .fullscreened(config.blurred_background_fullscreen())
-            // arbitrary huge window so it fills the whole screen
-            .default_width(100_000)
-            .default_height(100_000)
+            .default_width(100)
+            .default_height(100)
             .build();
         if !config.normal_window() {
             background.set_layer(config.layer().into());
         }
         background.set_widget_name("background");
         background.set_namespace(Some("worf"));
+        background.connect_is_active_notify(move |window| {
+            let Some(geometry) = get_monitor_geometry(window.surface().as_ref()) else {
+                return;
+            };
+            window.set_height_request(geometry.height());
+            window.set_width_request(geometry.width());
+        });
+
         Some(background)
     } else {
         None
@@ -1045,7 +1052,7 @@ where
     select_first_visible_child(&*lock, &ui.main_box);
     drop(lock);
     if meta.config.dynamic_lines() {
-        if let Some(geometry) = get_monitor_geometry(ui) {
+        if let Some(geometry) = get_monitor_geometry(ui.window.surface().as_ref()) {
             let height = calculate_dynamic_lines_window_height(&meta.config, ui, geometry);
             ui.window.set_height_request(height);
         }
@@ -1195,7 +1202,7 @@ fn sort_menu_items_by_score<T: Clone>(
 }
 
 fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>>) {
-    let Some(geometry) = get_monitor_geometry(ui) else {
+    let Some(geometry) = get_monitor_geometry(ui.window.surface().as_ref()) else {
         return;
     };
 
@@ -1238,14 +1245,13 @@ fn calculate_dynamic_lines_window_height<T: Clone + 'static>(
     }
 }
 
-fn get_monitor_geometry<T: Clone>(ui: &UiElements<T>) -> Option<Rectangle> {
-    // Get the surface and associated monitor geometry
-    let surface = ui.window.surface()?;
-
-    let display = surface.display();
-    let monitor = display.monitor_at_surface(&surface)?;
-    let geometry = monitor.geometry();
-    Some(geometry)
+fn get_monitor_geometry(surface: Option<&gdk4::Surface>) -> Option<Rectangle> {
+    surface
+        .and_then(|surface| {
+            let display = surface.display();
+            display.monitor_at_surface(surface)
+        })
+        .map(|monitor| monitor.geometry())
 }
 
 #[allow(clippy::cast_possible_truncation)] // does not matter for calculating height
