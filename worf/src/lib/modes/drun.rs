@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
+    sync::{Arc, Mutex, RwLock},
     time::Instant,
 };
 
@@ -8,6 +9,7 @@ use freedesktop_file_parser::EntryType;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::gui::ArcProvider;
 use crate::{
     Error,
     config::{Config, SortOrder},
@@ -15,7 +17,7 @@ use crate::{
         find_desktop_files, get_locale_variants, lookup_name_with_locale, save_cache_file,
         spawn_fork,
     },
-    gui::{self, ItemProvider, MenuItem},
+    gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
 };
 
@@ -37,15 +39,21 @@ pub(crate) struct DRunProvider<T: Clone> {
 }
 
 impl<T: Clone + Send + Sync> ItemProvider<T> for DRunProvider<T> {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
+    fn get_elements(&mut self, query: Option<&str>) -> ProviderData<T> {
         if self.items.is_none() {
             self.items = Some(self.load().clone());
         }
-        (false, self.items.clone().unwrap())
+        if query.is_some() {
+            ProviderData { items: None }
+        } else {
+            ProviderData {
+                items: self.items.clone(),
+            }
+        }
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
-        (false, None)
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> ProviderData<T> {
+        ProviderData { items: None }
     }
 }
 
@@ -211,15 +219,22 @@ pub(crate) fn update_drun_cache_and_run<T: Clone>(
 /// # Errors
 ///
 /// Will return `Err` if it was not able to spawn the process
-pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = DRunProvider::new(0, config);
-    let cache_path = provider.cache_path.clone();
-    let mut cache = provider.cache.clone();
-
-    // todo ues a arc instead of cloning the config
-    let selection_result = gui::show(config.clone(), provider, false, None, None);
+pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+    let provider = Arc::new(Mutex::new(DRunProvider::new((), &config.read().unwrap())));
+    let arc_provider = Arc::clone(&provider) as ArcProvider<()>;
+    let selection_result = gui::show(
+        config.clone(),
+        arc_provider,
+        None,
+        None,
+        ExpandMode::Verbatim,
+        None,
+    );
     match selection_result {
-        Ok(s) => update_drun_cache_and_run(&cache_path, &mut cache, s.menu)?,
+        Ok(s) => {
+            let p = provider.lock().unwrap();
+            update_drun_cache_and_run(&p.cache_path, &mut p.cache.clone(), s.menu)?;
+        }
         Err(_) => {
             log::error!("No item selected");
         }

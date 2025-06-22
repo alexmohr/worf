@@ -1,8 +1,10 @@
+use std::sync::{Arc, Mutex, RwLock};
+
 use crate::{
     Error,
     config::{Config, SortOrder},
     desktop::copy_to_clipboard,
-    gui::{self, ItemProvider, MenuItem},
+    gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
 };
 
 #[derive(Clone)]
@@ -41,12 +43,18 @@ impl EmojiProvider {
 }
 
 impl ItemProvider<String> for EmojiProvider {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<String>>) {
-        (false, self.elements.clone())
+    fn get_elements(&mut self, query: Option<&str>) -> ProviderData<String> {
+        if query.is_some() {
+            ProviderData { items: None }
+        } else {
+            ProviderData {
+                items: Some(self.elements.clone()),
+            }
+        }
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> (bool, Option<Vec<MenuItem<String>>>) {
-        (false, None)
+    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> ProviderData<String> {
+        ProviderData { items: None }
     }
 }
 
@@ -54,9 +62,22 @@ impl ItemProvider<String> for EmojiProvider {
 /// # Errors
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
-pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = EmojiProvider::new(&config.sort_order(), config.emoji_hide_label());
-    let selection_result = gui::show(config.clone(), provider, true, None, None)?;
+pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+    let cfg = config.read().unwrap();
+    let provider = Arc::new(Mutex::new(EmojiProvider::new(
+        &cfg.sort_order(),
+        cfg.emoji_hide_label(),
+    )));
+    drop(cfg);
+
+    let selection_result = gui::show(
+        config.clone(),
+        provider,
+        None,
+        None,
+        ExpandMode::Verbatim,
+        None,
+    )?;
     match selection_result.menu.data {
         None => Err(Error::MissingAction),
         Some(action) => copy_to_clipboard(action, None),

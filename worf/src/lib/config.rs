@@ -420,7 +420,9 @@ impl FromStr for Key {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Parser)]
-#[clap(about = "Worf is a wofi clone written in rust, it aims to be a drop-in replacement")]
+#[clap(
+    about = "Worf is a wofi like launcher, written in rust, it aims to be a drop-in replacement"
+)]
 #[derive(Default)]
 pub struct Config {
     /// Forks the menu so you can close the terminal
@@ -681,6 +683,10 @@ pub struct Config {
     /// Defaults to false.
     #[clap(long = "blurred-background-fullscreen")]
     blurred_background_fullscreen: Option<bool>,
+
+    /// Allow submitting selected entry with expand key if there is only 1 item left.
+    #[clap(long = "submit-with-expand")]
+    submit_with_expand: Option<bool>,
 }
 
 impl Config {
@@ -784,6 +790,10 @@ impl Config {
 
             Some(prompt) => prompt.clone(),
         }
+    }
+
+    pub fn set_prompt(&mut self, val: String) {
+        self.prompt = Some(val);
     }
 
     #[must_use]
@@ -978,15 +988,16 @@ impl Config {
     pub fn blurred_background_fullscreen(&self) -> bool {
         self.blurred_background_fullscreen.unwrap_or(false)
     }
+
+    #[must_use]
+    pub fn submit_with_expand(&self) -> bool {
+        self.submit_with_expand.unwrap_or(true)
+    }
 }
 
 fn default_false() -> bool {
     false
 }
-
-// fn default_true() -> bool {
-//     true
-// }
 
 #[must_use]
 pub fn parse_args() -> Config {

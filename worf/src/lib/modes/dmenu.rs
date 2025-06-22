@@ -1,9 +1,12 @@
-use std::io::{self, Read};
+use std::{
+    io::{self, Read},
+    sync::{Arc, Mutex, RwLock},
+};
 
 use crate::{
     Error,
     config::{Config, SortOrder},
-    gui::{self, ItemProvider, MenuItem},
+    gui::{self, DefaultItemFactory, ExpandMode, ItemProvider, MenuItem, ProviderData},
 };
 
 #[derive(Clone)]
@@ -30,12 +33,18 @@ impl DMenuProvider {
     }
 }
 impl ItemProvider<String> for DMenuProvider {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<String>>) {
-        (false, self.items.clone())
+    fn get_elements(&mut self, query: Option<&str>) -> ProviderData<String> {
+        if query.is_some() {
+            ProviderData { items: None }
+        } else {
+            ProviderData {
+                items: Some(self.items.clone()),
+            }
+        }
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> (bool, Option<Vec<MenuItem<String>>>) {
-        (false, None)
+    fn get_sub_elements(&mut self, _: &MenuItem<String>) -> ProviderData<String> {
+        ProviderData { items: None }
     }
 }
 
@@ -43,10 +52,19 @@ impl ItemProvider<String> for DMenuProvider {
 /// # Errors
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
-pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = DMenuProvider::new(&config.sort_order());
+pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+    let provider = Arc::new(Mutex::new(DMenuProvider::new(
+        &config.read().unwrap().sort_order(),
+    )));
 
-    let selection_result = gui::show(config.clone(), provider, true, None, None);
+    let selection_result = gui::show(
+        config,
+        provider,
+        Some(Arc::new(Mutex::new(DefaultItemFactory::new()))),
+        None,
+        ExpandMode::Verbatim,
+        None,
+    );
     match selection_result {
         Ok(s) => {
             println!("{}", s.menu.label);

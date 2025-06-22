@@ -1,4 +1,10 @@
-use std::{collections::HashMap, env, fs, path::PathBuf, sync::Arc, thread};
+use std::{
+    collections::HashMap,
+    env, fs,
+    path::PathBuf,
+    sync::{Arc, Mutex, RwLock},
+    thread,
+};
 
 use hyprland::{
     dispatch::{DispatchType, WindowIdentifier},
@@ -12,7 +18,7 @@ use worf::{
     config::{self, Config},
     desktop,
     desktop::EntryType,
-    gui::{self, ItemProvider, MenuItem},
+    gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
 };
 
 #[derive(Clone)]
@@ -108,12 +114,18 @@ impl WindowProvider {
 }
 
 impl ItemProvider<Window> for WindowProvider {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<Window>>) {
-        (false, self.windows.clone())
+    fn get_elements(&mut self, query: Option<&str>) -> ProviderData<Window> {
+        if query.is_some() {
+            ProviderData { items: None }
+        } else {
+            ProviderData {
+                items: Some(self.windows.clone()),
+            }
+        }
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<Window>) -> (bool, Option<Vec<MenuItem<Window>>>) {
-        (false, None)
+    fn get_sub_elements(&mut self, _: &MenuItem<Window>) -> ProviderData<Window> {
+        ProviderData { items: None }
     }
 }
 
@@ -132,15 +144,21 @@ fn main() -> Result<(), String> {
         .init();
 
     let args = config::parse_args();
-    let config = config::load_config(Some(&args)).unwrap_or(args);
+    let config = Arc::new(RwLock::new(
+        config::load_config(Some(&args)).unwrap_or(args),
+    ));
 
-    let cache_path =
-        desktop::cache_file_path(&config, "worf-hyprswitch").map_err(|err| err.to_string())?;
+    let cache_path = desktop::cache_file_path(&config.read().unwrap(), "worf-hyprswitch")
+        .map_err(|err| err.to_string())?;
     let mut cache = load_icon_cache(&cache_path).map_err(|e| e.to_string())?;
 
-    let provider = WindowProvider::new(&config, &cache)?;
-    let windows = provider.windows.clone();
-    let result = gui::show(config, provider, false, None, None).map_err(|e| e.to_string())?;
+    let provider = Arc::new(Mutex::new(WindowProvider::new(
+        &config.read().unwrap(),
+        &cache,
+    )?));
+    let windows = provider.lock().unwrap().windows.clone();
+    let result = gui::show(config, provider, None, None, ExpandMode::Verbatim, None)
+        .map_err(|e| e.to_string())?;
     let update_cache = thread::spawn(move || {
         windows.iter().for_each(|item| {
             if let Some(window) = &item.data {
@@ -158,13 +176,15 @@ fn main() -> Result<(), String> {
         }
     });
 
-    if let Some(window) = result.menu.data {
+    let return_value = if let Some(window) = result.menu.data {
         hyprland::dispatch::Dispatch::call(DispatchType::FocusWindow(WindowIdentifier::Address(
             window.address,
         )))
-        .map_err(|e| e.to_string())?;
-        Ok(update_cache.join().unwrap().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())
     } else {
         Err("No window data found".to_owned())
-    }
+    };
+
+    update_cache.join().unwrap().map_err(|e| e.to_string())?;
+    return_value
 }

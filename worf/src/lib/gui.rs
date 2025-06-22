@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    marker::PhantomData,
     rc::Rc,
     sync::{Arc, Mutex, RwLock},
     thread,
@@ -39,8 +40,9 @@ use crate::{
     desktop::known_image_extension_regex_pattern,
 };
 
-type ArcMenuMap<T> = Arc<RwLock<HashMap<FlowBoxChild, MenuItem<T>>>>;
-type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
+pub type ArcMenuMap<T> = Arc<RwLock<HashMap<FlowBoxChild, MenuItem<T>>>>;
+pub type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
+pub type ArcFactory<T> = Arc<Mutex<dyn ItemFactory<T> + Send>>;
 
 pub struct Selection<T: Clone + Send> {
     pub menu: MenuItem<T>,
@@ -48,9 +50,42 @@ pub struct Selection<T: Clone + Send> {
 }
 type SelectionSender<T> = Sender<Result<Selection<T>, Error>>;
 
+pub struct ProviderData<T: Clone> {
+    pub items: Option<Vec<MenuItem<T>>>,
+}
+
 pub trait ItemProvider<T: Clone> {
-    fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<MenuItem<T>>);
-    fn get_sub_elements(&mut self, item: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>);
+    fn get_elements(&mut self, search: Option<&str>) -> ProviderData<T>;
+
+    /// Get elements below the given menu entry.
+    /// Will be called for completion
+    /// If (true, None) is returned and submit-accept is set in the config, this
+    /// will be handled the name way as pressing enter (or the configured submit key).
+    fn get_sub_elements(&mut self, item: &MenuItem<T>) -> ProviderData<T>;
+}
+
+pub trait ItemFactory<T: Clone> {
+    fn new_menu_item(&self, label: String) -> Option<MenuItem<T>>;
+}
+
+/// Default generic item factory that creates an almost empty menu item
+/// Without data, no icon, and sort score of 0.
+pub struct DefaultItemFactory<T: Clone> {
+    _marker: PhantomData<T>,
+}
+
+impl<T: Clone> DefaultItemFactory<T> {
+    pub fn new() -> DefaultItemFactory<T> {
+        DefaultItemFactory::<T> {
+            _marker: Default::default(),
+        }
+    }
+}
+
+impl<T: Clone> ItemFactory<T> for DefaultItemFactory<T> {
+    fn new_menu_item(&self, label: String) -> Option<MenuItem<T>> {
+        Some(MenuItem::new(label, None, None, vec![], None, 0.0, None))
+    }
 }
 
 impl From<&Anchor> for Edge {
@@ -121,6 +156,10 @@ pub struct MenuItem<T: Clone> {
     /// Allows to store arbitrary additional information
     pub data: Option<T>,
 
+    // /// If set to true, the item is _not_ an intermediate thing
+    // /// and is acceptable, i.e. will close the UI
+    // pub allow_submit: bool,
+    // todo
     /// Score the item got in the current search
     search_sort_score: f64,
     /// True if the item is visible
@@ -351,6 +390,12 @@ pub enum Modifier {
     None,
 }
 
+#[derive(PartialEq)]
+pub enum ExpandMode {
+    Verbatim,
+    WithSpace,
+}
+
 fn modifiers_from_mask(mask: gdk4::ModifierType) -> HashSet<Modifier> {
     let mut modifiers = HashSet::new();
 
@@ -421,6 +466,7 @@ impl<T: Clone> MenuItem<T> {
         working_dir: Option<String>,
         initial_sort_score: f64,
         data: Option<T>,
+        //allow_submit: bool,
     ) -> Self {
         MenuItem {
             label,
@@ -430,6 +476,7 @@ impl<T: Clone> MenuItem<T> {
             working_dir,
             initial_sort_score,
             data,
+            //allow_submit,
             search_sort_score: 0.0,
             visible: true,
         }
@@ -444,10 +491,11 @@ impl<T: Clone> AsRef<MenuItem<T>> for MenuItem<T> {
 
 struct MetaData<T: Clone + Send> {
     item_provider: ArcProvider<T>,
+    item_factory: Option<ArcFactory<T>>,
     selected_sender: SelectionSender<T>,
-    config: Rc<Config>,
-    new_on_empty: bool,
+    config: Arc<RwLock<Config>>,
     search_ignored_words: Option<Vec<Regex>>,
+    expand_mode: ExpandMode,
 }
 
 struct UiElements<T: Clone> {
@@ -468,20 +516,20 @@ struct UiElements<T: Clone> {
 /// # Errors
 ///
 /// Will return Err when the channel between the UI and this is broken
-pub fn show<T, P>(
-    config: Config,
-    item_provider: P,
-    new_on_empty: bool,
+pub fn show<T>(
+    config: Arc<RwLock<Config>>,
+    item_provider: ArcProvider<T>,
+    item_factory: Option<ArcFactory<T>>,
     search_ignored_words: Option<Vec<Regex>>,
+    expand_mode: ExpandMode,
     custom_keys: Option<CustomKeys>,
 ) -> Result<Selection<T>, Error>
 where
     T: Clone + 'static + Send,
-    P: ItemProvider<T> + 'static + Clone + Send,
 {
     gtk4::init().map_err(|e| Error::Graphics(e.to_string()))?;
     log::debug!("Starting GUI");
-    if let Some(ref css) = config.style() {
+    if let Some(ref css) = config.read().unwrap().style() {
         log::debug!("loading css from {css}");
         let provider = CssProvider::new();
         let css_file_path = File::for_path(css);
@@ -498,16 +546,18 @@ where
     let app = Application::builder().application_id("worf").build();
     let (sender, receiver) = channel::bounded(1);
 
+    let meta = Rc::new(MetaData {
+        item_provider,
+        item_factory,
+        selected_sender: sender,
+        config: config.clone(),
+        search_ignored_words,
+        expand_mode,
+    });
+
+    let connect_cfg = Arc::clone(&config);
     app.connect_activate(move |app| {
-        build_ui(
-            &config,
-            item_provider.clone(),
-            sender.clone(),
-            app.clone(),
-            new_on_empty,
-            search_ignored_words.clone(),
-            custom_keys.as_ref(),
-        );
+        build_ui::<T>(&connect_cfg, &meta, app.clone(), custom_keys.as_ref());
     });
 
     let gtk_args: [&str; 0] = [];
@@ -524,27 +574,15 @@ where
     receiver_result?
 }
 
-fn build_ui<T, P>(
-    config: &Config,
-    item_provider: P,
-    sender: Sender<Result<Selection<T>, Error>>,
+fn build_ui<T>(
+    config: &Arc<RwLock<Config>>,
+    meta: &Rc<MetaData<T>>,
     app: Application,
-    new_on_empty: bool,
-    search_ignored_words: Option<Vec<Regex>>,
     custom_keys: Option<&CustomKeys>,
 ) where
     T: Clone + 'static + Send,
-    P: ItemProvider<T> + 'static + Send,
 {
     let start = Instant::now();
-
-    let meta = Rc::new(MetaData {
-        item_provider: Arc::new(Mutex::new(item_provider)),
-        selected_sender: sender,
-        config: Rc::new(config.clone()),
-        new_on_empty,
-        search_ignored_words,
-    });
 
     let provider_clone = Arc::clone(&meta.item_provider);
     let get_provider_elements = thread::spawn(move || {
@@ -560,7 +598,7 @@ fn build_ui<T, P>(
         .default_height(1)
         .build();
 
-    let background = create_background(config);
+    let background = create_background(&config.read().unwrap());
 
     let ui_elements = Rc::new(UiElements {
         app,
@@ -571,20 +609,22 @@ fn build_ui<T, P>(
         menu_rows: Arc::new(RwLock::new(HashMap::new())),
         search_text: Arc::new(Mutex::new(String::new())),
         search_delete_event: Arc::new(Mutex::new(None)),
-        outer_box: gtk4::Box::new(config.orientation().into(), 0),
+        outer_box: gtk4::Box::new(config.read().unwrap().orientation().into(), 0),
         scroll: ScrolledWindow::new(),
         custom_key_box: gtk4::Box::new(Orientation::Vertical, 0),
     });
 
     // handle keys as soon as possible
-    setup_key_event_handler(&ui_elements, &meta, custom_keys);
+    setup_key_event_handler(&ui_elements, meta, custom_keys);
 
     log::debug!("keyboard ready after {:?}", start.elapsed());
 
-    if !config.normal_window() {
+    if !config.read().unwrap().normal_window() {
         // Initialize the window as a layer
         ui_elements.window.init_layer_shell();
-        ui_elements.window.set_layer(config.layer().into());
+        ui_elements
+            .window
+            .set_layer(config.read().unwrap().layer().into());
         ui_elements
             .window
             .set_keyboard_mode(KeyboardMode::Exclusive);
@@ -593,7 +633,7 @@ fn build_ui<T, P>(
     ui_elements.window.set_widget_name("window");
     ui_elements.window.set_namespace(Some("worf"));
 
-    if let Some(location) = config.location() {
+    if let Some(location) = config.read().unwrap().location() {
         for anchor in location {
             ui_elements.window.set_anchor(anchor.into(), true);
         }
@@ -615,31 +655,33 @@ fn build_ui<T, P>(
     ui_elements.scroll.set_hexpand(true);
     ui_elements.scroll.set_vexpand(true);
 
-    if config.hide_scroll() {
+    if config.read().unwrap().hide_scroll() {
         ui_elements
             .scroll
             .set_policy(PolicyType::External, PolicyType::External);
     }
     ui_elements.outer_box.append(&ui_elements.scroll);
 
-    build_main_box(config, &ui_elements);
-    build_search_entry(config, &ui_elements, &meta);
+    build_main_box(&config.read().unwrap(), &ui_elements);
+    build_search_entry(&config.read().unwrap(), &ui_elements, meta);
 
     let wrapper_box = gtk4::Box::new(Orientation::Vertical, 0);
     wrapper_box.append(&ui_elements.main_box);
     ui_elements.scroll.set_child(Some(&wrapper_box));
 
     let wait_for_items = Instant::now();
-    let (_changed, provider_elements) = get_provider_elements.join().unwrap();
+    let provider_elements = get_provider_elements.join().unwrap();
     log::debug!("got items after {:?}", wait_for_items.elapsed());
 
     let cfg = config.clone();
     let ui = Rc::clone(&ui_elements);
     ui_elements.window.connect_is_active_notify(move |_| {
-        window_show_resize(&cfg.clone(), &ui);
+        window_show_resize(&cfg.read().unwrap(), &ui);
     });
 
-    build_ui_from_menu_items(&ui_elements, &meta, provider_elements);
+    if let Some(elements) = provider_elements.items {
+        build_ui_from_menu_items(&ui_elements, meta, elements);
+    }
 
     let window_start = Instant::now();
     ui_elements.window.present();
@@ -833,7 +875,7 @@ fn set_search_text<T: Clone + Send + 'static>(
     search_stop_listen_delete_event(ui);
     let mut lock = ui.search_text.lock().unwrap();
     query.clone_into(&mut lock);
-    if let Some(pw) = meta.config.password() {
+    if let Some(pw) = meta.config.read().unwrap().password() {
         let mut ui_text = String::new();
         for _ in 0..query.len() {
             ui_text += &pw;
@@ -850,7 +892,7 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
     meta: &Rc<MetaData<T>>,
     mut items: Vec<MenuItem<T>>,
 ) {
-    if meta.config.sort_order() != SortOrder::Default {
+    if meta.config.read().unwrap().sort_order() != SortOrder::Default {
         items.reverse();
     }
     let start = Instant::now();
@@ -968,7 +1010,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
 
     // hide search
     let propagate = if is_key_match(
-        meta.config.key_hide_search(),
+        meta.config.read().unwrap().key_hide_search(),
         &detection_type,
         key_code,
         keyboard_key,
@@ -976,7 +1018,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
         handle_key_hide_search(ui)
     // submit
     } else if is_key_match(
-        Some(meta.config.key_submit()),
+        Some(meta.config.read().unwrap().key_submit()),
         &detection_type,
         key_code,
         keyboard_key,
@@ -985,7 +1027,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
     }
     // exit
     else if is_key_match(
-        Some(meta.config.key_exit()),
+        Some(meta.config.read().unwrap().key_exit()),
         &detection_type,
         key_code,
         keyboard_key,
@@ -993,7 +1035,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
         handle_key_exit(ui, meta)
     // copy
     } else if is_key_match(
-        meta.config.key_copy(),
+        meta.config.read().unwrap().key_copy(),
         &detection_type,
         key_code,
         keyboard_key,
@@ -1001,7 +1043,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
         handle_key_copy(ui, meta)
     // expand
     } else if is_key_match(
-        Some(meta.config.key_expand()),
+        Some(meta.config.read().unwrap().key_expand()),
         &detection_type,
         key_code,
         keyboard_key,
@@ -1029,7 +1071,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
                 } else {
                     pos
                 };
-                if let Some((start, ch)) = query.char_indices().nth((del_pos) as usize) {
+                if let Some((start, ch)) = query.char_indices().nth(del_pos as usize) {
                     let end = start + ch.len_utf8();
                     query.replace_range(start..end, "");
                 }
@@ -1084,7 +1126,7 @@ fn handle_custom_keys<T: Clone + 'static + Send>(
     modifier_type: gdk4::ModifierType,
     custom_keys: Option<&CustomKeys>,
 ) -> KeyDetectionType {
-    let detection_type = meta.config.key_detection_type();
+    let detection_type = meta.config.read().unwrap().key_detection_type();
     if let Some(custom_keys) = custom_keys {
         let mods = modifiers_from_mask(modifier_type);
         for custom_key in &custom_keys.bindings {
@@ -1098,14 +1140,9 @@ fn handle_custom_keys<T: Clone + 'static + Send>(
 
             if custom_key_match {
                 let search_lock = ui.search_text.lock().unwrap();
-                if let Err(e) = handle_selected_item(
-                    ui,
-                    Rc::<MetaData<T>>::clone(meta),
-                    Some(&search_lock),
-                    None,
-                    meta.new_on_empty,
-                    Some(custom_key),
-                ) {
+                if let Err(e) =
+                    handle_selected_item(ui, meta, Some(&search_lock), None, Some(custom_key))
+                {
                     log::error!("{e}");
                 }
             }
@@ -1118,8 +1155,8 @@ fn update_view_from_provider<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, 
 where
     T: Clone + Send + 'static,
 {
-    let (changed, filtered_list) = meta.item_provider.lock().unwrap().get_elements(Some(query));
-    if changed {
+    let data = meta.item_provider.lock().unwrap().get_elements(Some(query));
+    if let Some(filtered_list) = data.items {
         build_ui_from_menu_items(ui, meta, filtered_list);
     }
     update_view(ui, meta, query);
@@ -1139,9 +1176,10 @@ where
 
     select_first_visible_child(&*lock, &ui.main_box);
     drop(lock);
-    if meta.config.dynamic_lines() {
+    if meta.config.read().unwrap().dynamic_lines() {
         if let Some(geometry) = get_monitor_geometry(ui.window.surface().as_ref()) {
-            let height = calculate_dynamic_lines_window_height(&meta.config, ui, geometry);
+            let height =
+                calculate_dynamic_lines_window_height(&meta.config.read().unwrap(), ui, geometry);
             ui.window.set_height_request(height);
         }
     }
@@ -1168,7 +1206,7 @@ where
             if let Some(expander) = expander {
                 expander.set_expanded(true);
             } else {
-                let opt_changed = {
+                let data = {
                     let lock = ui.menu_rows.read().unwrap();
                     let menu_item = lock.get(fb);
                     menu_item.map(|menu_item| {
@@ -1177,20 +1215,30 @@ where
                                 .lock()
                                 .unwrap()
                                 .get_sub_elements(menu_item),
-                            menu_item.label.clone(),
+                            menu_item.clone(),
                         )
                     })
                 };
 
-                if let Some(changed) = opt_changed {
-                    let items = changed.0.1.unwrap_or_default();
-                    if changed.0.0 {
+                if let Some((provider_data, menu_item)) = data {
+                    if let Some(items) = provider_data.items {
                         build_ui_from_menu_items(ui, meta, items);
-                    }
+                        let query = match meta.expand_mode {
+                            ExpandMode::Verbatim => menu_item.label.clone(),
+                            ExpandMode::WithSpace => format!("{} ", menu_item.label.clone()),
+                        };
 
-                    let query = changed.1;
-                    set_search_text(ui, meta, &query);
-                    update_view(ui, meta, &query);
+                        set_search_text(ui, meta, &query);
+                        if let Ok(new_pos) = i32::try_from(query.len() + 1) {
+                            ui.search.set_position(new_pos);
+                        }
+
+                        update_view(ui, meta, &query);
+                    } else if let Err(e) =
+                        handle_selected_item(ui, meta, None, Some(menu_item), None)
+                    {
+                        log::error!("{e}");
+                    }
                 }
             }
         }
@@ -1221,14 +1269,7 @@ where
     T: Clone + Send + 'static,
 {
     let search_lock = ui.search_text.lock().unwrap();
-    if let Err(e) = handle_selected_item(
-        ui,
-        Rc::<MetaData<T>>::clone(meta),
-        Some(&search_lock),
-        None,
-        meta.new_on_empty,
-        None,
-    ) {
+    if let Err(e) = handle_selected_item(ui, meta, Some(&search_lock), None, None) {
         log::error!("{e}");
     }
     Propagation::Stop
@@ -1431,10 +1472,9 @@ where
 }
 fn handle_selected_item<T>(
     ui: &Rc<UiElements<T>>,
-    meta: Rc<MetaData<T>>,
+    meta: &Rc<MetaData<T>>,
     query: Option<&str>,
     item: Option<MenuItem<T>>,
-    new_on_empty: bool,
     custom_key: Option<&KeyBinding>,
 ) -> Result<(), String>
 where
@@ -1448,37 +1488,31 @@ where
         return Ok(());
     }
 
-    if new_on_empty {
-        let item = MenuItem {
-            label: query.unwrap_or("").to_owned(),
-            icon_path: None,
-            action: None,
-            sub_elements: Vec::new(),
-            working_dir: None,
-            initial_sort_score: 0.0,
-            search_sort_score: 0.0,
-            data: None,
-            visible: true,
-        };
-
-        send_selected_item(ui, meta, custom_key.cloned(), item);
-        Ok(())
-    } else {
-        Err("selected item cannot be resolved".to_owned())
+    if let Some(factory) = meta.item_factory.as_ref() {
+        let factory = factory.lock().unwrap();
+        let label = filtered_query(meta.search_ignored_words.as_ref(), query.unwrap_or(""));
+        let item = factory.new_menu_item(label);
+        if let Some(item) = item {
+            send_selected_item(ui, meta, custom_key.cloned(), item);
+            return Ok(());
+        }
     }
+
+    Err("selected item cannot be resolved".to_owned())
 }
 
 fn send_selected_item<T>(
     ui: &Rc<UiElements<T>>,
-    meta: Rc<MetaData<T>>,
+    meta: &Rc<MetaData<T>>,
     custom_key: Option<KeyBinding>,
     selected_item: MenuItem<T>,
 ) where
     T: Clone + Send + 'static,
 {
     let ui_clone = Rc::clone(ui);
+    let meta_clone = Rc::clone(meta);
     ui.window.connect_hide(move |_| {
-        if let Err(e) = meta.selected_sender.send(Ok(Selection {
+        if let Err(e) = meta_clone.selected_sender.send(Ok(Selection {
             menu: selected_item.clone(),
             custom_key: custom_key.clone(),
         })) {
@@ -1548,7 +1582,7 @@ fn create_menu_row<T: Clone + 'static + Send>(
     row.set_halign(Align::Fill);
     row.set_widget_name("row");
 
-    let row_box = gtk4::Box::new(meta.config.row_box_orientation().into(), 0);
+    let row_box = gtk4::Box::new(meta.config.read().unwrap().row_box_orientation().into(), 0);
     row_box.set_hexpand(true);
     row_box.set_vexpand(false);
     row_box.set_halign(Align::Fill);
@@ -1557,15 +1591,13 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     let (label_img, label_text) = parse_label(&element_to_add.label);
 
-    if meta.config.allow_images() {
+    let config = meta.config.read().unwrap();
+    if meta.config.read().unwrap().allow_images() {
         let img = lookup_icon(
             element_to_add.icon_path.as_ref().map(AsRef::as_ref),
-            &meta.config,
+            &config,
         )
-        .or(lookup_icon(
-            label_img.as_ref().map(AsRef::as_ref),
-            &meta.config,
-        ));
+        .or(lookup_icon(label_img.as_ref().map(AsRef::as_ref), &config));
 
         if let Some(image) = img {
             image.set_widget_name("img");
@@ -1574,16 +1606,16 @@ fn create_menu_row<T: Clone + 'static + Send>(
     }
 
     let label = Label::new(label_text.as_ref().map(AsRef::as_ref));
-    label.set_use_markup(meta.config.allow_markup());
-    label.set_natural_wrap_mode(meta.config.line_wrap().into());
+    label.set_use_markup(meta.config.read().unwrap().allow_markup());
+    label.set_natural_wrap_mode(meta.config.read().unwrap().line_wrap().into());
     label.set_hexpand(true);
     label.set_widget_name("text");
     label.set_wrap(true);
-    if let Some(max_width_chars) = meta.config.line_max_width_chars() {
+    if let Some(max_width_chars) = meta.config.read().unwrap().line_max_width_chars() {
         label.set_max_width_chars(max_width_chars);
     }
 
-    if let Some(max_len) = meta.config.line_max_chars() {
+    if let Some(max_len) = meta.config.read().unwrap().line_max_chars() {
         if let Some(text) = label_text.as_ref() {
             if text.chars().count() > max_len {
                 let end = text
@@ -1597,8 +1629,18 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     row_box.append(&label);
 
-    if meta.config.content_halign().eq(&config::Align::Start)
-        || meta.config.content_halign().eq(&config::Align::Fill)
+    if meta
+        .config
+        .read()
+        .unwrap()
+        .content_halign()
+        .eq(&config::Align::Start)
+        || meta
+            .config
+            .read()
+            .unwrap()
+            .content_halign()
+            .eq(&config::Align::Fill)
     {
         label.set_xalign(0.0);
     }
@@ -1610,16 +1652,19 @@ fn create_menu_row<T: Clone + 'static + Send>(
     let click = GestureClick::new();
     click.set_button(gtk4::gdk::BUTTON_PRIMARY);
 
-    let presses = if meta.config.single_click() { 1 } else { 2 };
+    let presses = if meta.config.read().unwrap().single_click() {
+        1
+    } else {
+        2
+    };
 
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
         if n_press == presses {
             if let Err(e) = handle_selected_item(
                 &click_ui,
-                Rc::<MetaData<T>>::clone(&click_meta),
+                &click_meta,
                 None,
                 Some(element_clone.clone()),
-                false,
                 None,
             ) {
                 log::error!("{e}");
@@ -1703,82 +1748,89 @@ fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
 fn set_menu_visibility_for_search<T: Clone>(
     query: &str,
     items: &mut HashMap<FlowBoxChild, MenuItem<T>>,
-    config: &Config,
+    config: &Arc<RwLock<Config>>,
     search_ignored_words: Option<&Vec<Regex>>,
 ) {
-    {
-        if query.is_empty() {
-            for (fb, menu_item) in items.iter_mut() {
-                menu_item.search_sort_score = 0.0;
-                menu_item.visible = true;
-                fb.set_visible(menu_item.visible);
-            }
-            return;
-        }
-
-        let mut query = if config.insensitive() {
-            query.to_owned().to_lowercase()
-        } else {
-            query.to_owned()
-        };
-
-        if let Some(s) = search_ignored_words.as_ref() {
-            s.iter().for_each(|rgx| {
-                query = rgx.replace_all(&query, "").to_string();
-            });
-        }
-
+    if query.is_empty() {
         for (fb, menu_item) in items.iter_mut() {
-            let menu_item_search = format!(
-                "{} {}",
-                menu_item
-                    .action
-                    .as_ref()
-                    .map(|a| {
-                        if config.insensitive() {
-                            a.to_lowercase()
-                        } else {
-                            a.clone()
-                        }
-                    })
-                    .unwrap_or_default(),
-                if config.insensitive() {
-                    menu_item.label.to_lowercase()
-                } else {
-                    menu_item.label.clone()
-                }
-            );
-
-            let (search_sort_score, visible) = match config.match_method() {
-                MatchMethod::Fuzzy => {
-                    let mut score = strsim::jaro_winkler(&query, &menu_item_search);
-                    if score == 0.0 {
-                        score = -1.0;
-                    }
-
-                    (score, score > config.fuzzy_min_score() && score > 0.0)
-                }
-                MatchMethod::Contains => {
-                    if menu_item_search.contains(&query) {
-                        (1.0, true)
-                    } else {
-                        (0.0, false)
-                    }
-                }
-                MatchMethod::MultiContains => {
-                    let contains = query.split(' ').all(|x| menu_item_search.contains(x));
-                    (if contains { 1.0 } else { 0.0 }, contains)
-                }
-                MatchMethod::None => {
-                    (1.0, true) // items are always shown
-                }
-            };
-
-            menu_item.search_sort_score = search_sort_score + menu_item.initial_sort_score;
-            menu_item.visible = visible;
+            menu_item.search_sort_score = 0.0;
+            menu_item.visible = true;
             fb.set_visible(menu_item.visible);
         }
     }
+
+    let mut query = if config.read().unwrap().insensitive() {
+        query.to_owned().to_lowercase()
+    } else {
+        query.to_owned()
+    };
+
+    query = filtered_query(search_ignored_words, &query);
+
+    for (fb, menu_item) in items.iter_mut() {
+        let menu_item_search = format!(
+            "{} {}",
+            menu_item
+                .action
+                .as_ref()
+                .map(|a| {
+                    if config.read().unwrap().insensitive() {
+                        a.to_lowercase()
+                    } else {
+                        a.clone()
+                    }
+                })
+                .unwrap_or_default(),
+            if config.read().unwrap().insensitive() {
+                menu_item.label.to_lowercase()
+            } else {
+                menu_item.label.clone()
+            }
+        );
+
+        let (search_sort_score, visible) = match config.read().unwrap().match_method() {
+            MatchMethod::Fuzzy => {
+                let mut score = strsim::jaro_winkler(&query, &menu_item_search);
+                if score == 0.0 {
+                    score = -1.0;
+                }
+
+                (
+                    score,
+                    score > config.read().unwrap().fuzzy_min_score() && score > 0.0,
+                )
+            }
+            MatchMethod::Contains => {
+                if menu_item_search.contains(&query) {
+                    (1.0, true)
+                } else {
+                    (0.0, false)
+                }
+            }
+            MatchMethod::MultiContains => {
+                let contains = query.split(' ').all(|x| menu_item_search.contains(x));
+                (if contains { 1.0 } else { 0.0 }, contains)
+            }
+            MatchMethod::None => {
+                (1.0, true) // items are always shown
+            }
+        };
+
+        menu_item.search_sort_score = search_sort_score + menu_item.initial_sort_score;
+        menu_item.visible = visible;
+        fb.set_visible(menu_item.visible);
+    }
+}
+
+#[must_use]
+pub fn filtered_query(search_ignored_words: Option<&Vec<Regex>>, query: &str) -> String {
+    let mut query = query.to_owned();
+    if let Some(s) = search_ignored_words.as_ref() {
+        s.iter().for_each(|rgx| {
+            query = rgx.replace_all(&query, "").to_string();
+        });
+    }
+    query
 }
 
 fn select_first_visible_child<T: Clone>(
