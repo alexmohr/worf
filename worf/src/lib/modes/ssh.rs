@@ -1,7 +1,8 @@
-use std::fs;
-
 use regex::Regex;
+use std::fs;
+use std::sync::{Arc, Mutex, RwLock};
 
+use crate::gui::{ExpandMode, ProviderData};
 use crate::{
     Error,
     config::{Config, SortOrder},
@@ -11,7 +12,7 @@ use crate::{
 
 #[derive(Clone)]
 pub(crate) struct SshProvider<T: Clone> {
-    elements: Vec<MenuItem<T>>,
+    items: Vec<MenuItem<T>>,
 }
 
 impl<T: Clone> SshProvider<T> {
@@ -46,17 +47,23 @@ impl<T: Clone> SshProvider<T> {
             .collect();
 
         gui::apply_sort(&mut items, order);
-        Self { elements: items }
+        Self { items }
     }
 }
 
 impl<T: Clone> ItemProvider<T> for SshProvider<T> {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
-        (false, self.elements.clone())
+    fn get_elements(&mut self, query: Option<&str>) -> ProviderData<T> {
+        if query.is_some() {
+            ProviderData { items: None }
+        } else {
+            ProviderData {
+                items: Some(self.items.clone()),
+            }
+        }
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
-        (false, None)
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> ProviderData<T> {
+        ProviderData { items: None }
     }
 }
 
@@ -87,11 +94,21 @@ pub(crate) fn launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Resu
 /// Will return `Err`
 /// * if it was not able to spawn the process
 /// * if it didn't find a terminal
-pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = SshProvider::new(0, &config.sort_order());
-    let selection_result = gui::show(config.clone(), provider, true, None, None);
+pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+    let provider = Arc::new(Mutex::new(SshProvider::new(
+        0,
+        &config.read().unwrap().sort_order(),
+    )));
+    let selection_result = gui::show(
+        Arc::clone(&config),
+        provider,
+        None,
+        None,
+        ExpandMode::Verbatim,
+        None,
+    );
     if let Ok(mi) = selection_result {
-        launch(&mi.menu, config)?;
+        launch(&mi.menu, &config.read().unwrap())?;
     } else {
         log::error!("No item selected");
     }

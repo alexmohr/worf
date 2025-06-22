@@ -1,9 +1,16 @@
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex, RwLock},
+};
+
 use regex::Regex;
-use std::collections::VecDeque;
 
 use crate::{
     config::Config,
-    gui::{self, ItemProvider, MenuItem},
+    gui::{
+        self, ArcFactory, ArcProvider, DefaultItemFactory, ExpandMode, ItemProvider, MenuItem,
+        ProviderData,
+    },
 };
 
 #[derive(Clone)]
@@ -26,7 +33,7 @@ impl<T: Clone> MathProvider<T> {
 
 impl<T: Clone> ItemProvider<T> for MathProvider<T> {
     #[allow(clippy::cast_possible_truncation)]
-    fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
+    fn get_elements(&mut self, search: Option<&str>) -> ProviderData<T> {
         if let Some(search_text) = search {
             let result = calc(search_text);
 
@@ -41,14 +48,16 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
             );
             let mut result = vec![item];
             result.append(&mut self.elements.clone());
-            (true, result)
+            ProviderData {
+                items: Some(result),
+            }
         } else {
-            (false, self.elements.clone())
+            ProviderData { items: None }
         }
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
-        (false, None)
+    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> ProviderData<T> {
+        ProviderData { items: None }
     }
 }
 
@@ -239,12 +248,21 @@ fn calc(input: &str) -> String {
 }
 
 /// Shows the math mode
-pub fn show(config: &Config) {
-    let mut calc: Vec<MenuItem<String>> = vec![];
+pub fn show(config: Arc<RwLock<Config>>) {
+    let mut calc: Vec<MenuItem<()>> = vec![];
+    let provider = Arc::new(Mutex::new(MathProvider::new(())));
+    let factory: ArcFactory<()> = Arc::new(Mutex::new(DefaultItemFactory::new()));
+    let arc_provider = Arc::clone(&provider) as ArcProvider<()>;
     loop {
-        let mut provider = MathProvider::new(String::new());
-        provider.add_elements(&mut calc.clone());
-        let selection_result = gui::show(config.clone(), provider, true, None, None);
+        provider.lock().unwrap().add_elements(&mut calc.clone());
+        let selection_result = gui::show(
+            config.clone(),
+            Arc::clone(&arc_provider),
+            Some(Arc::clone(&factory)),
+            None,
+            ExpandMode::Verbatim,
+            None,
+        );
         if let Ok(mi) = selection_result {
             calc.push(mi.menu);
         } else {

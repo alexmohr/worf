@@ -1,16 +1,17 @@
+use regex::Regex;
+use std::sync::Mutex;
 use std::{
     fs,
     os::unix::fs::FileTypeExt,
     path::{Path, PathBuf},
+    sync::{Arc, RwLock},
 };
-
-use regex::Regex;
 
 use crate::{
     Error,
     config::{Config, SortOrder, expand_path},
     desktop::spawn_fork,
-    gui::{self, ItemProvider, MenuItem},
+    gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
 };
 
 #[derive(Clone)]
@@ -98,7 +99,7 @@ impl<T: Clone> FileItemProvider<T> {
 }
 
 impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
-    fn get_elements(&mut self, search: Option<&str>) -> (bool, Vec<MenuItem<T>>) {
+    fn get_elements(&mut self, search: Option<&str>) -> ProviderData<T> {
         let default_path = if let Some(home) = dirs::home_dir() {
             home.display().to_string()
         } else {
@@ -117,11 +118,7 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
         let mut items: Vec<MenuItem<T>> = Vec::new();
 
         if !path.exists() {
-            if let Some(last) = &self.last_result {
-                return (false, last.clone());
-            }
-
-            return (true, vec![]);
+            return ProviderData { items: None };
         }
 
         if path.is_dir() {
@@ -183,11 +180,15 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
         gui::apply_sort(&mut items, &self.sort_order);
 
         self.last_result = Some(items.clone());
-        (true, items)
+        ProviderData { items: Some(items) }
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<T>) -> (bool, Option<Vec<MenuItem<T>>>) {
-        (false, self.last_result.clone())
+    fn get_sub_elements(&mut self, item: &MenuItem<T>) -> ProviderData<T> {
+        if self.last_result.as_ref().is_some_and(|lr| lr.len() == 1) {
+            ProviderData { items: None }
+        } else {
+            self.get_elements(Some(&item.label))
+        }
     }
 }
 
@@ -199,15 +200,19 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
 ///
 /// # Panics
 /// In case an internal regex does not parse anymore, this should never happen
-pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = FileItemProvider::new(0, config.sort_order());
+pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+    let provider = Arc::new(Mutex::new(FileItemProvider::new(
+        0,
+        config.read().unwrap().sort_order(),
+    )));
 
     // todo ues a arc instead of cloning the config
     let selection_result = gui::show(
         config.clone(),
         provider,
-        false,
+        None,
         Some(vec![Regex::new("^\\$\\w+").unwrap()]),
+        ExpandMode::Verbatim,
         None,
     )?;
     if let Some(action) = selection_result.menu.action {

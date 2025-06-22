@@ -4,32 +4,42 @@ use std::{
     ffi::CString,
     fs,
     path::PathBuf,
+    sync::{Arc, Mutex, RwLock},
 };
 
+use crate::gui::ArcProvider;
 use crate::{
     Error,
     config::{Config, SortOrder},
     desktop::{is_executable, save_cache_file},
-    gui::{self, ItemProvider, MenuItem},
+    gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
 };
 
-impl ItemProvider<i32> for RunProvider {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<i32>>) {
+impl ItemProvider<()> for RunProvider {
+    fn get_elements(&mut self, query: Option<&str>) -> ProviderData<()> {
         if self.items.is_none() {
             self.items = Some(self.load().clone());
         }
-        (false, self.items.clone().unwrap())
+        if query.is_some() {
+            ProviderData { items: None }
+        } else {
+            ProviderData {
+                items: self.items.clone(),
+            }
+        }
     }
 
-    fn get_sub_elements(&mut self, _: &MenuItem<i32>) -> (bool, Option<Vec<MenuItem<i32>>>) {
-        (false, None)
+    fn get_sub_elements(&mut self, _: &MenuItem<()>) -> ProviderData<()> {
+        ProviderData {
+            items: self.items.clone(),
+        }
     }
 }
 
 #[derive(Clone)]
 struct RunProvider {
-    items: Option<Vec<MenuItem<i32>>>,
+    items: Option<Vec<MenuItem<()>>>,
     cache_path: PathBuf,
     cache: HashMap<String, i64>,
     sort_order: SortOrder,
@@ -48,7 +58,7 @@ impl RunProvider {
 
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_precision_loss)]
-    fn load(&self) -> Vec<MenuItem<i32>> {
+    fn load(&self) -> Vec<MenuItem<()>> {
         let path_var = env::var("PATH").unwrap_or_default();
         let paths = env::split_paths(&path_var);
 
@@ -82,7 +92,7 @@ impl RunProvider {
             .collect();
 
         let mut seen_actions = HashSet::new();
-        let mut entries: Vec<MenuItem<i32>> = entries
+        let mut entries: Vec<MenuItem<()>> = entries
             .into_iter()
             .filter(|entry| {
                 entry
@@ -124,13 +134,23 @@ fn update_run_cache_and_run<T: Clone>(
 /// # Errors
 ///
 /// Will return `Err` if it was not able to spawn the process
-pub fn show(config: &Config) -> Result<(), Error> {
-    let provider = RunProvider::new(config)?;
-    let cache_path = provider.cache_path.clone();
-    let mut cache = provider.cache.clone();
-    let selection_result = gui::show(config.clone(), provider, false, None, None);
+pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+    let provider = Arc::new(Mutex::new(RunProvider::new(&config.read().unwrap())?));
+    let arc_provider = Arc::clone(&provider) as ArcProvider<()>;
+
+    let selection_result = gui::show(
+        config,
+        arc_provider,
+        None,
+        None,
+        ExpandMode::Verbatim,
+        None,
+    );
     match selection_result {
-        Ok(s) => update_run_cache_and_run(&cache_path, &mut cache, s.menu)?,
+        Ok(s) => {
+            let prov = provider.lock().unwrap();
+            update_run_cache_and_run(&prov.cache_path, &mut prov.cache.clone(), s.menu)?;
+        }
         Err(_) => {
             log::error!("No item selected");
         }

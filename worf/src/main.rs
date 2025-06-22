@@ -1,5 +1,5 @@
 use std::env;
-
+use std::sync::{Arc, RwLock};
 use worf::{Error, config, config::Mode, desktop::fork_if_configured, modes};
 
 fn main() {
@@ -25,21 +25,22 @@ fn main() {
     }
 
     fork_if_configured(&config); // may exit the program
-
+    
     if let Some(show) = &config.show() {
+        let config = Arc::new(RwLock::new(config));
         let result = match show {
-            Mode::Run => modes::run::show(&config),
-            Mode::Drun => modes::drun::show(&config),
-            Mode::Dmenu => modes::dmenu::show(&config),
-            Mode::File => modes::file::show(&config),
+            Mode::Run => modes::run::show(config),
+            Mode::Drun => modes::drun::show(config),
+            Mode::Dmenu => modes::dmenu::show(config),
+            Mode::File => modes::file::show(config),
             Mode::Math => {
-                modes::math::show(&config);
+                modes::math::show(config);
                 Ok(())
             }
-            Mode::Ssh => modes::ssh::show(&config),
-            Mode::Emoji => modes::emoji::show(&config),
+            Mode::Ssh => modes::ssh::show(config),
+            Mode::Emoji => modes::emoji::show(config),
             Mode::Auto => modes::auto::show(&config),
-            Mode::WebSearch => modes::search::show(&config),
+            Mode::WebSearch => modes::search::show(config),
         };
 
         if let Err(err) = result {

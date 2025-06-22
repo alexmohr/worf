@@ -1,10 +1,11 @@
 use regex::Regex;
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
     Error,
     config::Config,
     desktop::spawn_fork,
-    gui::{self, ItemProvider, MenuItem},
+    gui::{self, DefaultItemFactory, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::{
         drun::{DRunProvider, update_drun_cache_and_run},
         file::FileItemProvider,
@@ -14,6 +15,7 @@ use crate::{
         ssh::SshProvider,
     },
 };
+use crate::gui::ArcProvider;
 
 #[derive(Debug, Clone, PartialEq)]
 enum AutoRunType {
@@ -22,6 +24,7 @@ enum AutoRunType {
     File,
     Ssh,
     WebSearch,
+    Auto,
 }
 
 #[derive(Clone)]
@@ -46,18 +49,25 @@ impl AutoItemProvider {
         }
     }
 
-    fn default_auto_elements(
-        &mut self,
-        search_opt: Option<&str>,
-    ) -> (bool, Vec<MenuItem<AutoRunType>>) {
+    fn default_auto_elements(&mut self) -> ProviderData<AutoRunType> {
         // return ssh and drun items
-        let (changed, mut items) = self.drun.get_elements(search_opt);
-        items.append(&mut self.ssh.get_elements(search_opt).1);
-        if self.last_mode == Some(AutoRunType::DRun) {
-            (changed, items)
+        if self.last_mode.is_none()
+            || self
+                .last_mode
+                .as_ref()
+                .is_some_and(|t| t != &AutoRunType::Auto)
+        {
+            let mut data = self.drun.get_elements(None);
+            if let Some(items) = data.items.as_mut() {
+                if let Some(mut ssh) = self.ssh.get_elements(None).items {
+                    items.append(&mut ssh);
+                }
+            }
+
+            self.last_mode = Some(AutoRunType::Auto);
+            data
         } else {
-            self.last_mode = Some(AutoRunType::DRun);
-            (true, items)
+            ProviderData { items: None }
         }
     }
 }
@@ -76,13 +86,13 @@ fn contains_math_functions_or_starts_with_number(input: &str) -> bool {
 }
 
 impl ItemProvider<AutoRunType> for AutoItemProvider {
-    fn get_elements(&mut self, search_opt: Option<&str>) -> (bool, Vec<MenuItem<AutoRunType>>) {
+    fn get_elements(&mut self, search_opt: Option<&str>) -> ProviderData<AutoRunType> {
         let search = match search_opt {
             Some(s) if !s.trim().is_empty() => s.trim(),
-            _ => return self.default_auto_elements(search_opt),
+            _ => "",
         };
 
-        let (mode, (changed, items)) = if contains_math_functions_or_starts_with_number(search) {
+        let (mode, provider_data) = if contains_math_functions_or_starts_with_number(search) {
             (AutoRunType::Math, self.math.get_elements(search_opt))
         } else if search.starts_with('$') || search.starts_with('/') || search.starts_with('~') {
             (AutoRunType::File, self.file.get_elements(search_opt))
@@ -96,23 +106,34 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
                 self.search.get_elements(Some(&query)),
             )
         } else {
-            return self.default_auto_elements(search_opt);
+            (AutoRunType::Auto, self.default_auto_elements())
         };
 
-        if self.last_mode.as_ref().is_some_and(|m| m == &mode) {
-            (changed, items)
-        } else {
-            self.last_mode = Some(mode);
-            (true, items)
-        }
+        self.last_mode = Some(mode);
+        provider_data
+
+        // if mode ==  AutoRunType::DRun &&  self.last_mode.as_ref().is_some_and(|l| l == &mode) {
+        //     ProviderData {
+        //         items: None,
+        //     }
+        // } else {
+        //     self.default_auto_elements()
+        // }
     }
 
-    fn get_sub_elements(
-        &mut self,
-        item: &MenuItem<AutoRunType>,
-    ) -> (bool, Option<Vec<MenuItem<AutoRunType>>>) {
-        let (changed, items) = self.get_elements(Some(item.label.as_ref()));
-        (changed, Some(items))
+    fn get_sub_elements(&mut self, item: &MenuItem<AutoRunType>) -> ProviderData<AutoRunType> {
+        if let Some(auto_run_type) = item.data.as_ref() {
+            match auto_run_type {
+                AutoRunType::Math => self.math.get_sub_elements(item),
+                AutoRunType::DRun => self.drun.get_sub_elements(item),
+                AutoRunType::File => self.file.get_sub_elements(item),
+                AutoRunType::Ssh => self.ssh.get_sub_elements(item),
+                AutoRunType::WebSearch => self.search.get_sub_elements(item),
+                AutoRunType::Auto => ProviderData { items: None },
+            }
+        } else {
+            ProviderData { items: None }
+        }
     }
 }
 
@@ -124,23 +145,24 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
 ///
 /// # Panics
 /// Panics if an internal static regex cannot be passed anymore, should never happen
-pub fn show(config: &Config) -> Result<(), Error> {
-    let mut provider = AutoItemProvider::new(config);
-    let cache_path = provider.drun.cache_path.clone();
-    let mut cache = provider.drun.cache.clone();
+pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
+    let provider = Arc::new(Mutex::new(AutoItemProvider::new(&config.read().unwrap())));
+    let arc_provider = Arc::clone(&provider) as ArcProvider<AutoRunType>;
+    let cache_path = provider.lock().unwrap().drun.cache_path.clone();
+    let mut cache = provider.lock().unwrap().drun.cache.clone();
 
     loop {
-        // todo ues a arc instead of cloning the config
         let selection_result = gui::show(
-            config.clone(),
-            provider.clone(),
-            true,
+            Arc::clone(&config),
+            Arc::clone(&arc_provider),
+            Some(Arc::new(Mutex::new(DefaultItemFactory::new()))),
             Some(
                 vec!["ssh", "emoji", "^\\$\\w+", "^\\?\\s*"]
                     .into_iter()
                     .map(|s| Regex::new(s).unwrap())
                     .collect(),
             ),
+            ExpandMode::Verbatim,
             None,
         );
 
@@ -149,7 +171,12 @@ pub fn show(config: &Config) -> Result<(), Error> {
             if let Some(data) = &selection_result.data {
                 match data {
                     AutoRunType::Math => {
-                        provider.math.elements.push(selection_result);
+                        provider
+                            .lock()
+                            .unwrap()
+                            .math
+                            .elements
+                            .push(selection_result);
                     }
                     AutoRunType::DRun => {
                         update_drun_cache_and_run(&cache_path, &mut cache, selection_result)?;
@@ -162,7 +189,7 @@ pub fn show(config: &Config) -> Result<(), Error> {
                         break;
                     }
                     AutoRunType::Ssh => {
-                        ssh::launch(&selection_result, config)?;
+                        ssh::launch(&selection_result, &config.read().unwrap())?;
                         break;
                     }
                     AutoRunType::WebSearch => {
@@ -171,10 +198,13 @@ pub fn show(config: &Config) -> Result<(), Error> {
                         }
                         break;
                     }
+                    AutoRunType::Auto => {
+                        unreachable!("Auto mode should never be set for show.")
+                    }
                 }
             } else if selection_result.label.starts_with("ssh") {
                 selection_result.label = selection_result.label.chars().skip(4).collect();
-                ssh::launch(&selection_result, config)?;
+                ssh::launch(&selection_result, &config.read().unwrap())?;
             }
         } else {
             log::error!("No item selected");

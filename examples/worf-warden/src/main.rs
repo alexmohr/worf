@@ -1,9 +1,9 @@
-use std::{collections::HashMap, env, process::Command, thread::sleep, time::Duration};
+use std::{collections::HashMap, env, process::Command, thread::sleep, time::Duration, sync::{Arc, Mutex, RwLock}};
 
 use worf::{
     config::{self, Config, CustomKeyHintLocation, Key},
     desktop::{copy_to_clipboard, spawn_fork},
-    gui::{self, CustomKeyHint, CustomKeys, ItemProvider, KeyBinding, MenuItem, Modifier},
+    gui::{self, CustomKeyHint, CustomKeys, ItemProvider, KeyBinding, MenuItem, Modifier, ProviderData, ExpandMode},
 };
 
 #[derive(Clone)]
@@ -75,15 +75,21 @@ impl PasswordProvider {
 }
 
 impl ItemProvider<MenuItemMetaData> for PasswordProvider {
-    fn get_elements(&mut self, _: Option<&str>) -> (bool, Vec<MenuItem<MenuItemMetaData>>) {
-        (false, self.items.clone())
+    fn get_elements(&mut self, query: Option<&str>) -> ProviderData<MenuItemMetaData> {
+        if query.is_some() {
+            ProviderData { items: None }
+        } else {
+            ProviderData {
+                items: Some(self.items.clone()),
+            }
+        }
     }
 
     fn get_sub_elements(
         &mut self,
         _: &MenuItem<MenuItemMetaData>,
-    ) -> (bool, Option<Vec<MenuItem<MenuItemMetaData>>>) {
-        (false, None)
+    ) -> ProviderData<MenuItemMetaData> {
+        ProviderData { items: None }
     }
 }
 
@@ -265,12 +271,13 @@ fn key_lock() -> KeyBinding {
     }
 }
 
-fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
+fn show(config: Arc<RwLock<Config>>, provider: Arc<Mutex<PasswordProvider>>) -> Result<(), String> {
     match gui::show(
-        config.clone(),
+        Arc::clone(&config),
         provider,
-        false,
         None,
+        None,
+        ExpandMode::Verbatim,
         Some(CustomKeys {
             bindings: vec![
                 key_type_all(),
@@ -294,7 +301,7 @@ fn show(config: Config, provider: PasswordProvider) -> Result<(), String> {
         Ok(selection) => {
             if let Some(meta) = selection.menu.data {
                 if meta.ids.len() > 1 {
-                    return show(config, PasswordProvider::sub_provider(meta.ids)?);
+                    return show(config, Arc::new(Mutex::new(PasswordProvider::sub_provider(meta.ids)?)));
                 }
 
                 let id = meta.ids.first().unwrap_or(&selection.menu.label);
@@ -344,7 +351,7 @@ fn main() -> Result<(), String> {
         .init();
 
     let args = config::parse_args();
-    let config = config::load_config(Some(&args)).unwrap_or(args);
+    let config = Arc::new(RwLock::new(config::load_config(Some(&args)).unwrap_or(args)));
 
     if !groups().contains("input") {
         log::error!(
@@ -359,6 +366,6 @@ fn main() -> Result<(), String> {
     }
 
     // todo eventually use a propper rust client for this, for now rbw is good enough
-    let provider = PasswordProvider::new(&config)?;
+    let provider = Arc::new(Mutex::new(PasswordProvider::new(&config.read().unwrap())?));
     show(config, provider)
 }
