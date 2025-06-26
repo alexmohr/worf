@@ -1,0 +1,16 @@
+[package]
+name = "worf-hyprspace"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+worf = {path = "../../worf"}
+env_logger = "0.11.8"
+hyprland = "0.4.0-beta.2"
+clap = "4.5.40"
+serde = "1.0.219"
+strum = "0.27.1"
+strum_macros = "0.27.1"
+Inflector = "0.11"
+regex = "1.11.1"
+log = "0.4.27"
