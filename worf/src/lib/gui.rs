@@ -1294,6 +1294,13 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
         return;
     };
 
+    if !config.blurred_background_fullscreen() {
+        if let Some(background) = &ui.background {
+            background.set_height_request(geometry.height());
+            background.set_width_request(geometry.width());
+        }
+    }
+
     // Calculate target width from config, return early if not set
     let Some(target_width) = percent_or_absolute(&config.width(), geometry.width()) else {
         log::error!("width is not set");
