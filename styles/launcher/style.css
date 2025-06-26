@@ -1,24 +1,12 @@
-:root {
-  --bg-blur: rgba(33, 33, 33, 0.6);
-  --entry-hover: rgba(255, 255, 255, 0.08);
-  --entry-selected: rgba(214, 174, 0, 0.2);
-  --search-bg: rgba(32, 32, 32, 0.6);
-  --search-border: rgba(214, 174, 0, 1);
-  --text-color: #f2f2f2;
-  --font: 'DejaVu Sans', 'Segoe UI', sans-serif;
-  --transition: 0.2s ease;
-}
-
 /* General Reset */
 * {
-  font-family: var(--font);
+  font-family: 'DejaVu Sans', 'Segoe UI', sans-serif;
   box-sizing: border-box;
   outline: none;
+  background-color: transparent;
 }
 
 #background {
-  background-color: rgba(33, 33, 33, 0.1);
-  backdrop-filter: blur(12px);
   width: 100vw;
   height: 100vh;
   overflow-y: auto;
@@ -26,6 +14,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  background-color: rgba(32, 32, 32, 0.5);
 }
 
 #window {
@@ -35,7 +24,6 @@
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 1200px;
   margin: 2em 15em 5em;
 }
 
@@ -53,9 +41,9 @@
 
 /* Search input styling */
 #input {
-  background-color: var(--search-bg);
-  color: var(--text-color);
-  border-bottom: 2px solid var(--search-border);
+  background-color: rgba(32, 32, 32, 0.6);
+  color: #f2f2f2;
+  border-bottom: 2px solid rgba(39, 37, 164, 1);
   padding: 0.8rem 1rem;
   font-size: 1rem;
   border-radius: 6px;
@@ -64,38 +52,31 @@
   margin: 2em 25em 5em;
 }
 
-#input:focus,
-#input:focus-visible,
-#input:active {
-  all: unset;
-  background-color: var(--search-bg);
-  color: var(--text-color);
-  border-bottom: 2px solid rgba(214, 174, 2, 1);
-  font-size: 1rem;
-}
-
 /* Entry styling */
 #scroll #inner-box #entry {
   color: #fff;
-  background-color: rgba(32, 32, 32, 0);
+  background-color: transparent;
   padding: 1rem;
-  margin: 1rem;
+  margin: 2em;
+  margin-bottom: 6em;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  transition: background-color var(--transition), transform var(--transition);
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+#window #outer-box #scroll #inner-box {
+  background-color: transparent;
 }
 
 #entry:hover {
-  background-color: rgba(255, 255, 255, 1);
+  background-color: transparent;
   transform: scale(1.3);
 }
 
 #entry:selected {
-  color: #fff;
-  background-color: var(--entry-selected);
-  border-bottom: 3px solid var(--search-border);
+  border-bottom: 3px solid rgba(39, 37, 164, 1);
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
