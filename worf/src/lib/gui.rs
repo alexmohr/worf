@@ -762,7 +762,7 @@ fn build_search_entry<T: Clone + Send + 'static>(
     ui_elements.search.set_css_classes(&["input"]);
     ui_elements
         .search
-        .set_placeholder_text(Some(config.prompt().as_ref()));
+        .set_placeholder_text(Some(&config.prompt().unwrap_or("Search...".to_owned())));
     ui_elements.search.set_can_focus(false);
     search_start_listen_delete_event(ui_elements, meta);
 
