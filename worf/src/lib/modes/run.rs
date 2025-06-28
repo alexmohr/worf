@@ -134,18 +134,13 @@ fn update_run_cache_and_run<T: Clone>(
 /// # Errors
 ///
 /// Will return `Err` if it was not able to spawn the process
-pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+/// # Panics
+/// When failing to unwrap the arc lock
+pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     let provider = Arc::new(Mutex::new(RunProvider::new(&config.read().unwrap())?));
     let arc_provider = Arc::clone(&provider) as ArcProvider<()>;
 
-    let selection_result = gui::show(
-        config,
-        arc_provider,
-        None,
-        None,
-        ExpandMode::Verbatim,
-        None,
-    );
+    let selection_result = gui::show(config, arc_provider, None, None, ExpandMode::Verbatim, None);
     match selection_result {
         Ok(s) => {
             let prov = provider.lock().unwrap();

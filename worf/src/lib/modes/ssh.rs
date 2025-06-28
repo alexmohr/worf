@@ -94,19 +94,14 @@ pub(crate) fn launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Resu
 /// Will return `Err`
 /// * if it was not able to spawn the process
 /// * if it didn't find a terminal
-pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+/// # Panics
+/// When failing to unwrap the arc lock
+pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     let provider = Arc::new(Mutex::new(SshProvider::new(
         0,
         &config.read().unwrap().sort_order(),
     )));
-    let selection_result = gui::show(
-        Arc::clone(&config),
-        provider,
-        None,
-        None,
-        ExpandMode::Verbatim,
-        None,
-    );
+    let selection_result = gui::show(config, provider, None, None, ExpandMode::Verbatim, None);
     if let Ok(mi) = selection_result {
         launch(&mi.menu, &config.read().unwrap())?;
     } else {

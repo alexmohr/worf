@@ -157,7 +157,7 @@ fn main() -> Result<(), String> {
         &cache,
     )?));
     let windows = provider.lock().unwrap().windows.clone();
-    let result = gui::show(config, provider, None, None, ExpandMode::Verbatim, None)
+    let result = gui::show(&config, provider, None, None, ExpandMode::Verbatim, None)
         .map_err(|e| e.to_string())?;
     let update_cache = thread::spawn(move || {
         windows.iter().for_each(|item| {
