@@ -63,36 +63,6 @@ pub enum KeyDetectionType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum Mode {
-    /// searches `$PATH` for executables and allows them to be run by selecting them.
-    Run,
-    /// searches `$XDG_DATA_HOME/applications` and `$XDG_DATA_DIRS/applications`
-    /// for desktop files and allows them to be run by selecting them.
-    Drun,
-
-    /// reads from stdin and displays options which when selected will be output to stdout.
-    Dmenu,
-
-    /// tries to determine automatically what to do
-    Auto,
-
-    /// use worf as file browser
-    File,
-
-    /// Use is as calculator
-    Math,
-
-    /// Connect via ssh to a given host
-    Ssh,
-
-    /// Emoji browser
-    Emoji,
-
-    /// Open search engine.
-    WebSearch,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Layer {
     Background,
     Bottom,
@@ -124,27 +94,6 @@ impl FromStr for Anchor {
             "bottom" => Ok(Anchor::Bottom),
             "right" => Ok(Anchor::Right),
             other => Err(format!("Invalid anchor: {other}")),
-        }
-    }
-}
-
-impl FromStr for Mode {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "run" => Ok(Mode::Run),
-            "drun" => Ok(Mode::Drun),
-            "dmenu" => Ok(Mode::Dmenu),
-            "file" => Ok(Mode::File),
-            "math" => Ok(Mode::Math),
-            "ssh" => Ok(Mode::Ssh),
-            "emoji" => Ok(Mode::Emoji),
-            "websearch" => Ok(Mode::WebSearch),
-            "auto" => Ok(Mode::Auto),
-            _ => Err(Error::InvalidArgument(
-                format!("{s} is not a valid argument, see help for details").to_owned(),
-            )),
         }
     }
 }
@@ -443,10 +392,6 @@ pub struct Config {
     /// or `$HOME/.config/worf/style.css` if `$XDG_CONF_DIR` is not set.
     #[clap(long = "style")]
     style: Option<String>,
-
-    /// Defines the mode worf is running in
-    #[clap(long = "show")]
-    show: Option<Mode>,
 
     /// Default width of the window, defaults to 50% of the screen
     #[clap(long = "width")]
@@ -771,25 +716,8 @@ impl Config {
     }
 
     #[must_use]
-    pub fn prompt(&self) -> String {
-        match &self.prompt {
-            None => match &self.show {
-                None => String::new(),
-                Some(mode) => match mode {
-                    Mode::Run => "run".to_owned(),
-                    Mode::Drun => "drun".to_owned(),
-                    Mode::Dmenu => "dmenu".to_owned(),
-                    Mode::Math => "math".to_owned(),
-                    Mode::File => "file".to_owned(),
-                    Mode::Auto => "auto".to_owned(),
-                    Mode::Ssh => "ssh".to_owned(),
-                    Mode::Emoji => "emoji".to_owned(),
-                    Mode::WebSearch => "websearch".to_owned(),
-                },
-            },
-
-            Some(prompt) => prompt.clone(),
-        }
+    pub fn prompt(&self) -> Option<String> {
+        self.prompt.clone()
     }
 
     pub fn set_prompt(&mut self, val: String) {
@@ -853,11 +781,6 @@ impl Config {
 
             None
         })
-    }
-
-    #[must_use]
-    pub fn show(&self) -> Option<Mode> {
-        self.show.clone()
     }
 
     #[must_use]
