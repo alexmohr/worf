@@ -62,7 +62,9 @@ impl ItemProvider<String> for EmojiProvider {
 /// # Errors
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
-pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+/// # Panics
+/// When failing to unwrap the arc lock
+pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     let cfg = config.read().unwrap();
     let provider = Arc::new(Mutex::new(EmojiProvider::new(
         &cfg.sort_order(),
@@ -70,14 +72,7 @@ pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
     )));
     drop(cfg);
 
-    let selection_result = gui::show(
-        config.clone(),
-        provider,
-        None,
-        None,
-        ExpandMode::Verbatim,
-        None,
-    )?;
+    let selection_result = gui::show(config, provider, None, None, ExpandMode::Verbatim, None)?;
     match selection_result.menu.data {
         None => Err(Error::MissingAction),
         Some(action) => copy_to_clipboard(action, None),

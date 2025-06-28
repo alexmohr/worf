@@ -75,10 +75,17 @@ pub struct DefaultItemFactory<T: Clone> {
 }
 
 impl<T: Clone> DefaultItemFactory<T> {
+    #[must_use]
     pub fn new() -> DefaultItemFactory<T> {
         DefaultItemFactory::<T> {
-            _marker: Default::default(),
+            _marker: PhantomData,
         }
+    }
+}
+
+impl<T: Clone> Default for DefaultItemFactory<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -516,8 +523,10 @@ struct UiElements<T: Clone> {
 /// # Errors
 ///
 /// Will return Err when the channel between the UI and this is broken
+/// # Panics
+/// When failing to unwrap the arc lock
 pub fn show<T>(
-    config: Arc<RwLock<Config>>,
+    config: &Arc<RwLock<Config>>,
     item_provider: ArcProvider<T>,
     item_factory: Option<ArcFactory<T>>,
     search_ignored_words: Option<Vec<Regex>>,
@@ -550,12 +559,12 @@ where
         item_provider,
         item_factory,
         selected_sender: sender,
-        config: config.clone(),
+        config: Arc::clone(config),
         search_ignored_words,
         expand_mode,
     });
 
-    let connect_cfg = Arc::clone(&config);
+    let connect_cfg = Arc::clone(config);
     app.connect_activate(move |app| {
         build_ui::<T>(&connect_cfg, &meta, app.clone(), custom_keys.as_ref());
     });
@@ -673,7 +682,7 @@ fn build_ui<T>(
     let provider_elements = get_provider_elements.join().unwrap();
     log::debug!("got items after {:?}", wait_for_items.elapsed());
 
-    let cfg = config.clone();
+    let cfg = Arc::clone(config);
     let ui = Rc::clone(&ui_elements);
     ui_elements.window.connect_is_active_notify(move |_| {
         window_show_resize(&cfg.read().unwrap(), &ui);

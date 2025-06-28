@@ -1,6 +1,7 @@
 use regex::Regex;
 use std::sync::{Arc, Mutex, RwLock};
 
+use crate::gui::ArcProvider;
 use crate::{
     Error,
     config::Config,
@@ -15,7 +16,6 @@ use crate::{
         ssh::SshProvider,
     },
 };
-use crate::gui::ArcProvider;
 
 #[derive(Debug, Clone, PartialEq)]
 enum AutoRunType {
@@ -153,7 +153,7 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
 
     loop {
         let selection_result = gui::show(
-            Arc::clone(&config),
+            config,
             Arc::clone(&arc_provider),
             Some(Arc::new(Mutex::new(DefaultItemFactory::new()))),
             Some(

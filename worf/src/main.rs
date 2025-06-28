@@ -1,12 +1,11 @@
+use clap::Parser;
+use std::fmt::Display;
+use std::str::FromStr;
 use std::{
     env,
     sync::{Arc, RwLock},
 };
-use std::fmt::Display;
-use std::str::FromStr;
-use clap::Parser;
 use worf::{Error, config, desktop::fork_if_configured, modes};
-
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -54,7 +53,7 @@ struct MainConfig {
 impl Display for Mode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Mode::Run =>  write!(f, "run"),
+            Mode::Run => write!(f, "run"),
             Mode::Drun => write!(f, "drun"),
             Mode::Dmenu => write!(f, "dmenu"),
             Mode::Math => write!(f, "math"),
@@ -93,7 +92,7 @@ fn main() {
         .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
         .format_timestamp_micros()
         .init();
-    
+
     let mut config = MainConfig::parse();
     config.worf = config::load_config(Some(&config.worf)).unwrap_or(config.worf);
     if config.worf.prompt().is_none() {
@@ -109,18 +108,18 @@ fn main() {
 
     let cfg_arc = Arc::new(RwLock::new(config.worf));
     let result = match config.show {
-        Mode::Run => modes::run::show(cfg_arc),
-        Mode::Drun => modes::drun::show(cfg_arc),
-        Mode::Dmenu => modes::dmenu::show(cfg_arc),
-        Mode::File => modes::file::show(cfg_arc),
+        Mode::Run => modes::run::show(&cfg_arc),
+        Mode::Drun => modes::drun::show(&cfg_arc),
+        Mode::Dmenu => modes::dmenu::show(&cfg_arc),
+        Mode::File => modes::file::show(&cfg_arc),
         Mode::Math => {
-            modes::math::show(cfg_arc);
+            modes::math::show(&cfg_arc);
             Ok(())
         }
-        Mode::Ssh => modes::ssh::show(cfg_arc),
-        Mode::Emoji => modes::emoji::show(cfg_arc),
+        Mode::Ssh => modes::ssh::show(&cfg_arc),
+        Mode::Emoji => modes::emoji::show(&cfg_arc),
         Mode::Auto => modes::auto::show(&cfg_arc),
-        Mode::WebSearch => modes::search::show(cfg_arc),
+        Mode::WebSearch => modes::search::show(&cfg_arc),
     };
 
     if let Err(err) = result {

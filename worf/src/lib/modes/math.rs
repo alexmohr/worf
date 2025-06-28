@@ -248,7 +248,9 @@ fn calc(input: &str) -> String {
 }
 
 /// Shows the math mode
-pub fn show(config: Arc<RwLock<Config>>) {
+/// # Panics
+/// When failing to unwrap the arc lock
+pub fn show(config: &Arc<RwLock<Config>>) {
     let mut calc: Vec<MenuItem<()>> = vec![];
     let provider = Arc::new(Mutex::new(MathProvider::new(())));
     let factory: ArcFactory<()> = Arc::new(Mutex::new(DefaultItemFactory::new()));
@@ -256,7 +258,7 @@ pub fn show(config: Arc<RwLock<Config>>) {
     loop {
         provider.lock().unwrap().add_elements(&mut calc.clone());
         let selection_result = gui::show(
-            config.clone(),
+            config,
             Arc::clone(&arc_provider),
             Some(Arc::clone(&factory)),
             None,

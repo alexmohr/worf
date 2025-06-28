@@ -52,7 +52,9 @@ impl ItemProvider<String> for DMenuProvider {
 /// # Errors
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
-pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+/// # Panics
+/// When failing to unwrap the arc lock
+pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     let provider = Arc::new(Mutex::new(DMenuProvider::new(
         &config.read().unwrap().sort_order(),
     )));

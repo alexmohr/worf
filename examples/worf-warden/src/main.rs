@@ -1,9 +1,19 @@
-use std::{collections::HashMap, env, process::Command, thread::sleep, time::Duration, sync::{Arc, Mutex, RwLock}};
+use std::{
+    collections::HashMap,
+    env,
+    process::Command,
+    sync::{Arc, Mutex, RwLock},
+    thread::sleep,
+    time::Duration,
+};
 
 use worf::{
     config::{self, Config, CustomKeyHintLocation, Key},
     desktop::{copy_to_clipboard, spawn_fork},
-    gui::{self, CustomKeyHint, CustomKeys, ItemProvider, KeyBinding, MenuItem, Modifier, ProviderData, ExpandMode},
+    gui::{
+        self, CustomKeyHint, CustomKeys, ExpandMode, ItemProvider, KeyBinding, MenuItem, Modifier,
+        ProviderData,
+    },
 };
 
 #[derive(Clone)]
@@ -138,7 +148,7 @@ fn rbw(cmd: &str, args: Option<Vec<&str>>) -> Result<String, String> {
 
     let output = command
         .output()
-        .map_err(|e| format!("Failed to execute command: {}", e))?;
+        .map_err(|e| format!("Failed to execute command: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -146,7 +156,7 @@ fn rbw(cmd: &str, args: Option<Vec<&str>>) -> Result<String, String> {
     }
 
     let stdout =
-        String::from_utf8(output.stdout).map_err(|e| format!("Invalid UTF-8 output: {}", e))?;
+        String::from_utf8(output.stdout).map_err(|e| format!("Invalid UTF-8 output: {e}"))?;
 
     Ok(stdout.trim().to_string())
 }
@@ -273,7 +283,7 @@ fn key_lock() -> KeyBinding {
 
 fn show(config: Arc<RwLock<Config>>, provider: Arc<Mutex<PasswordProvider>>) -> Result<(), String> {
     match gui::show(
-        Arc::clone(&config),
+        &config,
         provider,
         None,
         None,
@@ -301,7 +311,10 @@ fn show(config: Arc<RwLock<Config>>, provider: Arc<Mutex<PasswordProvider>>) -> 
         Ok(selection) => {
             if let Some(meta) = selection.menu.data {
                 if meta.ids.len() > 1 {
-                    return show(config, Arc::new(Mutex::new(PasswordProvider::sub_provider(meta.ids)?)));
+                    return show(
+                        config,
+                        Arc::new(Mutex::new(PasswordProvider::sub_provider(meta.ids)?)),
+                    );
                 }
 
                 let id = meta.ids.first().unwrap_or(&selection.menu.label);
@@ -351,7 +364,9 @@ fn main() -> Result<(), String> {
         .init();
 
     let args = config::parse_args();
-    let config = Arc::new(RwLock::new(config::load_config(Some(&args)).unwrap_or(args)));
+    let config = Arc::new(RwLock::new(
+        config::load_config(Some(&args)).unwrap_or(args),
+    ));
 
     if !groups().contains("input") {
         log::error!(

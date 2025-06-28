@@ -54,14 +54,16 @@ impl<T: Clone> ItemProvider<T> for SearchProvider<T> {
 /// # Errors
 ///
 /// Forwards errors from the gui. See `gui::show` for details.
-pub fn show(config: Arc<RwLock<Config>>) -> Result<(), Error> {
+/// # Panics
+/// When failing to unwrap the arc lock
+pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     let provider = Arc::new(Mutex::new(SearchProvider::new(
         (),
         config.read().unwrap().search_query(),
     )));
     let factory: ArcFactory<()> = Arc::new(Mutex::new(DefaultItemFactory::new()));
     let selection_result = gui::show(
-        config.clone(),
+        config,
         provider,
         Some(factory),
         None,
