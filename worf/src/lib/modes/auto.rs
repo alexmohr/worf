@@ -111,14 +111,6 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
 
         self.last_mode = Some(mode);
         provider_data
-
-        // if mode ==  AutoRunType::DRun &&  self.last_mode.as_ref().is_some_and(|l| l == &mode) {
-        //     ProviderData {
-        //         items: None,
-        //     }
-        // } else {
-        //     self.default_auto_elements()
-        // }
     }
 
     fn get_sub_elements(&mut self, item: &MenuItem<AutoRunType>) -> ProviderData<AutoRunType> {
