@@ -90,11 +90,18 @@ fn normalize_bases(expr: &str) -> String {
         .to_string()
 }
 
+fn insert_implicit_multiplication(tokens: &mut VecDeque<Token>, last_token: Option<&Token>) {
+    if matches!(last_token, Some(Token::Num(_) | Token::Op(')'))) {
+        tokens.push_back(Token::Op('*'));
+    }
+}
+
 /// Tokenize a normalized expression string into tokens
 fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
     let mut tokens = VecDeque::new();
     let chars: Vec<char> = expr.chars().collect();
     let mut i = 0;
+    let mut last_token: Option<Token> = None;
 
     while i < chars.len() {
         let c = chars[i];
@@ -108,17 +115,23 @@ fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
         if i + 1 < chars.len() {
             match &expr[i..=i + 1] {
                 "<<" => {
+                    insert_implicit_multiplication(&mut tokens, last_token.as_ref());
                     tokens.push_back(Token::ShiftLeft);
+                    last_token = Some(Token::ShiftLeft);
                     i += 2;
                     continue;
                 }
                 ">>" => {
+                    insert_implicit_multiplication(&mut tokens, last_token.as_ref());
                     tokens.push_back(Token::ShiftRight);
+                    last_token = Some(Token::ShiftRight);
                     i += 2;
                     continue;
                 }
                 "**" => {
+                    insert_implicit_multiplication(&mut tokens, last_token.as_ref());
                     tokens.push_back(Token::Power);
+                    last_token = Some(Token::Power);
                     i += 2;
                     continue;
                 }
@@ -126,20 +139,47 @@ fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
             }
         }
 
-        // Single-character operators or digits
+        // Single-character operators, parentheses, or digits
         match c {
             '+' | '-' | '*' | '/' | '&' | '|' | '^' => {
-                tokens.push_back(Token::Op(c));
+                let token = Token::Op(c);
+                tokens.push_back(token);
+                last_token = Some(token);
+                i += 1;
+            }
+            '(' => {
+                insert_implicit_multiplication(&mut tokens, last_token.as_ref());
+                let token = Token::Op('(');
+                tokens.push_back(token);
+                last_token = Some(token);
+                i += 1;
+            }
+            ')' => {
+                let token = Token::Op(')');
+                tokens.push_back(token);
+                last_token = Some(token);
                 i += 1;
             }
             '0'..='9' => {
+                // Only insert implicit multiplication if the last token is ')' and the last token in tokens is not already an operator (except ')')
+                if let Some(Token::Op(')')) = last_token {
+                    if let Some(Token::Op(op)) = tokens.back() {
+                        if *op == ')' {
+                            tokens.push_back(Token::Op('*'));
+                        }
+                    } else {
+                        tokens.push_back(Token::Op('*'));
+                    }
+                }
                 let start = i;
                 while i < chars.len() && chars[i].is_ascii_digit() {
                     i += 1;
                 }
                 let num_str: String = chars[start..i].iter().collect();
                 let n = num_str.parse::<i64>().unwrap();
-                tokens.push_back(Token::Num(n));
+                let token = Token::Num(n);
+                tokens.push_back(token);
+                last_token = Some(token);
             }
             _ => return Err("Invalid character in expression".to_owned()),
         }
@@ -203,8 +243,31 @@ fn eval_expr(tokens: &mut VecDeque<Token>) -> Result<Value, String> {
     while let Some(token) = tokens.pop_front() {
         match token {
             Token::Num(n) => values.push(Value::Int(n)),
+            Token::Op('(') => {
+                ops.push(Token::Op('('));
+            }
+            Token::Op(')') => {
+                while let Some(top_op) = ops.last() {
+                    if let Token::Op('(') = top_op {
+                        break;
+                    }
+                    let b = values.pop().ok_or("Missing left operand")?;
+                    let a = values.pop().ok_or("Missing right operand")?;
+                    let op = ops.pop().ok_or("Missing operator")?;
+                    values.push(apply_op(&a, &b, &op));
+                }
+                if let Some(Token::Op('(')) = ops.last() {
+                    ops.pop(); // Remove '('
+                } else {
+                    return Err("Mismatched parentheses".to_owned());
+                }
+            }
             op @ (Token::Op(_) | Token::ShiftLeft | Token::ShiftRight | Token::Power) => {
                 while let Some(top_op) = ops.last() {
+                    // Only pop ops with higher or equal precedence, and not '('
+                    if let Token::Op('(') = top_op {
+                        break;
+                    }
                     if precedence(&op) >= precedence(top_op) {
                         let b = values.pop().ok_or("Missing left operand")?;
                         let a = values.pop().ok_or("Missing right operand")?;
@@ -220,6 +283,9 @@ fn eval_expr(tokens: &mut VecDeque<Token>) -> Result<Value, String> {
     }
 
     while let Some(op) = ops.pop() {
+        if let Token::Op('(') = op {
+            return Err("Mismatched parentheses".to_owned());
+        }
         let b = values
             .pop()
             .ok_or("Missing right operand in final evaluation")?;
