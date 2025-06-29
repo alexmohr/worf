@@ -1175,16 +1175,31 @@ fn update_view<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, query: &str)
 where
     T: Clone + Send + 'static,
 {
-    let mut lock = ui.menu_rows.write().unwrap();
+    let mut menu_rows = ui.menu_rows.write().unwrap();
     set_menu_visibility_for_search(
         query,
-        &mut lock,
+        &mut menu_rows,
         &meta.config,
         meta.search_ignored_words.as_ref(),
     );
 
-    select_first_visible_child(&*lock, &ui.main_box);
-    drop(lock);
+    select_first_visible_child(&*menu_rows, &ui.main_box);
+
+    if meta.config.read().unwrap().auto_select_on_search() {
+        let visible_items = menu_rows
+            .iter()
+            .filter(|(_, menu)| menu.visible)
+            .collect::<Vec<_>>();
+        if visible_items.len() == 1 {
+            if let Err(e) =
+                handle_selected_item(ui, meta, None, Some(visible_items[0].1.clone()), None)
+            {
+                log::error!("failed to handle selected item {e}");
+            }
+        }
+    }
+
+    drop(menu_rows);
     if meta.config.read().unwrap().dynamic_lines() {
         if let Some(geometry) = get_monitor_geometry(ui.window.surface().as_ref()) {
             let height =

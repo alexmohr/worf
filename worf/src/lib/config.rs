@@ -632,6 +632,10 @@ pub struct Config {
     /// Allow submitting selected entry with expand key if there is only 1 item left.
     #[clap(long = "submit-with-expand")]
     submit_with_expand: Option<bool>,
+
+    /// Auto select when only 1 possible choice is left
+    #[clap(long = "auto-select-on-search")]
+    auto_select_on_search: Option<bool>,
 }
 
 impl Config {
@@ -915,6 +919,11 @@ impl Config {
     #[must_use]
     pub fn submit_with_expand(&self) -> bool {
         self.submit_with_expand.unwrap_or(true)
+    }
+
+    #[must_use]
+    pub fn auto_select_on_search(&self) -> bool {
+        self.auto_select_on_search.unwrap_or(false)
     }
 }
 
