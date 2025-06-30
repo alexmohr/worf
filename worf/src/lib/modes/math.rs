@@ -63,7 +63,8 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
 
 #[derive(Debug, Clone, Copy)]
 enum Token {
-    Num(i64),
+    Int(i64),
+    Float(f64),
     Op(char),
     ShiftLeft,
     ShiftRight,
@@ -91,12 +92,16 @@ fn normalize_bases(expr: &str) -> String {
 }
 
 fn insert_implicit_multiplication(tokens: &mut VecDeque<Token>, last_token: Option<&Token>) {
-    if matches!(last_token, Some(Token::Num(_) | Token::Op(')'))) {
+    if matches!(
+        last_token,
+        Some(Token::Int(_) | Token::Float(_) | Token::Op(')'))
+    ) {
         tokens.push_back(Token::Op('*'));
     }
 }
 
 /// Tokenize a normalized expression string into tokens
+#[allow(clippy::too_many_lines)]
 fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
     let mut tokens = VecDeque::new();
     let chars: Vec<char> = expr.chars().collect();
@@ -139,7 +144,7 @@ fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
             }
         }
 
-        // Single-character operators, parentheses, or digits
+        // Single-character operators, parentheses, or digits/float
         match c {
             '+' | '-' | '*' | '/' | '&' | '|' | '^' => {
                 let token = Token::Op(c);
@@ -160,7 +165,7 @@ fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
                 last_token = Some(token);
                 i += 1;
             }
-            '0'..='9' => {
+            '0'..='9' | '.' => {
                 // Only insert implicit multiplication if the last token is ')' and the last token in tokens is not already an operator (except ')')
                 if let Some(Token::Op(')')) = last_token {
                     if let Some(Token::Op(op)) = tokens.back() {
@@ -172,14 +177,35 @@ fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
                     }
                 }
                 let start = i;
-                while i < chars.len() && chars[i].is_ascii_digit() {
+                let mut has_dot = c == '.';
+                if c == '.' && (i + 1 >= chars.len() || !chars[i + 1].is_ascii_digit()) {
+                    return Err("Invalid float literal".to_owned());
+                }
+                i += 1;
+                while i < chars.len()
+                    && (chars[i].is_ascii_digit() || (!has_dot && chars[i] == '.'))
+                {
+                    if chars[i] == '.' {
+                        has_dot = true;
+                    }
                     i += 1;
                 }
                 let num_str: String = chars[start..i].iter().collect();
-                let n = num_str.parse::<i64>().unwrap();
-                let token = Token::Num(n);
-                tokens.push_back(token);
-                last_token = Some(token);
+                if has_dot {
+                    let n = num_str
+                        .parse::<f64>()
+                        .map_err(|_| "Invalid float literal".to_owned())?;
+                    let token = Token::Float(n);
+                    tokens.push_back(token);
+                    last_token = Some(token);
+                } else {
+                    let n = num_str
+                        .parse::<i64>()
+                        .map_err(|_| "Invalid integer literal".to_owned())?;
+                    let token = Token::Int(n);
+                    tokens.push_back(token);
+                    last_token = Some(token);
+                }
             }
             _ => return Err("Invalid character in expression".to_owned()),
         }
@@ -242,7 +268,8 @@ fn eval_expr(tokens: &mut VecDeque<Token>) -> Result<Value, String> {
 
     while let Some(token) = tokens.pop_front() {
         match token {
-            Token::Num(n) => values.push(Value::Int(n)),
+            Token::Int(n) => values.push(Value::Int(n)),
+            Token::Float(f) => values.push(Value::Float(f)),
             Token::Op('(') => {
                 ops.push(Token::Op('('));
             }
