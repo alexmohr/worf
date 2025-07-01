@@ -71,6 +71,7 @@ enum Token {
     Power,
 }
 
+#[derive(Debug)]
 enum Value {
     Int(i64),
     Float(f64),
@@ -120,21 +121,18 @@ fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
         if i + 1 < chars.len() {
             match &expr[i..=i + 1] {
                 "<<" => {
-                    insert_implicit_multiplication(&mut tokens, last_token.as_ref());
                     tokens.push_back(Token::ShiftLeft);
                     last_token = Some(Token::ShiftLeft);
                     i += 2;
                     continue;
                 }
                 ">>" => {
-                    insert_implicit_multiplication(&mut tokens, last_token.as_ref());
                     tokens.push_back(Token::ShiftRight);
                     last_token = Some(Token::ShiftRight);
                     i += 2;
                     continue;
                 }
                 "**" => {
-                    insert_implicit_multiplication(&mut tokens, last_token.as_ref());
                     tokens.push_back(Token::Power);
                     last_token = Some(Token::Power);
                     i += 2;
@@ -309,16 +307,22 @@ fn eval_expr(tokens: &mut VecDeque<Token>) -> Result<Value, String> {
         }
     }
 
+    // Final reduction: check if there are enough values for the remaining operators
+    if !ops.is_empty() && values.len() < 2 {
+        return Err(format!(
+            "Not enough values for the remaining operators (values: {values:?}, ops: {ops:?})",
+        ));
+    }
     while let Some(op) = ops.pop() {
         if let Token::Op('(') = op {
             return Err("Mismatched parentheses".to_owned());
         }
-        let b = values
-            .pop()
-            .ok_or("Missing right operand in final evaluation")?;
-        let a = values
-            .pop()
-            .ok_or("Missing left operand in final evaluation")?;
+        let b = values.pop().ok_or_else(|| {
+            format!("Missing right operand in final evaluation (values: {values:?}, ops: {ops:?})",)
+        })?;
+        let a = values.pop().ok_or_else(|| {
+            format!("Missing left operand in final evaluation (values: {values:?}, ops: {ops:?})",)
+        })?;
         values.push(apply_op(&a, &b, &op));
     }
 
