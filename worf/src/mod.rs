@@ -1,4 +1,5 @@
 use std::fmt;
+
 use thiserror::Error;
 
 /// Configuration and command line parsing
