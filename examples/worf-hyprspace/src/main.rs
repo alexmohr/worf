@@ -2,17 +2,15 @@ use std::{
     env,
     fmt::{Display, Formatter},
     str::FromStr,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, LazyLock, Mutex, RwLock},
     thread::sleep,
     time::{Duration, Instant},
 };
 
 use clap::Parser;
-use hyprland::data::Client;
-use hyprland::dispatch::WindowIdentifier;
 use hyprland::{
-    data::{Workspace, Workspaces},
-    dispatch::{Dispatch, DispatchType, WorkspaceIdentifierWithSpecial},
+    data::{Client, Workspace, Workspaces},
+    dispatch::{Dispatch, DispatchType, WindowIdentifier, WorkspaceIdentifierWithSpecial},
     prelude::HyprData,
     shared::HyprDataActive,
 };
@@ -478,12 +476,14 @@ fn main() -> Result<(), String> {
         cfg.worf.set_prompt(cfg.hypr_space_mode().to_string());
     }
 
-    let pattern = Mode::iter()
-        .map(|m| regex::escape(&m.to_string().to_lowercase()))
-        .collect::<Vec<_>>()
-        .join("|");
-
-    let pattern = Regex::new(&format!("(?i){pattern}")).map_err(|e| e.to_string())?;
+    static PATTERN_RE: LazyLock<Regex> = LazyLock::new(|| {
+        let pattern = Mode::iter()
+            .map(|m| regex::escape(&m.to_string().to_lowercase()))
+            .collect::<Vec<_>>()
+            .join("|");
+        Regex::new(&format!("(?i){pattern}")).unwrap()
+    });
+    let pattern = PATTERN_RE.clone();
 
     let provider = Arc::new(Mutex::new(HyprspaceProvider::new(
         &cfg,

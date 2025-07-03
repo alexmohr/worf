@@ -7,12 +7,11 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use crate::gui::ArcProvider;
 use crate::{
     Error,
     config::{Config, SortOrder},
     desktop::{is_executable, save_cache_file},
-    gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
+    gui::{self, ArcProvider, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
 };
 

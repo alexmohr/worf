@@ -1,10 +1,11 @@
-use clap::Parser;
-use std::fmt::Display;
-use std::str::FromStr;
 use std::{
     env,
+    fmt::Display,
+    str::FromStr,
     sync::{Arc, RwLock},
 };
+
+use clap::Parser;
 use worf::{Error, config, desktop::fork_if_configured, modes};
 
 #[derive(Clone, Debug)]
