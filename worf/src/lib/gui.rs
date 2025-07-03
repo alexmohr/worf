@@ -16,6 +16,7 @@ use gdk4::{
     glib::{self, MainContext, Propagation},
     prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt},
 };
+use gtk4::prelude::{AdjustmentExt, EventControllerExt};
 use gtk4::{
     Align, Application, ApplicationWindow, CssProvider, EventControllerKey, Expander, FlowBox,
     FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, NaturalWrapMode, Ordering,
@@ -609,11 +610,15 @@ fn build_ui<T>(
 
     let background = create_background(&config.read().unwrap());
 
+    let search_entry = SearchEntry::new();
+    search_entry.set_can_focus(true);
+    let main_window = window.clone();
+    main_window.set_can_focus(true);
     let ui_elements = Rc::new(UiElements {
         app,
-        window,
+        window: main_window,
         background,
-        search: SearchEntry::new(),
+        search: search_entry,
         main_box: FlowBox::new(),
         menu_rows: Arc::new(RwLock::new(HashMap::new())),
         search_text: Arc::new(Mutex::new(String::new())),
@@ -659,6 +664,8 @@ fn build_ui<T>(
     }
 
     ui_elements.window.set_child(Some(&ui_elements.outer_box));
+    // Set initial focus to the search entry
+    ui_elements.search.grab_focus();
 
     ui_elements.scroll.set_widget_name("scroll");
     ui_elements.scroll.set_hexpand(true);
@@ -758,7 +765,12 @@ fn build_main_box<T: Clone + 'static>(config: &Config, ui_elements: &Rc<UiElemen
         fb.invalidate_sort();
 
         let lock = ui_clone.menu_rows.read().unwrap();
-        select_first_visible_child(&*lock, &ui_clone.main_box);
+        select_visible_child(
+            &*lock,
+            &ui_clone.main_box,
+            &ui_clone.scroll,
+            &ChildPosition::Front,
+        );
     });
 }
 
@@ -946,7 +958,12 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
             if done {
                 let lock = ui_clone.menu_rows.read().unwrap();
 
-                select_first_visible_child(&lock, &ui_clone.main_box);
+                select_visible_child(
+                    &*lock,
+                    &ui_clone.main_box,
+                    &ui_clone.scroll,
+                    &ChildPosition::Front,
+                );
 
                 log::debug!(
                     "Created {} menu items in {:?}",
@@ -963,16 +980,18 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
 }
 
 fn setup_key_event_handler<T: Clone + 'static + Send>(
-    ui: &Rc<UiElements<T>>,
+    ui_elements: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     custom_keys: Option<&CustomKeys>,
 ) {
-    let key_controller = EventControllerKey::new();
-
-    let ui_clone = Rc::clone(ui);
+    // handle keys as soon as possible
+    // Remove old handler, use only one for both window and search
+    let key_controller_window = EventControllerKey::new();
+    key_controller_window.set_propagation_phase(gtk4::PropagationPhase::Capture);
+    let ui_clone = Rc::clone(ui_elements);
     let meta_clone = Rc::clone(meta);
     let keys_clone = custom_keys.cloned();
-    key_controller.connect_key_pressed(move |_, key_value, key_code, modifier| {
+    key_controller_window.connect_key_pressed(move |_, key_value, key_code, modifier| {
         handle_key_press(
             &ui_clone,
             &meta_clone,
@@ -983,7 +1002,24 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
         )
     });
 
-    ui.window.add_controller(key_controller);
+    ui_elements.window.add_controller(key_controller_window);
+
+    let key_controller_search = EventControllerKey::new();
+    key_controller_search.set_propagation_phase(gtk4::PropagationPhase::Capture);
+    let ui_clone2 = Rc::clone(ui_elements);
+    let meta_clone2 = Rc::clone(meta);
+    let keys_clone2 = custom_keys.cloned();
+    key_controller_search.connect_key_pressed(move |_, key_value, key_code, modifier| {
+        handle_key_press(
+            &ui_clone2,
+            &meta_clone2,
+            key_value,
+            key_code,
+            modifier,
+            keys_clone2.as_ref(),
+        )
+    });
+    ui_elements.search.add_controller(key_controller_search);
 }
 
 fn is_key_match(
@@ -1014,11 +1050,152 @@ fn handle_key_press<T: Clone + 'static + Send>(
 ) -> Propagation {
     log::debug!("received key. code: {key_code}, key: {keyboard_key:?}");
 
-    let detection_type =
+    let propagate =
         handle_custom_keys(ui, meta, keyboard_key, key_code, modifier_type, custom_keys);
 
+    if propagate == Propagation::Stop {
+        return propagate;
+    }
+
+    match keyboard_key {
+        gdk4::Key::BackSpace | gdk4::Key::Delete => {
+            let mut query = {
+                let search_text = ui.search_text.lock().unwrap();
+                search_text.clone()
+            };
+            if !query.is_empty() {
+                let pos = ui.search.position();
+                let del_pos = if keyboard_key == gdk4::Key::BackSpace {
+                    pos - 1
+                } else {
+                    pos
+                };
+                if let Some((start, ch)) = query.char_indices().nth(del_pos as usize) {
+                    let end = start + ch.len_utf8();
+                    query.replace_range(start..end, "");
+                }
+                set_search_text(ui, meta, &query);
+                ui.search.set_position(pos - 1);
+                update_view_from_provider(ui, meta, &query);
+            }
+        }
+        gdk4::Key::Home => {
+            ui.search.set_position(0);
+        }
+        gdk4::Key::Left => {
+            ui.search.set_position(ui.search.position() - 1);
+        }
+        gdk4::Key::Right => {
+            ui.search.set_position(ui.search.position() + 1);
+        }
+        gdk4::Key::End => {
+            if let Ok(i) = i32::try_from(ui.search_text.lock().unwrap().len() + 1) {
+                ui.search.set_position(i);
+            }
+        }
+        gdk4::Key::Up => {
+            return move_selection(ui, true);
+        }
+        gdk4::Key::Down => {
+            return move_selection(ui, false);
+        }
+        _ => {
+            if let Some(c) = keyboard_key.to_unicode() {
+                let mut query = {
+                    let search_text = ui.search_text.lock().unwrap();
+                    search_text.clone()
+                };
+                let pos = ui.search.position();
+                let byte_idx = query
+                    .char_indices()
+                    .nth(pos as usize)
+                    .map_or_else(|| query.len(), |(i, _)| i);
+                query.insert(byte_idx, c);
+                set_search_text(ui, meta, &query);
+                ui.search.set_position(pos + 1);
+                update_view_from_provider(ui, meta, &query);
+            }
+        }
+    }
+    Propagation::Proceed
+}
+
+fn move_selection<T: Clone + Send + 'static>(ui: &Rc<UiElements<T>>, up: bool) -> Propagation {
+    let selected_children = ui.main_box.selected_children();
+    let Some(selected) = selected_children.first() else {
+        return Propagation::Proceed;
+    };
+
+    let Some(first_child) = find_visible_child(
+        &ui.menu_rows.read().unwrap(),
+        &ui.main_box,
+        &ChildPosition::Front,
+    ) else {
+        return Propagation::Proceed;
+    };
+
+    let Some(last_child) = find_visible_child(
+        &ui.menu_rows.read().unwrap(),
+        &ui.main_box,
+        &ChildPosition::Back,
+    ) else {
+        return Propagation::Proceed;
+    };
+
+    if up && first_child == *selected {
+        select_visible_child(
+            &ui.menu_rows.read().unwrap(),
+            &ui.main_box,
+            &ui.scroll,
+            &ChildPosition::Back,
+        );
+        Propagation::Stop
+    } else if !up && last_child == *selected {
+        select_visible_child(
+            &ui.menu_rows.read().unwrap(),
+            &ui.main_box,
+            &ui.scroll,
+            &ChildPosition::Front,
+        );
+        Propagation::Stop
+    } else {
+        Propagation::Proceed
+    }
+}
+
+fn handle_custom_keys<T: Clone + 'static + Send>(
+    ui: &Rc<UiElements<T>>,
+    meta: &Rc<MetaData<T>>,
+    keyboard_key: gdk4::Key,
+    key_code: u32,
+    modifier_type: gdk4::ModifierType,
+    custom_keys: Option<&CustomKeys>,
+) -> Propagation {
+    let detection_type = meta.config.read().unwrap().key_detection_type();
+    if let Some(custom_keys) = custom_keys {
+        let mods = modifiers_from_mask(modifier_type);
+        for custom_key in &custom_keys.bindings {
+            let custom_key_match = if detection_type == KeyDetectionType::Code {
+                custom_key.key == key_code.into()
+            } else {
+                custom_key.key == keyboard_key.to_upper().into()
+            } && mods.is_subset(&custom_key.modifiers);
+
+            log::debug!("custom key {custom_key:?}, match {custom_key_match}");
+
+            if custom_key_match {
+                let search_lock = ui.search_text.lock().unwrap();
+                if let Err(e) =
+                    handle_selected_item(ui, meta, Some(&search_lock), None, Some(custom_key))
+                {
+                    log::error!("{e}");
+                }
+            }
+        }
+    }
+
     // hide search
-    let propagate = if is_key_match(
+    if is_key_match(
         meta.config.read().unwrap().key_hide_search(),
         &detection_type,
         key_code,
@@ -1060,104 +1237,7 @@ fn handle_key_press<T: Clone + 'static + Send>(
         handle_key_expand(ui, meta)
     } else {
         Propagation::Proceed
-    };
-
-    if propagate == Propagation::Stop {
-        return propagate;
     }
-
-    match keyboard_key {
-        gdk4::Key::BackSpace | gdk4::Key::Delete => {
-            let mut query = {
-                let search_text = ui.search_text.lock().unwrap();
-                search_text.clone()
-            };
-
-            if !query.is_empty() {
-                let pos = ui.search.position();
-                let del_pos = if keyboard_key == gdk4::Key::BackSpace {
-                    pos - 1
-                } else {
-                    pos
-                };
-                if let Some((start, ch)) = query.char_indices().nth(del_pos as usize) {
-                    let end = start + ch.len_utf8();
-                    query.replace_range(start..end, "");
-                }
-
-                set_search_text(ui, meta, &query);
-                ui.search.set_position(pos - 1);
-                update_view_from_provider(ui, meta, &query);
-            }
-        }
-        gdk4::Key::Home => {
-            ui.search.set_position(0);
-        }
-        gdk4::Key::Left => {
-            ui.search.set_position(ui.search.position() - 1);
-        }
-        gdk4::Key::Right => {
-            ui.search.set_position(ui.search.position() + 1);
-        }
-        gdk4::Key::End => {
-            if let Ok(i) = i32::try_from(ui.search_text.lock().unwrap().len() + 1) {
-                ui.search.set_position(i);
-            }
-        }
-        _ => {
-            if let Some(c) = keyboard_key.to_unicode() {
-                let mut query = {
-                    let search_text = ui.search_text.lock().unwrap();
-                    search_text.clone()
-                };
-
-                let pos = ui.search.position();
-                let byte_idx = query
-                    .char_indices()
-                    .nth(pos as usize)
-                    .map_or_else(|| query.len(), |(i, _)| i);
-
-                query.insert(byte_idx, c);
-                set_search_text(ui, meta, &query);
-                ui.search.set_position(pos + 1);
-                update_view_from_provider(ui, meta, &query);
-            }
-        }
-    }
-    Propagation::Proceed
-}
-
-fn handle_custom_keys<T: Clone + 'static + Send>(
-    ui: &Rc<UiElements<T>>,
-    meta: &Rc<MetaData<T>>,
-    keyboard_key: gdk4::Key,
-    key_code: u32,
-    modifier_type: gdk4::ModifierType,
-    custom_keys: Option<&CustomKeys>,
-) -> KeyDetectionType {
-    let detection_type = meta.config.read().unwrap().key_detection_type();
-    if let Some(custom_keys) = custom_keys {
-        let mods = modifiers_from_mask(modifier_type);
-        for custom_key in &custom_keys.bindings {
-            let custom_key_match = if detection_type == KeyDetectionType::Code {
-                custom_key.key == key_code.into()
-            } else {
-                custom_key.key == keyboard_key.to_upper().into()
-            } && mods.is_subset(&custom_key.modifiers);
-
-            log::debug!("custom key {custom_key:?}, match {custom_key_match}");
-
-            if custom_key_match {
-                let search_lock = ui.search_text.lock().unwrap();
-                if let Err(e) =
-                    handle_selected_item(ui, meta, Some(&search_lock), None, Some(custom_key))
-                {
-                    log::error!("{e}");
-                }
-            }
-        }
-    }
-    detection_type
 }
 
 fn update_view_from_provider<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, query: &str)
@@ -1183,7 +1263,7 @@ where
         meta.search_ignored_words.as_ref(),
     );
 
-    select_first_visible_child(&*menu_rows, &ui.main_box);
+    select_visible_child(&*menu_rows, &ui.main_box, &ui.scroll, &ChildPosition::Front);
 
     if meta.config.read().unwrap().auto_select_on_search() {
         let visible_items = menu_rows
@@ -1856,21 +1936,50 @@ pub fn filtered_query(search_ignored_words: Option<&Vec<Regex>>, query: &str) ->
     }
     query
 }
+enum ChildPosition {
+    Front,
+    Back,
+}
 
-fn select_first_visible_child<T: Clone>(
+fn find_visible_child<T: Clone>(
     items: &HashMap<FlowBoxChild, MenuItem<T>>,
     flow_box: &FlowBox,
-) {
-    for i in 0..items.len() {
+    direction: &ChildPosition,
+) -> Option<FlowBoxChild> {
+    let range: Box<dyn Iterator<Item = usize>> = match direction {
+        ChildPosition::Front => Box::new(0..items.len()),
+        ChildPosition::Back => Box::new((0..items.len()).rev()),
+    };
+
+    for i in range {
         let i_32 = i.try_into().unwrap_or(i32::MAX);
         if let Some(child) = flow_box.child_at_index(i_32) {
             if child.is_visible() {
-                flow_box.select_child(&child);
-                child.grab_focus();
-                child.activate();
-                return;
+                return Some(child);
             }
         }
+    }
+
+    None
+}
+
+fn select_visible_child<T: Clone>(
+    items: &HashMap<FlowBoxChild, MenuItem<T>>,
+    flow_box: &FlowBox,
+    scroll: &ScrolledWindow,
+    direction: &ChildPosition,
+) {
+    if let Some(child) = find_visible_child(items, flow_box, direction) {
+        flow_box.select_child(&child);
+        child.grab_focus();
+        child.activate();
+
+        let vadj = scroll.vadjustment();
+        let new_scroll = match direction {
+            ChildPosition::Front => 0.0,
+            ChildPosition::Back => vadj.upper() - vadj.page_size(),
+        };
+        vadj.set_value(new_scroll);
     }
 }
 
