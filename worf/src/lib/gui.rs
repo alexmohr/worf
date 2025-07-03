@@ -22,8 +22,9 @@ use gtk4::{
     Orientation, PolicyType, ScrolledWindow, SearchEntry, Widget,
     glib::ControlFlow,
     prelude::{
-        ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt,
-        GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt,
+        ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, EventControllerExt,
+        FlowBoxChildExt, GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt,
+        WidgetExt,
     },
 };
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
@@ -163,10 +164,6 @@ pub struct MenuItem<T: Clone> {
     /// Allows to store arbitrary additional information
     pub data: Option<T>,
 
-    // /// If set to true, the item is _not_ an intermediate thing
-    // /// and is acceptable, i.e. will close the UI
-    // pub allow_submit: bool,
-    // todo
     /// Score the item got in the current search
     search_sort_score: f64,
     /// True if the item is visible
@@ -473,7 +470,6 @@ impl<T: Clone> MenuItem<T> {
         working_dir: Option<String>,
         initial_sort_score: f64,
         data: Option<T>,
-        //allow_submit: bool,
     ) -> Self {
         MenuItem {
             label,
@@ -483,7 +479,6 @@ impl<T: Clone> MenuItem<T> {
             working_dir,
             initial_sort_score,
             data,
-            //allow_submit,
             search_sort_score: 0.0,
             visible: true,
         }
@@ -609,11 +604,15 @@ fn build_ui<T>(
 
     let background = create_background(&config.read().unwrap());
 
+    let search_entry = SearchEntry::new();
+    search_entry.set_can_focus(true);
+    let main_window = window.clone();
+    main_window.set_can_focus(true);
     let ui_elements = Rc::new(UiElements {
         app,
-        window,
+        window: main_window,
         background,
-        search: SearchEntry::new(),
+        search: search_entry,
         main_box: FlowBox::new(),
         menu_rows: Arc::new(RwLock::new(HashMap::new())),
         search_text: Arc::new(Mutex::new(String::new())),
@@ -659,6 +658,8 @@ fn build_ui<T>(
     }
 
     ui_elements.window.set_child(Some(&ui_elements.outer_box));
+    // Set initial focus to the search entry
+    ui_elements.search.grab_focus();
 
     ui_elements.scroll.set_widget_name("scroll");
     ui_elements.scroll.set_hexpand(true);
@@ -963,15 +964,16 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
 }
 
 fn setup_key_event_handler<T: Clone + 'static + Send>(
-    ui: &Rc<UiElements<T>>,
+    ui_elements: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
     custom_keys: Option<&CustomKeys>,
 ) {
-    let key_controller = EventControllerKey::new();
-
-    let ui_clone = Rc::clone(ui);
+    let ui_clone = Rc::clone(ui_elements);
     let meta_clone = Rc::clone(meta);
     let keys_clone = custom_keys.cloned();
+
+    let key_controller = EventControllerKey::new();
+    key_controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
     key_controller.connect_key_pressed(move |_, key_value, key_code, modifier| {
         handle_key_press(
             &ui_clone,
@@ -983,7 +985,8 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
         )
     });
 
-    ui.window.add_controller(key_controller);
+    ui_elements.window.add_controller(key_controller.clone());
+    ui_elements.search.add_controller(key_controller);
 }
 
 fn is_key_match(
@@ -1004,6 +1007,7 @@ fn is_key_match(
 }
 
 #[allow(clippy::cast_sign_loss)] // ok because we only need positive values
+#[allow(clippy::too_many_lines)] // TODO refactor
 fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
@@ -1072,7 +1076,6 @@ fn handle_key_press<T: Clone + 'static + Send>(
                 let search_text = ui.search_text.lock().unwrap();
                 search_text.clone()
             };
-
             if !query.is_empty() {
                 let pos = ui.search.position();
                 let del_pos = if keyboard_key == gdk4::Key::BackSpace {
@@ -1084,7 +1087,6 @@ fn handle_key_press<T: Clone + 'static + Send>(
                     let end = start + ch.len_utf8();
                     query.replace_range(start..end, "");
                 }
-
                 set_search_text(ui, meta, &query);
                 ui.search.set_position(pos - 1);
                 update_view_from_provider(ui, meta, &query);
@@ -1104,19 +1106,23 @@ fn handle_key_press<T: Clone + 'static + Send>(
                 ui.search.set_position(i);
             }
         }
+        // gdk4::Key::Up => {
+        //    // move_selection(ui, true);
+        // }
+        // gdk4::Key::Down => {
+        //     // move_selection(ui, false);
+        // }
         _ => {
             if let Some(c) = keyboard_key.to_unicode() {
                 let mut query = {
                     let search_text = ui.search_text.lock().unwrap();
                     search_text.clone()
                 };
-
                 let pos = ui.search.position();
                 let byte_idx = query
                     .char_indices()
                     .nth(pos as usize)
                     .map_or_else(|| query.len(), |(i, _)| i);
-
                 query.insert(byte_idx, c);
                 set_search_text(ui, meta, &query);
                 ui.search.set_position(pos + 1);
@@ -1126,6 +1132,79 @@ fn handle_key_press<T: Clone + 'static + Send>(
     }
     Propagation::Proceed
 }
+/*
+/// Move selection up or down, with wrap and scroll-into-view
+fn move_selection<T: Clone + Send + 'static>(ui: &Rc<UiElements<T>>, up: bool) {
+    let menu_rows = ui.menu_rows.read().unwrap();
+    // todo
+//     let visible_items: Vec<_> = menu_rows
+//         .iter()
+//         .filter(|(_, menu)| menu.visible)
+//         .collect();
+//     if visible_items.is_empty() {
+//         return;
+//     }
+//     let selected = ui.main_box.selected_children();
+//     let idx = selected.first()
+//         .and_then(|child| visible_items.iter().position(|(fb, _)| *fb == child))
+//         .unwrap_or(0);
+//     let new_idx = if up {
+//         if idx == 0 {
+//             visible_items.len() - 1
+//         } else {
+//             idx - 1
+//         }
+//     } else {
+//         if idx + 1 >= visible_items.len() {
+//             0
+//         } else {
+//             idx + 1
+//         }
+//     };
+//     // Scroll to ensure the selected child is fully visible
+//     if let Some((fb, _)) = visible_items.get(new_idx) {
+//
+//         // Scroll the selected child into view manually
+//         // Get the parent ScrolledWindow and its vadjustment
+//       //  if let Some(scrolled_window) = ui.main_box.parent().and_then(|p| p.downcast::<ScrolledWindow>().ok()) {
+//             //if let Some(vadj) = scrolled_window.vadjustment() {
+//             let vadj = ui.scroll.vadjustment();
+//                 // Get allocation of the FlowBoxChild relative to the FlowBox
+//                 let child_alloc = fb.allocation();
+//                 let flowbox_alloc = ui.main_box.allocation();
+//
+//                 // The position of the child relative to the FlowBox
+//                 let child_y = child_alloc.y();
+//                 let child_height = child_alloc.height();
+//
+//                 // The visible area of the ScrolledWindow
+//                 let visible_y = vadj.value() as i32;
+//                 let visible_height = vadj.page_size() as i32;
+//
+//                 // If the child is above the visible area, scroll up
+//                 if child_y < visible_y {
+//                     vadj.set_value(child_y as f64);
+//                 }
+//                 // If the child is below the visible area, scroll down
+//                 else if child_y + child_height > visible_y + visible_height {
+//                     vadj.set_value((child_y + child_height - visible_height) as f64);
+//                 }
+//                 // Otherwise, it's already visible
+//            // }
+//       //  }
+//     }
+//
+//
+// // if let Some((fb, _)) = visible_items.get(new_idx) {
+//     //     ui.main_box.select_child(fb.clone());
+//     //     let alloc = fb.allocation();
+//     //     let value = alloc.y().max(0);
+//     //     let adj =ui.scroll.vadjustment();
+//     //         adj.set_value(value as f64);
+//     //     ui.scroll.set_vadjustment(Some(&adj));
+//     // }
+}
+ */
 
 fn handle_custom_keys<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
