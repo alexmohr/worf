@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, LazyLock, Mutex, RwLock},
 };
 
 use regex::Regex;
@@ -79,13 +79,12 @@ enum Value {
 
 /// Normalize base literals like 0x and 0b into decimal format
 fn normalize_bases(expr: &str) -> String {
-    let hex_re = Regex::new(r"0x[0-9a-fA-F]+").unwrap();
-    let expr = hex_re.replace_all(expr, |caps: &regex::Captures| {
+    static HEX_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"0x[0-9a-fA-F]+").unwrap());
+    static BIN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"0b[01]+").unwrap());
+    let expr = HEX_RE.replace_all(expr, |caps: &regex::Captures| {
         i64::from_str_radix(&caps[0][2..], 16).unwrap().to_string()
     });
-
-    let bin_re = Regex::new(r"0b[01]+").unwrap();
-    bin_re
+    BIN_RE
         .replace_all(&expr, |caps: &regex::Captures| {
             i64::from_str_radix(&caps[0][2..], 2).unwrap().to_string()
         })

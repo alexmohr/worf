@@ -1,12 +1,14 @@
-use regex::Regex;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, LazyLock, Mutex, RwLock};
 
-use crate::gui::ArcProvider;
+use regex::Regex;
+
 use crate::{
     Error,
     config::Config,
     desktop::spawn_fork,
-    gui::{self, DefaultItemFactory, ExpandMode, ItemProvider, MenuItem, ProviderData},
+    gui::{
+        self, ArcProvider, DefaultItemFactory, ExpandMode, ItemProvider, MenuItem, ProviderData,
+    },
     modes::{
         drun::{DRunProvider, update_drun_cache_and_run},
         file::FileItemProvider,
@@ -74,15 +76,15 @@ impl AutoItemProvider {
 
 fn contains_math_functions_or_starts_with_number(input: &str) -> bool {
     // Regex for function names (word boundaries to match whole words)
-    let math_functions = r"\b(sqrt|abs|exp|ln|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|floor|ceil|round|signum|min|max|pi|e|0x|0b|\||&|<<|>>|\^)\b";
+    static MATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\b(sqrt|abs|exp|ln|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|floor|ceil|round|signum|min|max|pi|e|0x|0b|\||&|<<|>>|\^)\b").unwrap()
+    });
 
     // Regex for strings that start with a number (including decimals)
-    let starts_with_number = r"^\s*[+-]?(\d+(\.\d*)?|\.\d+)";
+    static NUMBER_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^\s*[+-]?(\d+(\.\d*)?|\.\d+)").unwrap());
 
-    let math_regex = Regex::new(math_functions).unwrap();
-    let number_regex = Regex::new(starts_with_number).unwrap();
-
-    math_regex.is_match(input) || number_regex.is_match(input)
+    MATH_REGEX.is_match(input) || NUMBER_REGEX.is_match(input)
 }
 
 impl ItemProvider<AutoRunType> for AutoItemProvider {
@@ -99,7 +101,8 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
         } else if search.starts_with("ssh") {
             (AutoRunType::Ssh, self.ssh.get_elements(search_opt))
         } else if search.starts_with('?') {
-            let re = Regex::new(r"^\?\s*").unwrap();
+            static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\?\s*").unwrap());
+            let re = &*RE;
             let query = re.replace(search, "");
             (
                 AutoRunType::WebSearch,
@@ -151,7 +154,7 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
             Some(
                 vec!["ssh", "emoji", "^\\$\\w+", "^\\?\\s*"]
                     .into_iter()
-                    .map(|s| Regex::new(s).unwrap())
+                    .map(|s| Regex::new(s).unwrap()) // Consider precompiling if s is constant
                     .collect(),
             ),
             ExpandMode::Verbatim,

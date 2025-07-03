@@ -6,9 +6,11 @@ use std::{
     os::unix::{fs::PermissionsExt, prelude::CommandExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::LazyLock,
     time::Instant,
 };
 
+// re-export freedesktop_file_parser for easier access
 pub use freedesktop_file_parser::{DesktopFile, EntryType};
 use notify_rust::Notification;
 use rayon::prelude::*;
@@ -26,8 +28,9 @@ use crate::{
 /// When it cannot parse the internal regex
 #[must_use]
 pub fn known_image_extension_regex_pattern() -> Regex {
-    Regex::new(r"(?i).*\.(png|jpg|gif|svg|jpeg)$")
-        .expect("Internal image regex is not valid anymore.")
+    static RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i).*\.(png|jpg|gif|svg|jpeg)$").unwrap());
+    RE.clone()
 }
 
 /// Helper function to retrieve a file with given regex.
@@ -59,6 +62,8 @@ fn find_files(folder: &Path, file_name: &Regex) -> Option<Vec<PathBuf>> {
 /// When it cannot parse the internal regex
 #[must_use]
 pub fn find_desktop_files() -> Vec<DesktopFile> {
+    static DESKTOP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i).*\.desktop$").unwrap());
+
     let mut paths = vec![
         PathBuf::from("/usr/share/applications"),
         PathBuf::from("/usr/local/share/applications"),
@@ -81,12 +86,10 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
         }
     }
 
-    let regex = &Regex::new("(?i).*\\.desktop$").expect("invalid internal regex");
-
     let p: Vec<_> = paths
         .into_par_iter()
         .filter(|desktop_dir| desktop_dir.exists())
-        .filter_map(|desktop_dir| find_files(&desktop_dir, regex))
+        .filter_map(|desktop_dir| find_files(&desktop_dir, &DESKTOP_RE))
         .flat_map(|desktop_files| {
             desktop_files.into_par_iter().filter_map(|desktop_file| {
                 fs::read_to_string(desktop_file)
@@ -160,7 +163,9 @@ pub fn fork_if_configured(config: &Config) {
 /// # Panics
 /// When internal regex unwrapping fails. Should not happen as the regex is static
 pub fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), Error> {
-    let re = Regex::new(r#"'([^']*)'|"([^"]*)"|(\S+)"#).expect("invalid regex in spawn_fork");
+    static RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"'([^']*)'|"([^"]*)"|(\S+)"#).unwrap());
+    let re = &*RE;
     let parts: Vec<String> = re
         .captures_iter(cmd)
         .map(|cap| {

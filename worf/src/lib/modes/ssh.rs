@@ -1,13 +1,15 @@
-use regex::Regex;
-use std::fs;
-use std::sync::{Arc, Mutex, RwLock};
+use std::{
+    fs,
+    sync::{Arc, LazyLock, Mutex, RwLock},
+};
 
-use crate::gui::{ExpandMode, ProviderData};
+use regex::Regex;
+
 use crate::{
     Error,
     config::{Config, SortOrder},
     desktop::spawn_fork,
-    gui::{self, ItemProvider, MenuItem},
+    gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
 };
 
 #[derive(Clone)]
@@ -17,7 +19,8 @@ pub(crate) struct SshProvider<T: Clone> {
 
 impl<T: Clone> SshProvider<T> {
     pub(crate) fn new(menu_item_data: T, order: &SortOrder) -> Self {
-        let re = Regex::new(r"(?m)^\s*Host\s+(.+)$").unwrap();
+        static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*Host\s+(.+)$").unwrap());
+        let re = &*RE;
         let mut items: Vec<_> = dirs::home_dir()
             .map(|home| home.join(".ssh").join("config"))
             .filter(|path| path.exists())
