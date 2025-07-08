@@ -9,7 +9,6 @@ use freedesktop_file_parser::EntryType;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::gui::ArcProvider;
 use crate::{
     Error,
     config::{Config, SortOrder},
@@ -17,7 +16,7 @@ use crate::{
         find_desktop_files, get_locale_variants, lookup_name_with_locale, save_cache_file,
         spawn_fork,
     },
-    gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
+    gui::{self, ArcProvider, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
 };
 

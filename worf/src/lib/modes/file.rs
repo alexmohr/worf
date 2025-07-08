@@ -1,11 +1,11 @@
-use regex::Regex;
-use std::sync::Mutex;
 use std::{
     fs,
     os::unix::fs::FileTypeExt,
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, LazyLock, Mutex, RwLock},
 };
+
+use regex::Regex;
 
 use crate::{
     Error,
@@ -201,6 +201,8 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
 /// # Panics
 /// In case an internal regex does not parse anymore, this should never happen
 pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
+    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\$\w+").unwrap());
+
     let provider = Arc::new(Mutex::new(FileItemProvider::new(
         0,
         config.read().unwrap().sort_order(),
@@ -211,7 +213,7 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
         config,
         provider,
         None,
-        Some(vec![Regex::new("^\\$\\w+").unwrap()]),
+        Some(vec![RE.clone()]),
         ExpandMode::Verbatim,
         None,
     )?;
