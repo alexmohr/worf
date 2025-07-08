@@ -147,6 +147,7 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     let mut cache = provider.lock().unwrap().drun.cache.clone();
 
     loop {
+        provider.lock().unwrap().last_mode = None;
         let selection_result = gui::show(
             config,
             Arc::clone(&arc_provider),
@@ -154,7 +155,7 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
             Some(
                 vec!["ssh", "emoji", "^\\$\\w+", "^\\?\\s*"]
                     .into_iter()
-                    .map(|s| Regex::new(s).unwrap()) // Consider precompiling if s is constant
+                    .map(|s| Regex::new(s).unwrap())
                     .collect(),
             ),
             ExpandMode::Verbatim,
