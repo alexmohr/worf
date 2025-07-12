@@ -7,8 +7,5 @@ edition = "2024"
 worf = {path = "../../worf"}
 env_logger = "0.11.8"
 log = "0.4.27"
+serde = { version = "1.0.219", features = ["derive"] }
 
-# todo re-add this
-#[features]
-#default = []  # nothing enabled by default
-#warden = ["worf-warden"]

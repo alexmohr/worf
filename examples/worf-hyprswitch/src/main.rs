@@ -145,7 +145,7 @@ fn main() -> Result<(), String> {
 
     let args = config::parse_args();
     let config = Arc::new(RwLock::new(
-        config::load_config(Some(&args)).unwrap_or(args),
+        config::load_worf_config(Some(&args)).unwrap_or(args),
     ));
 
     let cache_path = desktop::cache_file_path(&config.read().unwrap(), "worf-hyprswitch")

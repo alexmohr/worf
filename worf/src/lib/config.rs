@@ -1,6 +1,7 @@
 use std::{env, fs, path::PathBuf, str::FromStr};
 
 use clap::{Parser, ValueEnum};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -950,11 +951,9 @@ fn style_path(full_path: Option<&String>) -> Result<PathBuf, Error> {
 /// # Errors
 ///
 /// Will return Err when it cannot resolve any path or no style is found
-pub fn conf_path(full_path: Option<&String>) -> Result<PathBuf, Error> {
-    let alternative_paths = path_alternatives(
-        vec![dirs::config_dir()],
-        &PathBuf::from("worf").join("config"),
-    );
+pub fn conf_path(full_path: Option<&String>, folder: &str, name: &str) -> Result<PathBuf, Error> {
+    let alternative_paths =
+        path_alternatives(vec![dirs::config_dir()], &PathBuf::from(folder).join(name));
     resolve_path(full_path, alternative_paths.into_iter().collect())
 }
 
@@ -996,22 +995,39 @@ pub fn resolve_path(
 /// * cannot parse the config file
 /// * no config file exists
 /// * config file and args cannot be merged
-pub fn load_config(args_opt: Option<&Config>) -> Result<Config, Error> {
-    let config_path = conf_path(args_opt.as_ref().and_then(|c| c.cfg_path.as_ref()));
+pub fn load_worf_config(args_opt: Option<&Config>) -> Result<Config, Error> {
+    let mut config = load_config(args_opt, "worf", "config")?;
+    if let Some(args) = args_opt {
+        let merge_result = merge_config_with_args(&mut config, args)
+            .map_err(|e| Error::ParsingError(format!("{e}")))?;
+        Ok(merge_result)
+    } else {
+        Ok(config)
+    }
+}
+
+/// # Errors
+///
+/// Will return Err when it
+/// * cannot read the config file
+/// * cannot parse the config file
+/// * no config file exists
+/// * config file and args cannot be merged
+pub fn load_config<T: DeserializeOwned>(
+    args_opt: Option<&Config>,
+    folder: &str,
+    name: &str,
+) -> Result<T, Error> {
+    let config_path = conf_path(
+        args_opt.as_ref().and_then(|c| c.cfg_path.as_ref()),
+        folder,
+        name,
+    );
     match config_path {
         Ok(path) => {
             log::debug!("loading config from {}", path.display());
             let toml_content = fs::read_to_string(path).map_err(|e| Error::Io(format!("{e}")))?;
-            let mut config: Config =
-                toml::from_str(&toml_content).map_err(|e| Error::ParsingError(format!("{e}")))?;
-
-            if let Some(args) = args_opt {
-                let merge_result = merge_config_with_args(&mut config, args)
-                    .map_err(|e| Error::ParsingError(format!("{e}")))?;
-                Ok(merge_result)
-            } else {
-                Ok(config)
-            }
+            toml::from_str(&toml_content).map_err(|e| Error::ParsingError(format!("{e}")))
         }
 
         Err(e) => Err(Error::Io(format!("{e}"))),

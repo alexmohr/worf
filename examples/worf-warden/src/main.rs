@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     env,
@@ -6,7 +7,6 @@ use std::{
     thread::sleep,
     time::Duration,
 };
-
 use worf::{
     config::{self, Config, CustomKeyHintLocation, Key},
     desktop::{copy_to_clipboard, spawn_fork},
@@ -120,20 +120,44 @@ fn keyboard_type(text: &str) {
         .expect("Failed to execute ydotool");
 }
 
-fn keyboard_tab() {
-    Command::new("ydotool")
-        .arg("type")
-        .arg("\t")
-        .output()
-        .expect("Failed to execute ydotool");
+fn parse_cmd(cmd: &str) -> (&str, Option<u64>, Option<&str>) {
+    if let Some(pos) = cmd.find("$S") {
+        let left = &cmd[..pos];
+        let rest = &cmd[pos + 2..]; // Skip "$S"
+
+        // Extract digits after "$S"
+        let num_part: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+
+        if let Ok(number) = num_part.parse::<u64>() {
+            let right = &rest[num_part.len()..];
+            return (left, Some(number), Some(right));
+        }
+    }
+
+    (cmd, None, None)
 }
 
 fn keyboard_return() {
-    Command::new("ydotool")
-        .arg("type")
-        .arg("\n")
-        .output()
-        .expect("Failed to execute ydotool");
+    keyboard_type("\n");
+}
+
+fn keyboard_auto_type(cmd: &str, id: &str) -> Result<(), String> {
+    let user = rbw_get_user(id, false)?;
+    let pw = rbw_get_password(id, false)?;
+
+    let ydo_string = cmd.replace('_', "").replace("$U", &user).replace("$P", &pw);
+
+    let (left, sleep_ms, right) = parse_cmd(&ydo_string);
+    keyboard_type(left);
+    if let Some(sleep_ms) = sleep_ms {
+        sleep(Duration::from_millis(sleep_ms));
+    }
+
+    if let Some(right) = right {
+        keyboard_type(right);
+    }
+
+    Ok(())
 }
 
 fn rbw(cmd: &str, args: Option<Vec<&str>>) -> Result<String, String> {
@@ -281,7 +305,11 @@ fn key_lock() -> KeyBinding {
     }
 }
 
-fn show(config: Arc<RwLock<Config>>, provider: Arc<Mutex<PasswordProvider>>) -> Result<(), String> {
+fn show(
+    config: Arc<RwLock<Config>>,
+    provider: Arc<Mutex<PasswordProvider>>,
+    warden_config: WardenConfig,
+) -> Result<(), String> {
     match gui::show(
         &config,
         provider,
@@ -314,6 +342,7 @@ fn show(config: Arc<RwLock<Config>>, provider: Arc<Mutex<PasswordProvider>>) -> 
                     return show(
                         config,
                         Arc::new(Mutex::new(PasswordProvider::sub_provider(meta.ids)?)),
+                        warden_config.clone(),
                     );
                 }
 
@@ -322,9 +351,13 @@ fn show(config: Arc<RwLock<Config>>, provider: Arc<Mutex<PasswordProvider>>) -> 
                 sleep(Duration::from_millis(500));
                 if let Some(key) = selection.custom_key {
                     if key == key_type_all() || key == key_type_all_and_enter() {
-                        keyboard_type(&rbw_get_user(id, false)?);
-                        keyboard_tab();
-                        keyboard_type(&rbw_get_password(id, false)?);
+                        let default = "$U\t$P".to_owned();
+                        let typing = warden_config
+                            .custom_auto_types
+                            .get(id)
+                            .or(warden_config.custom_auto_types.get(&selection.menu.label))
+                            .unwrap_or(&default);
+                        keyboard_auto_type(typing, id)?;
                     } else if key == key_type_user() || key == key_type_user_and_enter() {
                         keyboard_type(&rbw_get_user(id, false)?);
                     } else if key == key_type_password() || key == key_type_password_and_enter() {
@@ -357,6 +390,11 @@ fn show(config: Arc<RwLock<Config>>, provider: Arc<Mutex<PasswordProvider>>) -> 
     }
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct WardenConfig {
+    custom_auto_types: HashMap<String, String>,
+}
+
 fn main() -> Result<(), String> {
     env_logger::Builder::new()
         .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
@@ -364,9 +402,12 @@ fn main() -> Result<(), String> {
         .init();
 
     let args = config::parse_args();
-    let config = Arc::new(RwLock::new(
-        config::load_config(Some(&args)).unwrap_or(args),
+    let worf_config = Arc::new(RwLock::new(
+        config::load_worf_config(Some(&args)).unwrap_or(args.clone()),
     ));
+
+    let warden_config: WardenConfig = config::load_config(Some(&args), "worf", "warden")
+        .map_err(|e| format!("failed to parse warden config {e}"))?;
 
     if !groups().contains("input") {
         log::error!(
@@ -381,6 +422,8 @@ fn main() -> Result<(), String> {
     }
 
     // todo eventually use a propper rust client for this, for now rbw is good enough
-    let provider = Arc::new(Mutex::new(PasswordProvider::new(&config.read().unwrap())?));
-    show(config, provider)
+    let provider = Arc::new(Mutex::new(PasswordProvider::new(
+        &worf_config.read().unwrap(),
+    )?));
+    show(worf_config, provider, warden_config)
 }
