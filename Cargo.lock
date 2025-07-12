@@ -2923,6 +2923,7 @@ dependencies = [
 name = "worf-warden"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "env_logger",
  "log",
  "serde",

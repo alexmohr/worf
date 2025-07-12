@@ -8,4 +8,4 @@ worf = {path = "../../worf"}
 env_logger = "0.11.8"
 log = "0.4.27"
 serde = { version = "1.0.219", features = ["derive"] }
-
+clap = { version = "4.5.40", features = ["derive"] }
