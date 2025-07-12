@@ -984,42 +984,31 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
     meta: &Rc<MetaData<T>>,
     custom_keys: Option<&CustomKeys>,
 ) {
-    // handle keys as soon as possible
-    // Remove old handler, use only one for both window and search
-    let key_controller_window = EventControllerKey::new();
-    key_controller_window.set_propagation_phase(gtk4::PropagationPhase::Capture);
-    let ui_clone = Rc::clone(ui_elements);
-    let meta_clone = Rc::clone(meta);
-    let keys_clone = custom_keys.cloned();
-    key_controller_window.connect_key_pressed(move |_, key_value, key_code, modifier| {
-        handle_key_press(
-            &ui_clone,
-            &meta_clone,
-            key_value,
-            key_code,
-            modifier,
-            keys_clone.as_ref(),
-        )
-    });
+    fn connect_key_handler<
+        T: gtk4::prelude::ObjectExt + Clone + 'static + WidgetExt,
+        Menu: Clone + 'static + Send,
+    >(
+        widget: &T,
+        ui: &Rc<UiElements<Menu>>,
+        meta: &Rc<MetaData<Menu>>,
+        keys: Option<CustomKeys>,
+    ) {
+        let controller = EventControllerKey::new();
+        controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
 
-    ui_elements.window.add_controller(key_controller_window);
+        let ui = Rc::clone(ui);
+        let meta = Rc::clone(meta);
+        controller.connect_key_pressed(move |_, key_value, key_code, modifier| {
+            handle_key_press(&ui, &meta, key_value, key_code, modifier, keys.as_ref())
+        });
+        widget.add_controller(controller.clone());
+    }
 
-    let key_controller_search = EventControllerKey::new();
-    key_controller_search.set_propagation_phase(gtk4::PropagationPhase::Capture);
-    let ui_clone2 = Rc::clone(ui_elements);
-    let meta_clone2 = Rc::clone(meta);
-    let keys_clone2 = custom_keys.cloned();
-    key_controller_search.connect_key_pressed(move |_, key_value, key_code, modifier| {
-        handle_key_press(
-            &ui_clone2,
-            &meta_clone2,
-            key_value,
-            key_code,
-            modifier,
-            keys_clone2.as_ref(),
-        )
-    });
-    ui_elements.search.add_controller(key_controller_search);
+    // Setup window controller
+    connect_key_handler(&ui_elements.window, ui_elements, meta, custom_keys.cloned());
+
+    // Setup search controller
+    connect_key_handler(&ui_elements.search, ui_elements, meta, custom_keys.cloned());
 }
 
 fn is_key_match(

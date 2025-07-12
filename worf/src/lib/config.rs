@@ -945,13 +945,16 @@ fn style_path(full_path: Option<&String>) -> Result<PathBuf, Error> {
         vec![dirs::config_dir()],
         &PathBuf::from("worf").join("style.css"),
     );
-    resolve_path(full_path, alternative_paths.into_iter().collect())
+    resolve_path(
+        full_path.map(std::string::String::as_str),
+        alternative_paths.into_iter().collect(),
+    )
 }
 
 /// # Errors
 ///
 /// Will return Err when it cannot resolve any path or no style is found
-pub fn conf_path(full_path: Option<&String>, folder: &str, name: &str) -> Result<PathBuf, Error> {
+pub fn conf_path(full_path: Option<&str>, folder: &str, name: &str) -> Result<PathBuf, Error> {
     let alternative_paths =
         path_alternatives(vec![dirs::config_dir()], &PathBuf::from(folder).join(name));
     resolve_path(full_path, alternative_paths.into_iter().collect())
@@ -971,10 +974,7 @@ pub fn path_alternatives(base_paths: Vec<Option<PathBuf>>, sub_path: &PathBuf) -
 /// # Errors
 ///
 /// Will return `Err` if it is not able to find any valid path
-pub fn resolve_path(
-    full_path: Option<&String>,
-    alternatives: Vec<PathBuf>,
-) -> Result<PathBuf, Error> {
+pub fn resolve_path(full_path: Option<&str>, alternatives: Vec<PathBuf>) -> Result<PathBuf, Error> {
     log::debug!("resolving path for {full_path:?}, with alternatives: {alternatives:?}");
     full_path
         .map(PathBuf::from)
@@ -988,6 +988,7 @@ pub fn resolve_path(
         .ok_or(Error::MissingFile)
 }
 
+/// Load the worf config from disk
 /// # Errors
 ///
 /// Will return Err when it
@@ -996,7 +997,11 @@ pub fn resolve_path(
 /// * no config file exists
 /// * config file and args cannot be merged
 pub fn load_worf_config(args_opt: Option<&Config>) -> Result<Config, Error> {
-    let mut config = load_config(args_opt, "worf", "config")?;
+    let mut config = load_config(
+        args_opt.as_ref().and_then(|c| c.cfg_path.as_deref()),
+        "worf",
+        "config",
+    )?;
     if let Some(args) = args_opt {
         let merge_result = merge_config_with_args(&mut config, args)
             .map_err(|e| Error::ParsingError(format!("{e}")))?;
@@ -1006,6 +1011,7 @@ pub fn load_worf_config(args_opt: Option<&Config>) -> Result<Config, Error> {
     }
 }
 
+/// Load any config from disk
 /// # Errors
 ///
 /// Will return Err when it
@@ -1014,15 +1020,11 @@ pub fn load_worf_config(args_opt: Option<&Config>) -> Result<Config, Error> {
 /// * no config file exists
 /// * config file and args cannot be merged
 pub fn load_config<T: DeserializeOwned>(
-    args_opt: Option<&Config>,
+    path: Option<&str>,
     folder: &str,
     name: &str,
 ) -> Result<T, Error> {
-    let config_path = conf_path(
-        args_opt.as_ref().and_then(|c| c.cfg_path.as_ref()),
-        folder,
-        name,
-    );
+    let config_path = conf_path(path, folder, name);
     match config_path {
         Ok(path) => {
             log::debug!("loading config from {}", path.display());

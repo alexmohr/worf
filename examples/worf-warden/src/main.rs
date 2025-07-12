@@ -1,3 +1,4 @@
+use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -395,19 +396,28 @@ struct WardenConfig {
     custom_auto_types: HashMap<String, String>,
 }
 
+#[derive(Debug, Parser, Clone)]
+struct WardenArgs {
+    /// Configuration file for worf warden
+    #[clap(long = "warden-config")]
+    warden_config: Option<String>,
+
+    #[command(flatten)]
+    worf: Config,
+}
+
 fn main() -> Result<(), String> {
     env_logger::Builder::new()
         .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
         .format_timestamp_micros()
         .init();
 
-    let args = config::parse_args();
-    let worf_config = Arc::new(RwLock::new(
-        config::load_worf_config(Some(&args)).unwrap_or(args.clone()),
-    ));
+    let mut cfg = WardenArgs::parse();
+    cfg.worf = config::load_worf_config(Some(&cfg.worf)).unwrap_or(cfg.worf);
 
-    let warden_config: WardenConfig = config::load_config(Some(&args), "worf", "warden")
-        .map_err(|e| format!("failed to parse warden config {e}"))?;
+    let warden_config: WardenConfig =
+        config::load_config(cfg.warden_config.as_deref(), "worf", "warden")
+            .map_err(|e| format!("failed to parse warden config {e}"))?;
 
     if !groups().contains("input") {
         log::error!(
@@ -420,6 +430,8 @@ fn main() -> Result<(), String> {
     if let Err(e) = spawn_fork("ydotoold", None) {
         log::error!("Failed to start ydotool daemon: {e}");
     }
+
+    let worf_config = Arc::new(RwLock::new(cfg.worf.clone()));
 
     // todo eventually use a propper rust client for this, for now rbw is good enough
     let provider = Arc::new(Mutex::new(PasswordProvider::new(
