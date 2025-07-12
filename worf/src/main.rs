@@ -95,7 +95,7 @@ fn main() {
         .init();
 
     let mut config = MainConfig::parse();
-    config.worf = config::load_config(Some(&config.worf)).unwrap_or(config.worf);
+    config.worf = config::load_worf_config(Some(&config.worf)).unwrap_or(config.worf);
     if config.worf.prompt().is_none() {
         config.worf.set_prompt(config.show.to_string());
     }

@@ -2925,6 +2925,7 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "log",
+ "serde",
  "worf",
 ]
 
