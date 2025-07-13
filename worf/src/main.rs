@@ -88,21 +88,21 @@ impl FromStr for Mode {
     }
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     env_logger::Builder::new()
         .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
         .format_timestamp_micros()
         .init();
 
     let mut config = MainConfig::parse();
-    config.worf = config::load_worf_config(Some(&config.worf)).unwrap_or(config.worf);
+    config.worf = config::load_worf_config(Some(&config.worf)).map_err(|e| e.to_string())?;
     if config.worf.prompt().is_none() {
         config.worf.set_prompt(config.show.to_string());
     }
 
     if config.worf.version() {
         println!("worf version {}", env!("CARGO_PKG_VERSION"));
-        return;
+        return Ok(());
     }
 
     fork_if_configured(&config.worf); // may exit the program
@@ -131,4 +131,6 @@ fn main() {
             std::process::exit(1);
         }
     }
+
+    Ok(())
 }
