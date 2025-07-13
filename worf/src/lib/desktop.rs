@@ -2,7 +2,9 @@ use std::{
     collections::HashMap,
     env,
     ffi::OsStr,
-    fs, io,
+    fs,
+    hash::BuildHasher,
+    io,
     os::unix::{fs::PermissionsExt, prelude::CommandExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -124,12 +126,10 @@ pub fn get_locale_variants() -> Vec<String> {
 }
 
 /// Lookup a value from a hashmap with respect to current locale
-// implicit hasher does not make sense here, it is only for desktop files
-#[allow(clippy::implicit_hasher)]
 #[must_use]
-pub fn lookup_name_with_locale(
+pub fn lookup_name_with_locale<S: BuildHasher>(
     locale_variants: &[String],
-    variants: &HashMap<String, String>,
+    variants: &HashMap<String, String, S>,
     fallback: &str,
 ) -> Option<String> {
     locale_variants
@@ -272,9 +272,10 @@ pub fn load_cache_file(cache_path: &PathBuf) -> Result<HashMap<String, i64>, Err
 /// # Errors
 /// `Error::Parsing` if converting into toml was not possible
 /// `Error::Io` if storing the file failed.
-// implicit hasher does not make sense here, it is only for desktop files
-#[allow(clippy::implicit_hasher)]
-pub fn save_cache_file(path: &PathBuf, data: &HashMap<String, i64>) -> Result<(), Error> {
+pub fn save_cache_file<S: BuildHasher>(
+    path: &PathBuf,
+    data: &HashMap<String, i64, S>,
+) -> Result<(), Error> {
     // Convert the HashMap to TOML string
     let toml_string =
         toml::ser::to_string(&data).map_err(|e| Error::ParsingError(e.to_string()))?;

@@ -32,7 +32,6 @@ impl<T: Clone> MathProvider<T> {
 }
 
 impl<T: Clone> ItemProvider<T> for MathProvider<T> {
-    #[allow(clippy::cast_possible_truncation)]
     fn get_elements(&mut self, search: Option<&str>) -> ProviderData<T> {
         if let Some(search_text) = search {
             let result = calc(search_text);
