@@ -637,6 +637,10 @@ pub struct Config {
     /// Auto select when only 1 possible choice is left
     #[clap(long = "auto-select-on-search")]
     auto_select_on_search: Option<bool>,
+
+    /// Jump to the first/last entry when at the end/start and down/up is pressed
+    /// Defaults to true
+    rollover: Option<bool>,
 }
 
 impl Config {
@@ -925,6 +929,11 @@ impl Config {
     #[must_use]
     pub fn auto_select_on_search(&self) -> bool {
         self.auto_select_on_search.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn rollover(&self) -> bool {
+        self.rollover.unwrap_or(true)
     }
 }
 

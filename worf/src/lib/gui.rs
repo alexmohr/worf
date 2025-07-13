@@ -1083,10 +1083,10 @@ fn handle_key_press<T: Clone + 'static + Send>(
             }
         }
         gdk4::Key::Up => {
-            return move_selection(ui, true);
+            return move_selection(ui, meta, &Direction::Up);
         }
         gdk4::Key::Down => {
-            return move_selection(ui, false);
+            return move_selection(ui, meta, &Direction::Down);
         }
         _ => {
             if let Some(c) = keyboard_key.to_unicode() {
@@ -1109,7 +1109,21 @@ fn handle_key_press<T: Clone + 'static + Send>(
     Propagation::Proceed
 }
 
-fn move_selection<T: Clone + Send + 'static>(ui: &Rc<UiElements<T>>, up: bool) -> Propagation {
+#[derive(PartialEq)]
+enum Direction {
+    Up,
+    Down,
+}
+
+fn move_selection<T: Clone + Send + 'static>(
+    ui: &Rc<UiElements<T>>,
+    meta: &Rc<MetaData<T>>,
+    direction: &Direction,
+) -> Propagation {
+    if !meta.config.read().unwrap().rollover() {
+        return Propagation::Proceed;
+    }
+
     let selected_children = ui.main_box.selected_children();
     let Some(selected) = selected_children.first() else {
         return Propagation::Proceed;
@@ -1131,7 +1145,7 @@ fn move_selection<T: Clone + Send + 'static>(ui: &Rc<UiElements<T>>, up: bool) -
         return Propagation::Proceed;
     };
 
-    if up && first_child == *selected {
+    if *direction == Direction::Up && first_child == *selected {
         select_visible_child(
             &ui.menu_rows.read().unwrap(),
             &ui.main_box,
@@ -1139,7 +1153,7 @@ fn move_selection<T: Clone + Send + 'static>(ui: &Rc<UiElements<T>>, up: bool) -
             &ChildPosition::Back,
         );
         Propagation::Stop
-    } else if !up && last_child == *selected {
+    } else if *direction == Direction::Down && last_child == *selected {
         select_visible_child(
             &ui.menu_rows.read().unwrap(),
             &ui.main_box,
