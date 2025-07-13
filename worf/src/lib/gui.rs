@@ -1269,20 +1269,25 @@ where
     select_visible_child(&*menu_rows, &ui.main_box, &ui.scroll, &ChildPosition::Front);
 
     if meta.config.read().unwrap().auto_select_on_search() {
-        let visible_items = menu_rows
-            .iter()
-            .filter(|(_, menu)| menu.visible)
-            .collect::<Vec<_>>();
-        if visible_items.len() == 1 {
-            if let Err(e) =
-                handle_selected_item(ui, meta, None, Some(visible_items[0].1.clone()), None)
-            {
+        let visible_items: Vec<_> = menu_rows.iter().filter(|(_, menu)| menu.visible).collect();
+
+        let item = if visible_items.len() == 1 {
+            Some(visible_items[0].1.clone())
+        } else {
+            None
+        };
+
+        drop(menu_rows);
+
+        if let Some(item) = item {
+            if let Err(e) = handle_selected_item(ui, meta, None, Some(item), None) {
                 log::error!("failed to handle selected item {e}");
             }
         }
+    } else {
+        drop(menu_rows);
     }
 
-    drop(menu_rows);
     if meta.config.read().unwrap().dynamic_lines() {
         if let Some(geometry) = get_monitor_geometry(ui.window.surface().as_ref()) {
             let height =
