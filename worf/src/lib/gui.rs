@@ -8,23 +8,21 @@ use std::{
 };
 
 use crossbeam::channel::{self, Sender};
-use gdk4::glib::SignalHandlerId;
-use gdk4::prelude::ObjectExt;
 use gdk4::{
     Display, Rectangle,
     gio::File,
-    glib::{self, MainContext, Propagation},
-    prelude::{Cast, DisplayExt, MonitorExt, SurfaceExt},
+    glib::{self, MainContext, Propagation, SignalHandlerId},
+    prelude::{Cast, DisplayExt, MonitorExt, ObjectExt, SurfaceExt},
 };
-use gtk4::prelude::{AdjustmentExt, EventControllerExt};
 use gtk4::{
     Align, Application, ApplicationWindow, CssProvider, EventControllerKey, Expander, FlowBox,
     FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, NaturalWrapMode, Ordering,
     Orientation, PolicyType, ScrolledWindow, SearchEntry, Widget,
     glib::ControlFlow,
     prelude::{
-        ApplicationExt, ApplicationExtManual, BoxExt, EditableExt, FlowBoxChildExt,
-        GestureSingleExt, GtkWindowExt, ListBoxRowExt, NativeExt, OrientableExt, WidgetExt,
+        AdjustmentExt, ApplicationExt, ApplicationExtManual, BoxExt, EditableExt,
+        EventControllerExt, FlowBoxChildExt, GestureSingleExt, GtkWindowExt, ListBoxRowExt,
+        NativeExt, OrientableExt, WidgetExt,
     },
 };
 use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
@@ -164,10 +162,6 @@ pub struct MenuItem<T: Clone> {
     /// Allows to store arbitrary additional information
     pub data: Option<T>,
 
-    // /// If set to true, the item is _not_ an intermediate thing
-    // /// and is acceptable, i.e. will close the UI
-    // pub allow_submit: bool,
-    // todo
     /// Score the item got in the current search
     search_sort_score: f64,
     /// True if the item is visible
@@ -985,7 +979,7 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
     custom_keys: Option<&CustomKeys>,
 ) {
     fn connect_key_handler<
-        T: gtk4::prelude::ObjectExt + Clone + 'static + WidgetExt,
+        T: ObjectExt + Clone + 'static + WidgetExt,
         Menu: Clone + 'static + Send,
     >(
         widget: &T,
@@ -1028,7 +1022,6 @@ fn is_key_match(
     }
 }
 
-#[allow(clippy::cast_sign_loss)] // ok because we only need positive values
 fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
@@ -1059,6 +1052,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
                 } else {
                     pos
                 };
+                // position will not be negative
+                #[allow(clippy::cast_sign_loss)]
                 if let Some((start, ch)) = query.char_indices().nth(del_pos as usize) {
                     let end = start + ch.len_utf8();
                     query.replace_range(start..end, "");
@@ -1094,7 +1089,10 @@ fn handle_key_press<T: Clone + 'static + Send>(
                     let search_text = ui.search_text.lock().unwrap();
                     search_text.clone()
                 };
+
                 let pos = ui.search.position();
+                // position never is negative here.
+                #[allow(clippy::cast_sign_loss)]
                 let byte_idx = query
                     .char_indices()
                     .nth(pos as usize)
@@ -1502,7 +1500,6 @@ fn get_monitor_geometry(surface: Option<&gdk4::Surface>) -> Option<Rectangle> {
         .map(|monitor| monitor.geometry())
 }
 
-#[allow(clippy::cast_possible_truncation)] // does not matter for calculating height
 fn calculate_row_height<T: Clone + 'static>(
     ui: &UiElements<T>,
     lines: i32,
@@ -1523,8 +1520,12 @@ fn calculate_row_height<T: Clone + 'static>(
                     let factor = config.lines_size_factor();
 
                     if config.allow_images() && baseline < i32::from(config.image_size()) {
+                        // not relevant for height
+                        #[allow(clippy::cast_possible_truncation)]
                         Some((f64::from(i32::from(config.image_size())) * factor) as i32)
                     } else {
+                        // not relevant for height
+                        #[allow(clippy::cast_possible_truncation)]
                         Some((f64::from(baseline) * factor) as i32)
                     }
                 } else {
@@ -1944,6 +1945,7 @@ pub fn filtered_query(search_ignored_words: Option<&Vec<Regex>>, query: &str) ->
     }
     query
 }
+
 enum ChildPosition {
     Front,
     Back,
@@ -1992,13 +1994,13 @@ fn select_visible_child<T: Clone>(
 }
 
 // allowed because truncating is fine, we do no need the precision
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_precision_loss)]
 fn percent_or_absolute(value: &str, base_value: i32) -> Option<i32> {
     if value.contains('%') {
         let value = value.replace('%', "").trim().to_string();
         match value.parse::<i32>() {
-            Ok(n) => Some(((n as f32 / 100.0) * base_value as f32) as i32),
+            // okay to truncate the value for positioning.
+            #[allow(clippy::cast_possible_truncation)]
+            Ok(n) => Some(((f64::from(n) / 100.0) * f64::from(base_value)) as i32),
             Err(_) => None,
         }
     } else {
@@ -2007,14 +2009,12 @@ fn percent_or_absolute(value: &str, base_value: i32) -> Option<i32> {
 }
 
 /// Sorts menu items in alphabetical order, while maintaining the initial score
-// highly unlikely that we are dealing with > i64 items
-#[allow(clippy::cast_possible_wrap)]
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_precision_loss)]
 pub fn apply_sort<T: Clone>(items: &mut [MenuItem<T>], order: &SortOrder) {
     match order {
         SortOrder::Default => {}
         SortOrder::Alphabetical => {
+            // we won't deal w/ enough items that this matters
+            #[allow(clippy::cast_precision_loss)]
             let special_score = items.len() as f64;
             let mut regular_score = 0.0;
             items.sort_by(|l, r| r.label.cmp(&l.label));

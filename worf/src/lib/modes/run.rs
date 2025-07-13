@@ -55,8 +55,6 @@ impl RunProvider {
         })
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_precision_loss)]
     fn load(&self) -> Vec<MenuItem<()>> {
         let path_var = env::var("PATH").unwrap_or_default();
         let paths = env::split_paths(&path_var);
@@ -75,6 +73,8 @@ impl RunProvider {
                         }
 
                         let label = path.file_name()?.to_str()?.to_string();
+                        // acceptable, because we most likely have not enough items anyways
+                        #[allow(clippy::cast_precision_loss)]
                         let sort_score = *self.cache.get(&label).unwrap_or(&0) as f64;
 
                         Some(MenuItem::new(

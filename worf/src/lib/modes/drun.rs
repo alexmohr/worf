@@ -70,8 +70,6 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
         }
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_precision_loss)]
     fn load(&self) -> Vec<MenuItem<T>> {
         let locale_variants = get_locale_variants();
         let default_icon = "application-x-executable".to_string();
@@ -117,6 +115,7 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                     .map(|s| s.content.clone())
                     .or(Some(default_icon.clone()));
 
+                #[allow(clippy::cast_precision_loss)] // we won't deal with enough values anyways
                 let sort_score = *self.cache.get(&name).unwrap_or(&0) as f64;
 
                 let mut entry = MenuItem::new(
