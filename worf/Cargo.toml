@@ -1,15 +1,15 @@
 [package]
 name = "worf"
-version = "0.5.0"
+version = "0.7.0"
 edition = "2024"
 
 description = "Wayland application launcher inspired by wofi, rofi, and walker. Written in Rust with GTK4, supporting multiple modes (math, drun, file, ssh, run, emoji, search, auto), modern theming, and high performance."
-keywords = ["wayland", "launcher", "gtk4", "wofi", "rofi", "application-launcher", "linux", "desktop"]
+keywords = ["wayland", "gtk4", "wofi", "rofi", "application-launcher"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/alexmohr/worf"
 documentation = "https://github.com/alexmohr/worf#readme"
 homepage = "https://github.com/alexmohr/worf"
-readme = "../../README.md"
+readme = "../README.md"
 
 [lints.clippy]
 # enable pedantic
@@ -48,8 +48,7 @@ toml = "0.8.20"
 serde_json = "1.0.140"
 crossbeam = "0.8.4"
 libc = "0.2.171"
-#freedesktop-file-parser = "0.2.0"
-freedesktop-file-parser = { git = "https://github.com/alexmohr/desktop_file_parser", branch = "fix-wm-class" }
+freedesktop-file-parser = "0.3.1"
 strsim = "0.11.1"
 dirs = "6.0.0"
 which = "7.0.3"

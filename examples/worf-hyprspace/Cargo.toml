@@ -12,7 +12,7 @@ homepage = "https://github.com/alexmohr/worf"
 readme = "Readme.md"
 
 [dependencies]
-worf = { path = "../../worf" }
+worf = { path = "../../worf", version = "0.7" }
 env_logger = "0.11.8"
 hyprland = "0.4.0-beta.2"
 clap = "4.5.40"

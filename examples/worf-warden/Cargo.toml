@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 description = "Bitwarden frontend and password manager using the Worf API. Integrates with rbw and ydotool for secure password management."
-keywords = ["bitwarden", "password-manager", "worf", "wayland", "rust"]
+keywords = ["bitwarden", "password-manager", "worf", "wayland"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/alexmohr/worf"
 documentation = "https://github.com/alexmohr/worf#readme"
