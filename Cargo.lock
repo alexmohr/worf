@@ -723,8 +723,9 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "freedesktop-file-parser"
-version = "0.2.0"
-source = "git+https://github.com/alexmohr/desktop_file_parser?branch=fix-wm-class#fac196cd45afc1cb1c059085b7510e5a084e80bf"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1998b5ee36700463150124ac6d6d6128a5a4da453a6f6777a26810f05539f41"
 dependencies = [
  "freedesktop-icons",
  "thiserror 2.0.12",
@@ -2917,7 +2918,7 @@ dependencies = [
 
 [[package]]
 name = "worf"
-version = "0.5.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "crossbeam",
