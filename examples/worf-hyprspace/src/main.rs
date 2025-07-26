@@ -385,10 +385,10 @@ fn workspace_from_selection<'a>(
     action: Option<Action>,
     max_id: i32,
 ) -> Result<(WorkspaceIdentifierWithSpecial<'a>, i32, bool), String> {
-    if let Some(action) = action {
-        if let Some(ws) = action.workspace {
-            return Ok((WorkspaceIdentifierWithSpecial::Id(ws.id), ws.id, false));
-        }
+    if let Some(action) = action
+        && let Some(ws) = action.workspace
+    {
+        return Ok((WorkspaceIdentifierWithSpecial::Id(ws.id), ws.id, false));
     }
     find_first_free_workspace_id(max_id)
         .map(|id| (WorkspaceIdentifierWithSpecial::Id(id), id, true))

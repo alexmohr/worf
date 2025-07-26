@@ -1,5 +1,3 @@
-use clap::Parser;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     env,
@@ -8,6 +6,9 @@ use std::{
     thread::sleep,
     time::Duration,
 };
+
+use clap::Parser;
+use serde::{Deserialize, Serialize};
 use worf::{
     config::{self, Config, CustomKeyHintLocation, Key},
     desktop::{copy_to_clipboard, spawn_fork},

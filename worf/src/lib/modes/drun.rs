@@ -7,7 +7,6 @@ use std::{
 
 use freedesktop_file_parser::EntryType;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     Error,
@@ -19,12 +18,6 @@ use crate::{
     gui::{self, ArcProvider, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
 };
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-struct DRunCache {
-    desktop_entry: String,
-    run_count: usize,
-}
 
 #[derive(Clone)]
 pub(crate) struct DRunProvider<T: Clone> {
@@ -78,8 +71,7 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
         let entries: Vec<MenuItem<T>> = find_desktop_files()
             .into_par_iter()
             .filter(|file| {
-                !file.entry.no_display.unwrap_or(false)
-                    && !file.entry.hidden.unwrap_or(false)
+                !file.entry.no_display.unwrap_or(false) && !file.entry.hidden.unwrap_or(false)
             })
             .filter_map(|file| {
                 let name = lookup_name_with_locale(
@@ -89,7 +81,11 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                 )?;
 
                 let (action, working_dir, in_terminal) = match &file.entry.entry_type {
-                    EntryType::Application(app) => (app.exec.clone(), app.path.clone(), app.terminal.unwrap_or(false)),
+                    EntryType::Application(app) => (
+                        app.exec.clone(),
+                        app.path.clone(),
+                        app.terminal.unwrap_or(false),
+                    ),
                     _ => return None,
                 };
 
@@ -104,7 +100,10 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                     .unwrap_or(false);
 
                 if !cmd_exists {
-                    log::warn!("Skipping desktop entry for {name:?} because action {action:?} does not exist");
+                    log::warn!(
+                        "Skipping desktop entry for {name:?} because action {action:?} does not \
+                         exist"
+                    );
                     return None;
                 }
 
@@ -142,8 +141,8 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                                 .or(icon.clone())
                                 .unwrap_or("application-x-executable".to_string());
 
-
-                            let action = self.get_action(in_terminal, action.exec.clone(), &action_name);
+                            let action =
+                                self.get_action(in_terminal, action.exec.clone(), &action_name);
 
                             entry.sub_elements.push(MenuItem::new(
                                 action_name,

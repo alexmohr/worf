@@ -161,10 +161,10 @@ fn main() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     let update_cache = thread::spawn(move || {
         windows.iter().for_each(|item| {
-            if let Some(window) = &item.data {
-                if let Some(icon) = &window.icon {
-                    cache.insert(window.process.clone(), icon.clone());
-                }
+            if let Some(window) = &item.data
+                && let Some(icon) = &window.icon
+            {
+                cache.insert(window.process.clone(), icon.clone());
             }
         });
         let updated_toml = toml::to_string(&cache);

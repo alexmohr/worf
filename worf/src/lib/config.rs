@@ -1,8 +1,7 @@
 use std::{env, fs, path::PathBuf, str::FromStr};
 
 use clap::{Parser, ValueEnum};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
 use crate::Error;
@@ -462,7 +461,9 @@ pub struct Config {
     /// set where the window is displayed.
     /// can be used to anchor a window to an edge by
     /// setting top,left for example
-    #[clap(short = 'l', long = "location", value_delimiter = ',', value_parser = clap::builder::ValueParser::new(Anchor::from_str)
+    #[clap(
+        short = 'l', long = "location",
+        value_delimiter = ',', value_parser = clap::builder::ValueParser::new(Anchor::from_str)
     )]
     location: Option<Vec<Anchor>>,
 
@@ -1050,10 +1051,10 @@ pub fn expand_path(input: &str) -> PathBuf {
     let mut path = input.to_string();
 
     // Expand ~ to home directory
-    if path.starts_with('~') {
-        if let Some(home_dir) = dirs::home_dir() {
-            path = path.replacen('~', home_dir.to_str().unwrap_or(""), 1);
-        }
+    if path.starts_with('~')
+        && let Some(home_dir) = dirs::home_dir()
+    {
+        path = path.replacen('~', home_dir.to_str().unwrap_or(""), 1);
     }
 
     // Expand $VAR style environment variables
