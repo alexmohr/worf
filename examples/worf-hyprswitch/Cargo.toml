@@ -3,6 +3,14 @@ name = "worf-hyprswitch"
 version = "0.1.0"
 edition = "2024"
 
+description = "Elegant window switcher for Hyprland, written in Rust using the Worf API."
+keywords = ["hyprland", "window-switcher", "wayland", "worf", "rust"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/alexmohr/worf"
+documentation = "https://github.com/alexmohr/worf#readme"
+homepage = "https://github.com/alexmohr/worf"
+readme = "Readme.md"
+
 [dependencies]
 worf = { path = "../../worf" }
 env_logger = "0.11.8"
