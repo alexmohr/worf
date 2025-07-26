@@ -13,8 +13,47 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  format_and_clippy_nightly_toolchain:
+    runs-on : ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+      
+      - name: Install ubuntu dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y librust-gdk4-sys-dev \
+            libglib2.0-dev libgtk-layer-shell-dev libgtk-layer-shell0 gir1.2-gtklayershell-0.1 \
+            libgtk-4-dev gobject-introspection libgirepository1.0-dev gtk-doc-tools python3 valac \
+            git cmake gcc meson ninja-build
 
+      - name: Install gt4k layer shell
+        run: |
+          git clone https://github.com/wmww/gtk4-layer-shell
+          cd gtk4-layer-shell
+          meson setup -Dexamples=true -Ddocs=true -Dtests=true build
+          ninja -C build
+          sudo ninja -C build install
+          sudo ldconfig
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+      
+      - name: Install format
+        run: rustup component add rustfmt
+      
+      - name: Check format with nightly rules
+        run: cargo +nightly fmt -- --check --config error_on_unformatted=true,error_on_line_overflow=true,format_strings=true,group_imports=StdExternalCrate,imports_granularity=Crate
+      
+      - name: install clippy
+        run: rustup component add clippy --toolchain nightly
+      
+      - name: run clippy nightly
+        run: cargo +nightly clippy --all-targets -- -D warnings
+
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -38,11 +77,19 @@ jobs:
           sudo ninja -C build install
           sudo ldconfig
 
-      - name: Formatting
+      - name: Install taplo toml toolkit
+        run: cargo install --locked taplo-cli
+      - name: Toml Formatting
+        run: taplo fmt --check --diff
+
+      - name: Rust Formatting
         run: cargo fmt --all -- --check
+      
       - name: Clippy warnings
         run: cargo clippy -- -D warnings
+      
       - name: Build
         run: cargo build --verbose
+      
       - name: Run tests
         run: cargo test -- --show-output

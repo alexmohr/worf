@@ -1277,21 +1277,21 @@ where
 
         drop(menu_rows);
 
-        if let Some(item) = item {
-            if let Err(e) = handle_selected_item(ui, meta, None, Some(item), None) {
-                log::error!("failed to handle selected item {e}");
-            }
+        if let Some(item) = item
+            && let Err(e) = handle_selected_item(ui, meta, None, Some(item), None)
+        {
+            log::error!("failed to handle selected item {e}");
         }
     } else {
         drop(menu_rows);
     }
 
-    if meta.config.read().unwrap().dynamic_lines() {
-        if let Some(geometry) = get_monitor_geometry(ui.window.surface().as_ref()) {
-            let height =
-                calculate_dynamic_lines_window_height(&meta.config.read().unwrap(), ui, geometry);
-            ui.window.set_height_request(height);
-        }
+    if meta.config.read().unwrap().dynamic_lines()
+        && let Some(geometry) = get_monitor_geometry(ui.window.surface().as_ref())
+    {
+        let height =
+            calculate_dynamic_lines_window_height(&meta.config.read().unwrap(), ui, geometry);
+        ui.window.set_height_request(height);
     }
 }
 
@@ -1310,45 +1310,43 @@ fn handle_key_expand<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>) -> Propa
 where
     T: Clone + Send + 'static,
 {
-    if let Some(fb) = ui.main_box.selected_children().first() {
-        if let Some(child) = fb.child() {
-            let expander = child.downcast::<Expander>().ok();
-            if let Some(expander) = expander {
-                expander.set_expanded(true);
-            } else {
-                let data = {
-                    let lock = ui.menu_rows.read().unwrap();
-                    let menu_item = lock.get(fb);
-                    menu_item.map(|menu_item| {
-                        (
-                            meta.item_provider
-                                .lock()
-                                .unwrap()
-                                .get_sub_elements(menu_item),
-                            menu_item.clone(),
-                        )
-                    })
-                };
+    if let Some(fb) = ui.main_box.selected_children().first()
+        && let Some(child) = fb.child()
+    {
+        let expander = child.downcast::<Expander>().ok();
+        if let Some(expander) = expander {
+            expander.set_expanded(true);
+        } else {
+            let data = {
+                let lock = ui.menu_rows.read().unwrap();
+                let menu_item = lock.get(fb);
+                menu_item.map(|menu_item| {
+                    (
+                        meta.item_provider
+                            .lock()
+                            .unwrap()
+                            .get_sub_elements(menu_item),
+                        menu_item.clone(),
+                    )
+                })
+            };
 
-                if let Some((provider_data, menu_item)) = data {
-                    if let Some(items) = provider_data.items {
-                        build_ui_from_menu_items(ui, meta, items);
-                        let query = match meta.expand_mode {
-                            ExpandMode::Verbatim => menu_item.label.clone(),
-                            ExpandMode::WithSpace => format!("{} ", menu_item.label.clone()),
-                        };
+            if let Some((provider_data, menu_item)) = data {
+                if let Some(items) = provider_data.items {
+                    build_ui_from_menu_items(ui, meta, items);
+                    let query = match meta.expand_mode {
+                        ExpandMode::Verbatim => menu_item.label.clone(),
+                        ExpandMode::WithSpace => format!("{} ", menu_item.label.clone()),
+                    };
 
-                        set_search_text(ui, meta, &query);
-                        if let Ok(new_pos) = i32::try_from(query.len() + 1) {
-                            ui.search.set_position(new_pos);
-                        }
-
-                        update_view(ui, meta, &query);
-                    } else if let Err(e) =
-                        handle_selected_item(ui, meta, None, Some(menu_item), None)
-                    {
-                        log::error!("{e}");
+                    set_search_text(ui, meta, &query);
+                    if let Ok(new_pos) = i32::try_from(query.len() + 1) {
+                        ui.search.set_position(new_pos);
                     }
+
+                    update_view(ui, meta, &query);
+                } else if let Err(e) = handle_selected_item(ui, meta, None, Some(menu_item), None) {
+                    log::error!("{e}");
                 }
             }
         }
@@ -1360,12 +1358,11 @@ fn handle_key_copy<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>) -> Propaga
 where
     T: Clone + Send + 'static,
 {
-    if let Some(item) = get_selected_item(ui) {
-        if let Some(action) = item.action {
-            if let Err(e) = desktop::copy_to_clipboard(action, None) {
-                log::error!("failed to copy to clipboard: {e}");
-            }
-        }
+    if let Some(item) = get_selected_item(ui)
+        && let Some(action) = item.action
+        && let Err(e) = desktop::copy_to_clipboard(action, None)
+    {
+        log::error!("failed to copy to clipboard: {e}");
     }
     if let Err(e) = meta.selected_sender.send(Err(Error::NoSelection)) {
         log::error!("failed to send message {e}");
@@ -1445,11 +1442,11 @@ fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>
         return;
     };
 
-    if !config.blurred_background_fullscreen() {
-        if let Some(background) = &ui.background {
-            background.set_height_request(geometry.height());
-            background.set_width_request(geometry.width());
-        }
+    if !config.blurred_background_fullscreen()
+        && let Some(background) = &ui.background
+    {
+        background.set_height_request(geometry.height());
+        background.set_width_request(geometry.width());
     }
 
     // Calculate target width from config, return early if not set
@@ -1541,7 +1538,8 @@ fn calculate_row_height<T: Clone + 'static>(
     };
 
     log::debug!(
-        "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height {height:?}, lines {lines:?}"
+        "heights: scroll {scroll_height}, window {window_height}, keys {height_box}, height \
+         {height:?}, lines {lines:?}"
     );
 
     height_box
@@ -1574,10 +1572,10 @@ where
     if let Some(s) = ui.main_box.selected_children().into_iter().next() {
         let list_items = ui.menu_rows.read().unwrap();
         let item = list_items.get(&s);
-        if let Some(selected_item) = item {
-            if selected_item.visible {
-                return Some(selected_item.clone());
-            }
+        if let Some(selected_item) = item
+            && selected_item.visible
+        {
+            return Some(selected_item.clone());
         }
     }
 
@@ -1728,16 +1726,15 @@ fn create_menu_row<T: Clone + 'static + Send>(
         label.set_max_width_chars(max_width_chars);
     }
 
-    if let Some(max_len) = meta.config.read().unwrap().line_max_chars() {
-        if let Some(text) = label_text.as_ref() {
-            if text.chars().count() > max_len {
-                let end = text
-                    .char_indices()
-                    .nth(max_len)
-                    .map_or(text.len(), |(idx, _)| idx);
-                label.set_text(&format!("{}...", &text[..end]));
-            }
-        }
+    if let Some(max_len) = meta.config.read().unwrap().line_max_chars()
+        && let Some(text) = label_text.as_ref()
+        && text.chars().count() > max_len
+    {
+        let end = text
+            .char_indices()
+            .nth(max_len)
+            .map_or(text.len(), |(idx, _)| idx);
+        label.set_text(&format!("{}...", &text[..end]));
     }
 
     row_box.append(&label);
@@ -1772,16 +1769,16 @@ fn create_menu_row<T: Clone + 'static + Send>(
     };
 
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
-        if n_press == presses {
-            if let Err(e) = handle_selected_item(
+        if n_press == presses
+            && let Err(e) = handle_selected_item(
                 &click_ui,
                 &click_meta,
                 None,
                 Some(element_clone.clone()),
                 None,
-            ) {
-                log::error!("{e}");
-            }
+            )
+        {
+            log::error!("{e}");
         }
     });
     row.add_controller(click);
@@ -1963,10 +1960,10 @@ fn find_visible_child<T: Clone>(
 
     for i in range {
         let i_32 = i.try_into().unwrap_or(i32::MAX);
-        if let Some(child) = flow_box.child_at_index(i_32) {
-            if child.is_visible() {
-                return Some(child);
-            }
+        if let Some(child) = flow_box.child_at_index(i_32)
+            && child.is_visible()
+        {
+            return Some(child);
         }
     }
 

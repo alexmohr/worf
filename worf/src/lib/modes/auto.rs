@@ -60,10 +60,10 @@ impl AutoItemProvider {
                 .is_some_and(|t| t != &AutoRunType::Auto)
         {
             let mut data = self.drun.get_elements(None);
-            if let Some(items) = data.items.as_mut() {
-                if let Some(mut ssh) = self.ssh.get_elements(None).items {
-                    items.append(&mut ssh);
-                }
+            if let Some(items) = data.items.as_mut()
+                && let Some(mut ssh) = self.ssh.get_elements(None).items
+            {
+                items.append(&mut ssh);
             }
 
             self.last_mode = Some(AutoRunType::Auto);
@@ -77,7 +77,18 @@ impl AutoItemProvider {
 fn contains_math_functions_or_starts_with_number(input: &str) -> bool {
     // Regex for function names (word boundaries to match whole words)
     static MATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\b(sqrt|abs|exp|ln|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|floor|ceil|round|signum|min|max|pi|e|0x|0b|\||&|<<|>>|\^)\b").unwrap()
+        Regex::new(
+            r"\b(
+            sqrt|abs|exp|ln|sin|cos|tan|
+            asin|acos|atan|atan2|
+            sinh|cosh|tanh|asinh|acosh|atanh|
+            floor|ceil|round|signum|min|max|
+            pi|e|
+            0x|0b|
+            \||&|<<|>>|\^
+        )\b",
+        )
+        .unwrap()
     });
 
     // Regex for strings that start with a number (including decimals)

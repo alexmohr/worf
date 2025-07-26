@@ -137,12 +137,11 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
                     if let Some(mut path_str) =
                         entry.path().to_str().map(std::string::ToString::to_string)
                     {
-                        if trimmed_search.starts_with('~') {
-                            if let Some(home_dir) = dirs::home_dir() {
-                                if let Some(home_str) = home_dir.to_str() {
-                                    path_str = path_str.replace(home_str, "~");
-                                }
-                            }
+                        if trimmed_search.starts_with('~')
+                            && let Some(home_dir) = dirs::home_dir()
+                            && let Some(home_str) = home_dir.to_str()
+                        {
+                            path_str = path_str.replace(home_str, "~");
                         }
 
                         if entry.path().is_dir() {

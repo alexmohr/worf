@@ -162,7 +162,8 @@ fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
                 i += 1;
             }
             '0'..='9' | '.' => {
-                // Only insert implicit multiplication if the last token is ')' and the last token in tokens is not already an operator (except ')')
+                // Only insert implicit multiplication if the last token is ')'
+                // and the last token in tokens is not already an operator (except ')')
                 if let Some(Token::Op(')')) = last_token {
                     if let Some(Token::Op(op)) = tokens.back() {
                         if *op == ')' {
