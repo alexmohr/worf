@@ -605,7 +605,7 @@ fn build_ui<T>(
     let background = create_background(&config.read().unwrap());
 
     let search_entry = SearchEntry::new();
-    search_entry.set_can_focus(true);
+    search_entry.set_can_focus(false);
     let main_window = window.clone();
     main_window.set_can_focus(true);
     let ui_elements = Rc::new(UiElements {
@@ -1000,9 +1000,6 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
 
     // Setup window controller
     connect_key_handler(&ui_elements.window, ui_elements, meta, custom_keys.cloned());
-
-    // Setup search controller
-    connect_key_handler(&ui_elements.search, ui_elements, meta, custom_keys.cloned());
 }
 
 fn is_key_match(
