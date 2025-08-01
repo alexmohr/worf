@@ -392,7 +392,7 @@ fn show(
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 struct WardenConfig {
     custom_auto_types: HashMap<String, String>,
 }
@@ -417,8 +417,12 @@ fn main() -> Result<(), String> {
     cfg.worf = config::load_worf_config(Some(&cfg.worf)).unwrap_or(cfg.worf);
 
     let warden_config: WardenConfig =
-        config::load_config(cfg.warden_config.as_deref(), "worf", "warden")
-            .map_err(|e| format!("failed to parse warden config {e}"))?;
+        config::load_config(cfg.warden_config.as_deref(), "worf", "warden").unwrap_or_else(|e| {
+            log::warn!(
+                "Failed to parse or find the worf-warden configuration: {e}, using defaults"
+            );
+            WardenConfig::default()
+        });
 
     if !groups().contains("input") {
         log::error!(

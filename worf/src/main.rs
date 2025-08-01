@@ -88,21 +88,32 @@ impl FromStr for Mode {
     }
 }
 
-fn main() -> Result<(), String> {
+fn main() {
     env_logger::Builder::new()
         .parse_filters(&env::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()))
         .format_timestamp_micros()
         .init();
 
     let mut config = MainConfig::parse();
-    config.worf = config::load_worf_config(Some(&config.worf)).map_err(|e| e.to_string())?;
+    config.worf = if let Ok(config) =
+        config::load_worf_config(Some(&config.worf)).map_err(|e| e.to_string())
+    {
+        config
+    } else {
+        log::warn!(
+            "Failed to load config, using default config, the configuration should be located in \
+             $XDG_CONFIG_DIR/worf or if that variable is not defined in $HOME/.config/worf"
+        );
+        config::Config::default()
+    };
+
     if config.worf.prompt().is_none() {
         config.worf.set_prompt(config.show.to_string());
     }
 
     if config.worf.version() {
         println!("worf version {}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
+        return;
     }
 
     fork_if_configured(&config.worf); // may exit the program
@@ -131,6 +142,4 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
     }
-
-    Ok(())
 }
