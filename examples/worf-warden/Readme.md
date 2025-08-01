@@ -6,18 +6,34 @@ Simple password manager build upon these additional tools aside worf
   * [pinentry](https://www.gnupg.org/related_software/pinentry/index.en.html) is required to show a dialog show password entry 
   * As worf warden 
 * [ydotool](https://github.com/ReimuNotMoe/ydotool)
+  * ydotool is just the defaults, other tools can be configured via `--typing-cmd` or using this key in the config file. 
 
 The idea it taken from https://github.com/mattydebie/bitwarden-rofi/blob/master/bwmenu
 
 ## Custom auto typing
-* Auto typing supports custom keys. Just pass user name with `$U` and pw with `$P`
-  * I.e. the default is `$U\t$P` which is user, tab, password. 
-  * This is using ydotool to type, so see their documentation for key input details.
 
-### Example
-`~/.config/worf/warden`
+Custom key strokes are supported for auto typing. 
+For example this can be used for some websites like PayPal, 
+where `<enter>` after the username must be typed instead of `<tab>`
+
+Special variables:
+* `$U` -- Username
+* `$P` -- Password
+* `$T` -- Two factor
+* `$S` -- Sleep in milliseconds
+* `_` -- All underscores are removed and used to make the string more readable
+
+The default is `$U\t$P` which is user, tab, password.  
+As the string is passed to the typing tool, see their documentation for special chars.
+
+## Configuration
+
+The location of the configuration file follows the same rules as worf itself.
 
 ```toml
+typing_cmd = "ydotool"
+typing_cmd_args = ["type"]
+
 [custom_auto_types]
 # This will use User, enter, password for the demo entry.
 # You can use the id or the label as key, where id has higher precedence.
