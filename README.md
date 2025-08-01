@@ -113,6 +113,163 @@ Copy the binaries you need into a path that is part of `$PATH`, for example `/us
 Installing via cargo (once available) will put the binaries in `$HOME/.cargo/bin`.
 
 
+## Configuring Worf
+
+Worf configuration files are looked up in the following directories
+* Configuration file passed on the command line with `--conf`
+* `$XDG_CONF_DIR/worf/config`
+* `$HOME/.config/worf/config`
+
+When no file is found, the defaults will be used.
+Same is true for the style sheet, expect the filename will be `style.css`
+
+All configuration options can also be set via the command line.
+
+### Configuration options
+
+This section describes all configuration options available for Worf, including their default values and usage. 
+At the end, you will find a sample TOML configuration with all options set to their defaults.
+All configuration options can also be set on the command line. Run `worf --help` for details.
+The command line options have precedence over the configuration file.
+
+
+| Option                        | Type             | Default Value                | Description                                                    |
+|-------------------------------|------------------|------------------------------|----------------------------------------------------------------|
+| fork                          | bool             | false                        | Forks the menu so you can close the terminal                   |
+| cfg_path                      | string           | None                         | Selects a config file to use                                   |
+| version                       | bool             | false                        | Prints the version and then exits                              |
+| style                         | string           | None                         | Defines the style sheet to be loaded                           |
+| width                         | string           | "50%"                        | Default width of the window                                    |
+| height                        | string           | "40%"                        | Default height of the window                                   |
+| prompt                        | string           | None                         | Defines which prompt is used                                   |
+| normal_window                 | bool             | false                        | If true, a normal window instead of a layer shell will be used |
+| allow_images                  | bool             | true                         | Set to 'false' to disable images                               |
+| allow_markup                  | bool             | false                        | If true, pango markup is parsed                                |
+| cache_file                    | string           | None                         | Custom cache file to use                                       |
+| term                          | string           | Auto-detected                | Defines which terminal to use                                  |
+| password                      | string           | None                         | Password for protected actions                                 |
+| hide_scroll                   | bool             | false                        | Defines whether the scrollbar is visible                       |
+| matching                      | MatchMethod      | Contains                     | Defines the matching method                                    |
+| insensitive                   | bool             | true                         | Control if search is case-insensitive                          |
+| parse_search                  | bool             | None                         | Parse search option                                            |
+| location                      | [Anchor]         | None                         | Set where the window is displayed                              |
+| no_actions                    | bool             | false                        | If true, sub actions will be disabled                          |
+| lines                         | int              | None                         | Number of lines to show                                        |
+| lines_additional_space        | int              | 0                            | Additional space for lines                                     |
+| lines_size_factor             | float            | 1.4                          | Factor to multiply the line height                             |
+| columns                       | int              | 1                            | Number of columns to display                                   |
+| sort_order                    | SortOrder        | Alphabetical                 | How elements are sorted                                        |
+| search                        | string           | None                         | Search for given value at startup                              |
+| orientation                   | Orientation      | Vertical                     | Window alignment                                               |
+| halign                        | Align            | Fill                         | Horizontal alignment                                           |
+| content_halign                | Align            | Fill                         | Alignment of content                                           |
+| content_vcenter               | bool             | false                        | Center content on vertical axis                                |
+| valign                        | Align            | Center                       | Vertical alignment                                             |
+| image_size                    | int              | 32                           | Image size in pixels                                           |
+| hide_search                   | bool             | false                        | Hide the search field                                          |
+| key_hide_search               | Key              | None                         | Key to toggle the search bar                                   |
+| key_submit                    | Key              | Enter                        | Key to run the associated thing                                |
+| key_exit                      | Key              | Escape                       | Key to close the window                                        |
+| key_copy                      | Key              | None                         | Key to copy to clipboard                                       |
+| key_expand                    | Key              | Tab                          | Key to expand/autocomplete                                     |
+| dynamic_lines                 | bool             | false                        | Resize according to displayed rows                             |
+| dynamic_lines_limit           | bool             | true                         | Dynamic lines do not exceed max height                         |
+| layer                         | Layer            | Top                          | Defines the layer worf is running on                           |
+| single_click                  | bool             | false                        | Single click selects entry                                     |
+| pre_display_exec              | bool             | None                         | Pre-display exec option                                        |
+| fuzzy_min_score               | float            | 0.0                          | Minimum score for fuzzy search                                 |
+| row_box_orientation           | Orientation      | Horizontal                   | Orientation of items in row box                                |
+| line_wrap                     | WrapMode         | None                         | Defines if lines should wrap                                   |
+| line_max_chars                | int              | None                         | Truncate labels after this amount                              |
+| line_max_width_chars          | int              | None                         | Maximum width of a label in chars                              |
+| emoji_hide_label              | bool             | false                        | Display only icon in emoji mode                                |
+| key_detection_type            | KeyDetectionType | Value                        | Key detection type                                             |
+| lines                         | int              | None                         | Number of lines to show                                        |
+| lines_additional_space        | int              | 0                            | Additional space for lines                                     |
+| lines_size_factor             | float            | 1.4                          | Factor to multiply the line height                             |
+| search_query                  | string           | "https://duckduckgo.com/?q=" | Search query to use                                            |
+| blurred_background            | bool             | false                        | Blur the background of the screen                              |
+| blurred_background_fullscreen | bool             | false                        | Set background to full screen                                  |
+| submit_with_expand            | bool             | true                         | Allow submit with expand key                                   |
+| auto_select_on_search         | bool             | false                        | Auto select when only 1 choice left                            |
+| rollover                      | bool             | true                         | Jump to first/last entry at end/start                          |
+
+### Enum Values
+- **MatchMethod**: Fuzzy, Contains, MultiContains, None
+- **Anchor**: Top, Left, Bottom, Right
+- **Orientation**: Vertical, Horizontal
+- **Align**: Fill, Start, Center
+- **SortOrder**: Default, Alphabetical
+- **WrapMode**: None, Word, Inherit
+- **Layer**: Background, Bottom, Top, Overlay
+- **KeyDetectionType**: Code, Value
+- **Key**: See source for full list (A-Z, Num0-Num9, F1-F12, Escape, Enter, etc.)
+
+---
+
+### Default TOML Configuration
+
+```toml
+fork = false
+cfg_path = ""
+version = false
+style = ""
+width = "50%"
+height = "40%"
+prompt = ""
+normal_window = false
+allow_images = true
+allow_markup = false
+cache_file = ""
+term = ""
+password = ""
+hide_scroll = false
+matching = "Contains"
+insensitive = true
+parse_search = false
+location = []
+no_actions = false
+lines = 0
+lines_additional_space = 0
+lines_size_factor = 1.4
+columns = 1
+sort_order = "Alphabetical"
+search = ""
+orientation = "Vertical"
+halign = "Fill"
+content_halign = "Fill"
+content_vcenter = false
+valign = "Center"
+image_size = 32
+hide_search = false
+key_hide_search = "None"
+key_submit = "Enter"
+key_exit = "Escape"
+key_copy = "None"
+key_expand = "Tab"
+dynamic_lines = false
+dynamic_lines_limit = true
+layer = "Top"
+single_click = false
+pre_display_exec = false
+fuzzy_min_score = 0.0
+row_box_orientation = "Horizontal"
+line_wrap = "None"
+line_max_chars = 0
+line_max_width_chars = 0
+emoji_hide_label = false
+key_detection_type = "Value"
+search_query = "https://duckduckgo.com/?q="
+blurred_background = false
+blurred_background_fullscreen = false
+submit_with_expand = true
+auto_select_on_search = false
+rollover = true
+```
+
+> **Note:** Some options (like lists, enums, or keys) may require specific formatting or values. See the enum values section above for valid options.
+
+
 ### 🌊 Hyprland Integration
 
 Enable beautiful blur effects for Worf:
