@@ -379,7 +379,7 @@ pub struct Config {
     fork: Option<bool>,
 
     /// Selects a config file to use
-    #[clap(short = 'c', long = "conf")]
+    #[clap(short = 'c', long = "conf", alias = "config")]
     cfg_path: Option<String>,
 
     /// Prints the version and then exits
