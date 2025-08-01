@@ -353,9 +353,13 @@ The possibilities are endless! Here are some powerful examples of what you can b
 - Removed copy_exec as we are not executing a binary to copy data into the clipboard
 - `exec-search` not supported
 - `parse-search` not supported
+- `pre_display_exec` not supported
 - All custom keys that change the default bindings for navigation like up, down, page, etc.
 - key_custom_(n) is not supported, such specialized behaviour can be achieved via the API though.
 
+If any of these is breaking changes is an blocker for you to migrate to Worf, open an issue and it's probably fixable.
+Options marked as `not supported` are mainly marked this way because I didn't figure out a use case where this is useful for me
+and likely there is a technical solution to fix this, so please reach out. :
 
 #### Removed Command Line Arguments
 - `mode` → Use `show` instead
