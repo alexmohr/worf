@@ -94,6 +94,24 @@ sudo ninja -C build install
 sudo ldconfig
 ```
 
+#### Installing Worf
+
+Worf is not yet available on crates.io, so it has to be build from scratch.
+Fortunately this is easy.
+
+This is described here https://rustup.rs/
+
+Then the following commands
+```bash
+git clone https://github.com/alexmohr/worf
+cd worf
+cargo build --release
+```
+
+You will find all worf binaries, including the examples, in `./target/release`.
+Copy the binaries you need into a path that is part of `$PATH`, for example `/usr/bin`.
+Installing via cargo (once available) will put the binaries in `$HOME/.cargo/bin`.
+
 
 ### 🌊 Hyprland Integration
 
@@ -104,6 +122,7 @@ layerrule = blur, worf
 ```
 
 ---
+
 
 ## 📚 Library Usage
 
