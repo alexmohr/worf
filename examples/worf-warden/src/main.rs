@@ -174,7 +174,7 @@ fn rbw(cmd: &str, args: Option<Vec<&str>>) -> Result<String, String> {
 
     let output = command
         .output()
-        .map_err(|e| format!("Failed to execute command: {e}"))?;
+        .map_err(|e| format!("Failed to execute rbw command: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
