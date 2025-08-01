@@ -97,11 +97,10 @@ sudo ldconfig
 #### Installing Worf
 
 Worf is not yet available on crates.io, so it has to be build from scratch.
-Fortunately this is easy.
-
+Before building, make sure you have the rust toolchain (at least 1.88) installed.
 This is described here https://rustup.rs/
 
-Then the following commands
+Then run the following commands to clone & build the application
 ```bash
 git clone https://github.com/alexmohr/worf
 cd worf
