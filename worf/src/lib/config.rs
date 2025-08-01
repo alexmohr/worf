@@ -455,9 +455,6 @@ pub struct Config {
     #[clap(short = 'i', long = "insensitive")]
     insensitive: Option<bool>,
 
-    #[clap(short = 'q', long = "parse-search")]
-    parse_search: Option<bool>, // todo support this
-
     /// set where the window is displayed.
     /// can be used to anchor a window to an edge by
     /// setting top,left for example
@@ -501,9 +498,6 @@ pub struct Config {
 
     //  #[clap(short = 'o', long = "monitor")]
     //  monitor: Option<String>, // todo support this
-
-    //  #[clap(short = 'r', long = "pre-display-cmd")]
-    //  pre_display_cmd: Option<String>, // todo support this
     /// Defines if window is aligned vertically or horizontally.
     #[clap(long = "orientation")]
     orientation: Option<Orientation>,
@@ -577,9 +571,6 @@ pub struct Config {
     /// Defaults to `false`
     #[clap(long = "single-click")]
     single_click: Option<bool>,
-
-    #[clap(long = "pre-display-exec")]
-    pre_display_exec: Option<bool>, // todo support this
 
     /// Minimum score for a fuzzy search to be shown
     #[clap(long = "fuzzy-min-score")]
