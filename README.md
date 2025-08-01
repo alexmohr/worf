@@ -176,7 +176,6 @@ The command line options have precedence over the configuration file.
 | dynamic_lines_limit           | bool             | true                         | Dynamic lines do not exceed max height                         |
 | layer                         | Layer            | Top                          | Defines the layer worf is running on                           |
 | single_click                  | bool             | false                        | Single click selects entry                                     |
-| pre_display_exec              | bool             | None                         | Pre-display exec option                                        |
 | fuzzy_min_score               | float            | 0.0                          | Minimum score for fuzzy search                                 |
 | row_box_orientation           | Orientation      | Horizontal                   | Orientation of items in row box                                |
 | line_wrap                     | WrapMode         | None                         | Defines if lines should wrap                                   |
@@ -251,7 +250,6 @@ dynamic_lines = false
 dynamic_lines_limit = true
 layer = "Top"
 single_click = false
-pre_display_exec = false
 fuzzy_min_score = 0.0
 row_box_orientation = "Horizontal"
 line_wrap = "None"
@@ -354,6 +352,7 @@ The possibilities are endless! Here are some powerful examples of what you can b
 - `exec-search` not supported
 - `parse-search` not supported
 - `pre_display_exec` not supported
+- `pre-display-cmd` not supported
 - All custom keys that change the default bindings for navigation like up, down, page, etc.
 - key_custom_(n) is not supported, such specialized behaviour can be achieved via the API though.
 
