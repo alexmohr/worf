@@ -114,49 +114,92 @@ fn groups() -> String {
         .to_string()
 }
 
-fn keyboard_type(text: &str) {
-    Command::new("ydotool")
-        .arg("type")
-        .arg(text)
-        .output()
-        .expect("Failed to execute ydotool");
+fn keyboard_type(text: &str, cfg: &WardenConfig) {
+    let mut cmd = Command::new(cfg.typing_cmd());
+    for arg in cfg.typing_cmd_args() {
+        cmd.arg(arg);
+    }
+    cmd.arg(text);
+
+    cmd.output()
+        .unwrap_or_else(|_| panic!("Failed to execute {}", cfg.typing_cmd()));
 }
 
-fn parse_cmd(cmd: &str) -> (&str, Option<u64>, Option<&str>) {
-    if let Some(pos) = cmd.find("$S") {
-        let left = &cmd[..pos];
-        let rest = &cmd[pos + 2..]; // Skip "$S"
+fn keyboard_return(config: &WardenConfig) {
+    keyboard_type("\n", config);
+}
 
-        // Extract digits after "$S"
-        let num_part: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+fn keyboard_auto_type(cmd: &str, id: &str, config: &WardenConfig) -> Result<(), String> {
+    let mut input = cmd.replace('_', "");
 
-        if let Ok(number) = num_part.parse::<u64>() {
-            let right = &rest[num_part.len()..];
-            return (left, Some(number), Some(right));
+    //.replace("$U", &user).replace("$P", &pw);
+
+    // if input.contains("$T") {
+    //     input = input.replace("$T", &rbw_get_totp(id, false)?);
+    // }
+
+    while !input.is_empty() {
+        // Remove up to and including the first '$'
+
+        if let Some(pos) = input.find('$') {
+            // Extract substring before '$'
+            let extracted = input[..pos].to_string();
+
+            // Remove extracted part + '$' from input
+            input.drain(..=pos);
+
+            if !extracted.is_empty() {
+                keyboard_type(extracted.as_str(), config);
+            }
         }
-    }
 
-    (cmd, None, None)
-}
+        // Match the next character
+        match input.chars().next() {
+            Some('S') => {
+                // Remove the 'S' command character
+                input.remove(0);
 
-fn keyboard_return() {
-    keyboard_type("\n");
-}
+                // Collect digits following 'S'
+                let digits: String = input.chars().take_while(|c| c.is_ascii_digit()).collect();
 
-fn keyboard_auto_type(cmd: &str, id: &str) -> Result<(), String> {
-    let user = rbw_get_user(id, false)?;
-    let pw = rbw_get_password(id, false)?;
+                // Remove the digits from input
+                let len = digits.len();
+                input.drain(..len);
 
-    let ydo_string = cmd.replace('_', "").replace("$U", &user).replace("$P", &pw);
+                // Parse and sleep
+                if let Ok(ms) = digits.parse::<u64>() {
+                    sleep(Duration::from_millis(ms));
+                } else {
+                    log::error!("Failed to parse digits: {digits}");
+                }
+                continue;
+            }
 
-    let (left, sleep_ms, right) = parse_cmd(&ydo_string);
-    keyboard_type(left);
-    if let Some(sleep_ms) = sleep_ms {
-        sleep(Duration::from_millis(sleep_ms));
-    }
+            Some('U') => {
+                let user = rbw_get_user(id, false)?;
+                keyboard_type(&user, config);
+            }
 
-    if let Some(right) = right {
-        keyboard_type(right);
+            Some('P') => {
+                let pw = rbw_get_password(id, false)?;
+                keyboard_type(&pw, config);
+            }
+
+            Some('T') => {
+                let totp = rbw_get_totp(id, false)?;
+                keyboard_type(&totp, config);
+            }
+
+            Some(c) => {
+                log::error!("Unknown character found: {c}");
+            }
+
+            None => {
+                log::error!("No command found after '$'");
+            }
+        }
+
+        input.drain(..1);
     }
 
     Ok(())
@@ -359,13 +402,13 @@ fn show(
                             .get(id)
                             .or(warden_config.custom_auto_types.get(&selection.menu.label))
                             .unwrap_or(&default);
-                        keyboard_auto_type(typing, id)?;
+                        keyboard_auto_type(typing, id, &warden_config)?;
                     } else if key == key_type_user() || key == key_type_user_and_enter() {
-                        keyboard_type(&rbw_get_user(id, false)?);
+                        keyboard_type(&rbw_get_user(id, false)?, &warden_config);
                     } else if key == key_type_password() || key == key_type_password_and_enter() {
-                        keyboard_type(&rbw_get_password(id, false)?);
+                        keyboard_type(&rbw_get_password(id, false)?, &warden_config);
                     } else if key == key_type_totp() || key == key_type_totp_and_enter() {
-                        keyboard_type(&rbw_get_totp(id, false)?);
+                        keyboard_type(&rbw_get_totp(id, false)?, &warden_config);
                     } else if key == key_lock() {
                         rbw("lock", None)?;
                     } else if key == key_sync() {
@@ -375,7 +418,7 @@ fn show(
                     }
 
                     if key.modifiers.contains(&Modifier::Shift) {
-                        keyboard_return();
+                        keyboard_return(&warden_config);
                     }
                 } else {
                     let pw = rbw_get_password(id, true)?;
@@ -394,7 +437,21 @@ fn show(
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct WardenConfig {
+    typing_cmd: Option<String>,
+    typing_cmd_args: Option<Vec<String>>,
     custom_auto_types: HashMap<String, String>,
+}
+
+impl WardenConfig {
+    fn typing_cmd(&self) -> String {
+        self.typing_cmd.clone().unwrap_or("ydotool".to_owned())
+    }
+
+    fn typing_cmd_args(&self) -> Vec<String> {
+        self.typing_cmd_args
+            .clone()
+            .unwrap_or(vec!["type".to_owned()])
+    }
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -427,9 +484,14 @@ fn main() -> Result<(), String> {
         std::process::exit(1)
     }
 
-    // will exit if there is a daemon running already, so it's fine to call this everytime.
-    if let Err(e) = spawn_fork("ydotoold", None) {
-        log::error!("Failed to start ydotool daemon: {e}");
+    // ydotool is our special default value, give it some love and start the daemon
+    // if other tools need this it must be run beforehand (or can be added here)
+    // in case another tool is added it might make sense to make it configurable
+    if warden_config.typing_cmd() == "ydotool" {
+        // will exit if there is a daemon running already, so it's fine to call this everytime.
+        if let Err(e) = spawn_fork("ydotoold", None) {
+            log::error!("Failed to start ydotool daemon: {e}");
+        }
     }
 
     let worf_config = Arc::new(RwLock::new(cfg.worf.clone()));
