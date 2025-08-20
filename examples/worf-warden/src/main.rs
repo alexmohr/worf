@@ -10,7 +10,7 @@ use std::{
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use worf::{
-    config::{self, Config, CustomKeyHintLocation, Key},
+    config::{self, Config, CustomKeyHintLocation, Key, TextOutputMode},
     desktop::{copy_to_clipboard, spawn_fork},
     gui::{
         self, CustomKeyHint, CustomKeys, ExpandMode, ItemProvider, KeyBinding, MenuItem, Modifier,
@@ -416,8 +416,16 @@ fn show(
                     }
                 } else {
                     let pw = rbw_get_password(id, true)?;
-                    if let Err(e) = copy_to_clipboard(pw, None) {
-                        log::error!("failed to copy to clipboard: {e}");
+                    match config.read().unwrap().text_output_mode() {
+                        TextOutputMode::Clipboard => {
+                            if let Err(e) = copy_to_clipboard(pw, None) {
+                                log::error!("failed to copy to clipboard: {e}");
+                            }
+                        }
+                        TextOutputMode::StandardOutput => {
+                            println!("{pw}");
+                        }
+                        TextOutputMode::None => {}
                     }
                 }
                 Ok(())

@@ -6,7 +6,8 @@ use std::{
 use regex::Regex;
 
 use crate::{
-    config::Config,
+    Error,
+    config::{Config, TextOutputMode},
     gui::{
         self, ArcFactory, ArcProvider, DefaultItemFactory, ExpandMode, ItemProvider, MenuItem,
         ProviderData,
@@ -346,7 +347,11 @@ fn calc(input: &str) -> String {
 /// Shows the math mode
 /// # Panics
 /// When failing to unwrap the arc lock
-pub fn show(config: &Arc<RwLock<Config>>) {
+///
+/// # Errors
+/// Forwards the errors from `crate::desktop::copy_to_clipboard`
+/// if the text output mode is set to `Clipboard`.
+pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     let mut calc: Vec<MenuItem<()>> = vec![];
     let provider = Arc::new(Mutex::new(MathProvider::new(())));
     let factory: ArcFactory<()> = Arc::new(Mutex::new(DefaultItemFactory::new()));
@@ -361,11 +366,24 @@ pub fn show(config: &Arc<RwLock<Config>>) {
             ExpandMode::Verbatim,
             None,
         );
+
         if let Ok(mi) = selection_result {
-            calc.push(mi.menu);
+            match config.read().unwrap().text_output_mode() {
+                TextOutputMode::Clipboard => {
+                    crate::desktop::copy_to_clipboard(mi.menu.label, None)?;
+                    break;
+                }
+                TextOutputMode::StandardOutput => {
+                    println!("{}", mi.menu.label);
+                    break;
+                }
+                TextOutputMode::None => calc.push(mi.menu),
+            }
         } else {
             log::error!("No item selected");
             break;
         }
     }
+
+    Ok(())
 }
