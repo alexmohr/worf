@@ -207,7 +207,6 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
         config.read().unwrap().sort_order(),
     )));
 
-    // todo ues a arc instead of cloning the config
     let selection_result = gui::show(
         config,
         provider,

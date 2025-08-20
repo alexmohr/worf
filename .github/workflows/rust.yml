@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -40,18 +44,24 @@ jobs:
       
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2025-07-14
+          components: clippy, rustfmt
       
-      - name: Install format
-        run: rustup component add rustfmt
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
       
-      - name: Check format with nightly rules
-        run: cargo +nightly fmt -- --check --config error_on_unformatted=true,error_on_line_overflow=true,format_strings=true,group_imports=StdExternalCrate,imports_granularity=Crate
+      - name: Formating - check for long lines
+        run: cargo fmt -- --check --config error_on_unformatted=true,error_on_line_overflow=true,format_strings=true
       
-      - name: install clippy
-        run: rustup component add clippy --toolchain nightly
+      - name: Formatting - check import order
+        run: cargo fmt -- --check --config group_imports=StdExternalCrate
+      
+      - name: Formatting - check imports granularity
+        run: cargo fmt -- --check --config imports_granularity=Crate
       
       - name: run clippy nightly
-        run: cargo +nightly clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
   build:
     runs-on: ubuntu-latest

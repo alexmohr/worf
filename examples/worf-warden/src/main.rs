@@ -132,12 +132,6 @@ fn keyboard_return(config: &WardenConfig) {
 fn keyboard_auto_type(cmd: &str, id: &str, config: &WardenConfig) -> Result<(), String> {
     let mut input = cmd.replace('_', "");
 
-    //.replace("$U", &user).replace("$P", &pw);
-
-    // if input.contains("$T") {
-    //     input = input.replace("$T", &rbw_get_totp(id, false)?);
-    // }
-
     while !input.is_empty() {
         // Remove up to and including the first '$'
 
