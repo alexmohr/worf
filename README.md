@@ -151,7 +151,7 @@ The command line options have precedence over the configuration file.
 | matching                      | MatchMethod      | Contains                     | Defines the matching method                                    |
 | insensitive                   | bool             | true                         | Control if search is case-insensitive                          |
 | parse_search                  | bool             | None                         | Parse search option                                            |
-| location                      | [Anchor]         | None                         | Set where the window is displayed                              |
+| location                      | Anchor           | None                         | Set where the window is displayed                              |
 | no_actions                    | bool             | false                        | If true, sub actions will be disabled                          |
 | lines                         | int              | None                         | Number of lines to show                                        |
 | lines_additional_space        | int              | 0                            | Additional space for lines                                     |
@@ -191,6 +191,7 @@ The command line options have precedence over the configuration file.
 | submit_with_expand            | bool             | true                         | Allow submit with expand key                                   |
 | auto_select_on_search         | bool             | false                        | Auto select when only 1 choice left                            |
 | rollover                      | bool             | true                         | Jump to first/last entry at end/start                          |
+| text_output_mode              | TextOutputMode   | Clipboard                    | Output for text modes (i.e. math and emoji)                    |
 
 ### Enum Values
 - **MatchMethod**: Fuzzy, Contains, MultiContains, None

@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
     Error,
-    config::{Config, SortOrder},
+    config::{Config, SortOrder, TextOutputMode},
     desktop::copy_to_clipboard,
     gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
 };
@@ -75,6 +75,16 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     let selection_result = gui::show(config, provider, None, None, ExpandMode::Verbatim, None)?;
     match selection_result.menu.data {
         None => Err(Error::MissingAction),
-        Some(action) => copy_to_clipboard(action, None),
+        Some(action) => match config.read().unwrap().text_output_mode() {
+            TextOutputMode::Clipboard => {
+                copy_to_clipboard(action, None)?;
+                Ok(())
+            }
+            TextOutputMode::StandardOutput => {
+                println!("{action}");
+                Ok(())
+            }
+            TextOutputMode::None => Ok(()),
+        },
     }
 }

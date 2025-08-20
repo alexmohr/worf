@@ -70,15 +70,22 @@ pub enum Layer {
     Overlay,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TextOutputMode {
+    None,
+    Clipboard,
+    StandardOutput,
+}
+
 impl FromStr for Layer {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Background" => Ok(Layer::Background),
-            "Bottom" => Ok(Layer::Bottom),
-            "Top" => Ok(Layer::Top),
-            "Overlay" => Ok(Layer::Overlay),
+        match s.trim().to_lowercase().as_str() {
+            "background" => Ok(Layer::Background),
+            "bottom" => Ok(Layer::Bottom),
+            "top" => Ok(Layer::Top),
+            "overlay" => Ok(Layer::Overlay),
             _ => Err(format!("{s} is not a valid layer.")),
         }
     }
@@ -88,7 +95,7 @@ impl FromStr for Anchor {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim() {
+        match s.trim().to_lowercase().as_str() {
             "top" => Ok(Anchor::Top),
             "left" => Ok(Anchor::Left),
             "bottom" => Ok(Anchor::Bottom),
@@ -102,7 +109,7 @@ impl FromStr for WrapMode {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+        match s.trim().to_lowercase().as_str() {
             "none" => Ok(WrapMode::None),
             "word" => Ok(WrapMode::Word),
             "inherit" => Ok(WrapMode::Inherit),
@@ -117,7 +124,7 @@ impl FromStr for SortOrder {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+        match s.trim().to_lowercase().as_str() {
             "alphabetical" => Ok(SortOrder::Alphabetical),
             "default" => Ok(SortOrder::Default),
             _ => Err(Error::InvalidArgument(
@@ -131,12 +138,25 @@ impl FromStr for KeyDetectionType {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+        match s.trim().to_lowercase().as_str() {
             "value" => Ok(KeyDetectionType::Value),
             "code" => Ok(KeyDetectionType::Code),
             _ => Err(Error::InvalidArgument(
                 format!("{s} is not a valid argument, see help for details").to_owned(),
             )),
+        }
+    }
+}
+
+impl FromStr for TextOutputMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "clipboard" => Ok(TextOutputMode::Clipboard),
+            "stdout" | "standardoutput" => Ok(TextOutputMode::StandardOutput),
+            "none" => Ok(TextOutputMode::None),
+            _ => Err(format!("{s} is not a valid layer.")),
         }
     }
 }
@@ -632,7 +652,18 @@ pub struct Config {
 
     /// Jump to the first/last entry when at the end/start and down/up is pressed
     /// Defaults to true
+    #[clap(long = "rollover")]
     rollover: Option<bool>,
+
+    /// For text modes, defines which output is used.
+    /// This is per default used in math and emoji mode.
+    /// Defaults to `Clipboard`
+    /// For emoji mode, setting this to None will disable the text output
+    /// so the mode isn't too useful anymore.
+    /// For math mode, setting this to None will provide no output but keep running
+    /// math mode in a loop. Other modes will exit and provide results on selected output.
+    #[clap(long = "text-output-mode")]
+    text_output_mode: Option<TextOutputMode>,
 }
 
 impl Config {
@@ -926,6 +957,13 @@ impl Config {
     #[must_use]
     pub fn rollover(&self) -> bool {
         self.rollover.unwrap_or(true)
+    }
+
+    #[must_use]
+    pub fn text_output_mode(&self) -> TextOutputMode {
+        self.text_output_mode
+            .clone()
+            .unwrap_or(TextOutputMode::Clipboard)
     }
 }
 

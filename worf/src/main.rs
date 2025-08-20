@@ -44,7 +44,7 @@ pub enum Mode {
 )]
 struct MainConfig {
     /// Defines the mode worf is running in
-    #[clap(long = "show")]
+    #[clap(long = "show", alias = "mode")]
     show: Mode,
 
     #[command(flatten)]
@@ -124,10 +124,7 @@ fn main() {
         Mode::Drun => modes::drun::show(&cfg_arc),
         Mode::Dmenu => modes::dmenu::show(&cfg_arc),
         Mode::File => modes::file::show(&cfg_arc),
-        Mode::Math => {
-            modes::math::show(&cfg_arc);
-            Ok(())
-        }
+        Mode::Math => modes::math::show(&cfg_arc),
         Mode::Ssh => modes::ssh::show(&cfg_arc),
         Mode::Emoji => modes::emoji::show(&cfg_arc),
         Mode::Auto => modes::auto::show(&cfg_arc),
