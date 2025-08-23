@@ -76,17 +76,21 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
 
     if let Some(home) = dirs::home_dir() {
         paths.push(home.join(".local/share/applications"));
+        paths.push(home.join(".local/share/flatpak/exports/share/applications"));
     }
 
     if let Ok(xdg_data_home) = env::var("XDG_DATA_HOME") {
-        paths.push(PathBuf::from(xdg_data_home).join(".applications"));
+        paths.push(PathBuf::from(xdg_data_home.clone()).join("applications"));
+        paths.push(PathBuf::from(xdg_data_home).join("flatpak/exports/share/applications"));
     }
 
     if let Ok(xdg_data_dirs) = env::var("XDG_DATA_DIRS") {
         for dir in xdg_data_dirs.split(':') {
-            paths.push(PathBuf::from(dir).join(".applications"));
+            paths.push(PathBuf::from(dir).join("applications"));
         }
     }
+    paths.sort();
+    paths.dedup();
 
     let p: Vec<_> = paths
         .into_par_iter()
