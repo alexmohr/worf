@@ -1063,21 +1063,15 @@ fn handle_key_press<T: Clone + 'static + Send>(
         gdk4::Key::Home => {
             ui.search.set_position(0);
         }
-        gdk4::Key::Left => {
-            ui.search.set_position(ui.search.position() - 1);
-        }
-        gdk4::Key::Right => {
-            ui.search.set_position(ui.search.position() + 1);
-        }
         gdk4::Key::End => {
             if let Ok(i) = i32::try_from(ui.search_text.lock().unwrap().len() + 1) {
                 ui.search.set_position(i);
             }
         }
-        gdk4::Key::Up => {
+        gdk4::Key::Up | gdk4::Key::Left => {
             return move_selection(ui, meta, &Direction::Up);
         }
-        gdk4::Key::Down => {
+        gdk4::Key::Down | gdk4::Key::Right => {
             return move_selection(ui, meta, &Direction::Down);
         }
         _ => {
@@ -1123,6 +1117,76 @@ fn move_selection<T: Clone + Send + 'static>(
     let Some(selected) = selected_children.first() else {
         return Propagation::Proceed;
     };
+
+    // If the selected FlowBoxChild contains an expanded Expander and one of its
+    // ListBox rows is focused, handle edge navigation between sub-items and
+    // the surrounding FlowBox children.
+    let list_items = ui.menu_rows.read().unwrap();
+    if let Some(selected_item) = list_items.get(selected)
+        && !selected_item.sub_elements.is_empty()
+        && let Some(parent_widget) = selected.child()
+        && let Ok(expander) = parent_widget.downcast::<Expander>()
+        && expander.is_expanded()
+        && let Some(list_box) = expander.child().and_then(|w| w.downcast::<ListBox>().ok())
+        && let Some(selected_row) = list_box.selected_row()
+    {
+        let idx = selected_row.index();
+        // Count children using the model data (MenuItem.sub_elements)
+        let child_count = selected_item.sub_elements.len();
+
+        // Moving down from the last sub-item -> select next FlowBox child
+        #[allow(clippy::cast_sign_loss)]
+        if *direction == Direction::Down && (idx as usize) == child_count.saturating_sub(1) {
+            // find index of `selected` inside main_box using the number of menu_rows
+            let total = ui.menu_rows.read().unwrap().len();
+            let mut sel_index: Option<usize> = None;
+            for i in 0..total {
+                if let Some(child) = ui.main_box.child_at_index(i.try_into().unwrap_or(0))
+                    && child == *selected
+                {
+                    sel_index = Some(i);
+                    expander.set_expanded(false);
+                    break;
+                }
+            }
+
+            if let Some(i) = sel_index {
+                // pick next visible child after the expander
+                for j in (i + 1)..total {
+                    if let Some(candidate) = ui.main_box.child_at_index(j.try_into().unwrap_or(0))
+                        && candidate.is_visible()
+                    {
+                        ui.main_box.select_child(&candidate);
+                        candidate.grab_focus();
+                        candidate.activate();
+                        return Propagation::Stop;
+                    }
+                }
+            }
+        }
+
+        // Moving up from the first sub-item -> focus parent expander
+        if *direction == Direction::Up {
+            return if idx == 0 {
+                // make sure the FlowBoxChild is selected and focus the expander
+                ui.main_box.select_child(selected);
+                // Try to focus the expander itself so the user clearly moved to the parent
+                let _ = expander.grab_focus();
+                expander.set_expanded(false);
+                Propagation::Stop
+            } else {
+                Propagation::Proceed
+            };
+        }
+    } else {
+        ui.menu_rows.read().unwrap().iter().for_each(|(child, _)| {
+            if let Some(c) = child.child()
+                && let Ok(expander) = c.downcast::<Expander>()
+            {
+                expander.set_expanded(false);
+            }
+        });
+    }
 
     let Some(first_child) = find_visible_child(
         &ui.menu_rows.read().unwrap(),
@@ -1208,9 +1272,8 @@ fn handle_custom_keys<T: Clone + 'static + Send>(
         keyboard_key,
     ) {
         handle_key_submit(ui, meta)
-    }
     // exit
-    else if is_key_match(
+    } else if is_key_match(
         Some(meta.config.read().unwrap().key_exit()),
         &detection_type,
         key_code,
@@ -1313,6 +1376,13 @@ where
         let expander = child.downcast::<Expander>().ok();
         if let Some(expander) = expander {
             expander.set_expanded(true);
+
+            if let Some(list_box) = expander.child().and_then(|w| w.downcast::<ListBox>().ok())
+                && let Some(first_row) = list_box.first_child()
+            {
+                first_row.grab_focus();
+                list_box.select_row(first_row.downcast_ref::<ListBoxRow>());
+            }
         } else {
             let data = {
                 let lock = ui.menu_rows.read().unwrap();
@@ -1572,12 +1642,30 @@ where
         if let Some(selected_item) = item
             && selected_item.visible
         {
+            // Check if item is an expander (has sub_elements)
+            if !selected_item.sub_elements.is_empty() {
+                // Try to get the Expander widget from the FlowBoxChild
+                if let Some(expander) = s.child().and_then(|w| w.downcast::<Expander>().ok())
+                    && expander.is_expanded()
+                    && let Some(list_box) =
+                        expander.child().and_then(|w| w.downcast::<ListBox>().ok())
+                    && let Some(selected_row) = list_box.selected_row()
+                {
+                    let idx = selected_row.index();
+                    #[allow(clippy::cast_sign_loss)]
+                    if let Some(sub_item) = selected_item.sub_elements.get(idx as usize) {
+                        return Some(sub_item.clone());
+                    }
+                }
+            }
+            // Not an expander or not expanded, return top-level item
             return Some(selected_item.clone());
         }
     }
 
     None
 }
+
 fn handle_selected_item<T>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
