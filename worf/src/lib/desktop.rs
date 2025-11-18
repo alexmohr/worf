@@ -12,6 +12,7 @@ use std::{
     time::Instant,
 };
 
+use dashmap::DashMap;
 // re-export freedesktop_file_parser for easier access
 pub use freedesktop_file_parser::{DesktopFile, EntryType};
 use notify_rust::Notification;
@@ -66,44 +67,84 @@ fn find_files(folder: &Path, file_name: &Regex) -> Option<Vec<PathBuf>> {
 pub fn find_desktop_files() -> Vec<DesktopFile> {
     static DESKTOP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i).*\.desktop$").unwrap());
 
-    let mut paths = vec![
-        PathBuf::from("/usr/share/applications"),
-        PathBuf::from("/usr/local/share/applications"),
-        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
-    ];
-
+    let mut paths = Vec::<(usize, PathBuf)>::new();
     let start = Instant::now();
 
+    // get files per prio, highest prio in homedir
+    let mut prio = 0;
     if let Some(home) = dirs::home_dir() {
-        paths.push(home.join(".local/share/applications"));
-        paths.push(home.join(".local/share/flatpak/exports/share/applications"));
+        paths.push((prio, home.join(".local/share/applications")));
+        paths.push((
+            prio,
+            home.join(".local/share/flatpak/exports/share/applications"),
+        ));
     }
 
     if let Ok(xdg_data_home) = env::var("XDG_DATA_HOME") {
-        paths.push(PathBuf::from(xdg_data_home.clone()).join("applications"));
-        paths.push(PathBuf::from(xdg_data_home).join("flatpak/exports/share/applications"));
+        let x = PathBuf::from(&xdg_data_home);
+        paths.push((prio, x.join("applications")));
+        paths.push((prio, x.join("flatpak/exports/share/applications")));
     }
 
+    prio += 1;
     if let Ok(xdg_data_dirs) = env::var("XDG_DATA_DIRS") {
         for dir in xdg_data_dirs.split(':') {
-            paths.push(PathBuf::from(dir).join("applications"));
+            paths.push((prio, PathBuf::from(dir).join("applications")));
         }
     }
-    paths.sort();
-    paths.dedup();
 
-    let p: Vec<_> = paths
+    paths.push((prio, PathBuf::from("/usr/local/share/applications")));
+    paths.push((
+        prio,
+        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+    ));
+    paths.push((prio, PathBuf::from("/usr/share/applications")));
+
+    let files: Vec<(usize, PathBuf)> = paths
         .into_par_iter()
-        .filter(|desktop_dir| desktop_dir.exists())
-        .filter_map(|desktop_dir| find_files(&desktop_dir, &DESKTOP_RE))
-        .flat_map(|desktop_files| {
-            desktop_files.into_par_iter().filter_map(|desktop_file| {
-                fs::read_to_string(desktop_file)
-                    .ok()
-                    .and_then(|content| freedesktop_file_parser::parse(&content).ok())
+        .filter(|(_, dir)| dir.exists())
+        .filter_map(|(prio, dir)| {
+            find_files(&dir, &DESKTOP_RE).map(|v| {
+                v.into_iter()
+                    .map(move |file| (prio, file))
+                    .collect::<Vec<_>>()
             })
         })
+        .flatten()
         .collect();
+
+    let mut file_by_prio: HashMap<String, (usize, PathBuf)> = HashMap::new();
+    for (prio, path) in files {
+        if let Some(name) = path.file_name().and_then(|x| x.to_str()) {
+            match file_by_prio.get(name) {
+                None => {
+                    file_by_prio.insert(name.to_string(), (prio, path));
+                }
+                Some((existing_prio, _)) if prio < *existing_prio => {
+                    // Smaller prio value = higher priority
+                    file_by_prio.insert(name.to_string(), (prio, path));
+                }
+                _ => {} // keep existing
+            }
+        }
+    }
+    let p = DashMap::new();
+    file_by_prio
+        .into_values()
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .filter_map(|(_, desktop_file)| {
+            fs::read_to_string(&desktop_file)
+                .ok()
+                .and_then(|content| freedesktop_file_parser::parse(&content).ok())
+        })
+        .for_each(|parsed| {
+            let name = parsed.entry.name.default.clone();
+            p.insert(name, parsed);
+        });
+
+    // Convert to Vec if needed, or just iterate over p directly
+    let p: Vec<_> = p.into_iter().map(|(_, v)| v).collect();
     log::debug!("Found {} desktop files in {:?}", p.len(), start.elapsed());
     p
 }
