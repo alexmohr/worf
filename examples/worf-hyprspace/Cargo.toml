@@ -3,8 +3,16 @@ name = "worf-hyprspace"
 version = "0.1.0"
 edition = "2024"
 
+description = "Manage Hyprland workspaces using the Worf API. Features automatic mode detection, workspace renaming, window moving, and more."
+keywords = ["hyprland", "workspace", "wayland", "worf", "rust"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/alexmohr/worf"
+documentation = "https://github.com/alexmohr/worf#readme"
+homepage = "https://github.com/alexmohr/worf"
+readme = "Readme.md"
+
 [dependencies]
-worf = { path = "../../worf" }
+worf = { path = "../../worf", version = "0.5" }
 env_logger = "0.11.8"
 hyprland = "0.4.0-beta.2"
 clap = "4.5.40"
