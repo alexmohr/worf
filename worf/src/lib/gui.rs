@@ -1122,6 +1122,7 @@ fn move_selection<T: Clone + Send + 'static>(
     // ListBox rows is focused, handle edge navigation between sub-items and
     // the surrounding FlowBox children.
     let list_items = ui.menu_rows.read().unwrap();
+    let visible_items_count = list_items.iter().filter(|(_, menu)| menu.visible).count();
     if let Some(selected_item) = list_items.get(selected)
         && !selected_item.sub_elements.is_empty()
         && let Some(parent_widget) = selected.child()
@@ -1164,6 +1165,7 @@ fn move_selection<T: Clone + Send + 'static>(
                 }
             }
         }
+        drop(list_items);
 
         // Moving up from the first sub-item -> focus parent expander
         if *direction == Direction::Up {
@@ -1204,7 +1206,7 @@ fn move_selection<T: Clone + Send + 'static>(
         return Propagation::Proceed;
     };
 
-    if *direction == Direction::Up && first_child == *selected {
+    if *direction == Direction::Up && first_child == *selected && visible_items_count > 1 {
         select_visible_child(
             &ui.menu_rows.read().unwrap(),
             &ui.main_box,
@@ -1212,7 +1214,7 @@ fn move_selection<T: Clone + Send + 'static>(
             &ChildPosition::Back,
         );
         Propagation::Stop
-    } else if *direction == Direction::Down && last_child == *selected {
+    } else if *direction == Direction::Down && last_child == *selected && visible_items_count > 1 {
         select_visible_child(
             &ui.menu_rows.read().unwrap(),
             &ui.main_box,
