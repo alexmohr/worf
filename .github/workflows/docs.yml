@@ -29,16 +29,12 @@ jobs:
 
       - name: Build crate docs
         run: |
-          cargo doc --manifest-path worf/Cargo.toml --no-deps --release
-
-      - name: Add index redirect
-        run: |
-          echo '<meta http-equiv="refresh" content="0; url=worf">' > target/doc/worf/index.html
+          cargo doc --no-deps --release
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: target/doc
+          path: target/doc/worf
 
   deploy:
     needs: build
