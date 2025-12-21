@@ -7,7 +7,7 @@ description = "Manage Hyprland workspaces using the Worf API. Features automatic
 keywords = ["hyprland", "workspace", "wayland", "worf", "rust"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/alexmohr/worf"
-documentation = "https://github.com/alexmohr/worf#readme"
+documentation = "https://alexmohr.github.io/worf"
 homepage = "https://github.com/alexmohr/worf"
 readme = "Readme.md"
 

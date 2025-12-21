@@ -1,12 +1,13 @@
 [package]
 name = "worf-launcher"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2024"
 
 description = "Wayland application launcher inspired by wofi, rofi, and walker. Written in Rust with GTK4, supporting multiple modes (math, drun, file, ssh, run, emoji, search, auto), modern theming, and high performance."
 keywords = ["wayland", "gtk4", "wofi", "rofi", "application-launcher"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/alexmohr/worf"
+documentation = "https://alexmohr.github.io/worf"
 homepage = "https://github.com/alexmohr/worf"
 readme = "../README.md"
 

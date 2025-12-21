@@ -25,27 +25,12 @@ jobs:
         with:
           submodules: false
       
-      - name: Install ubuntu dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y librust-gdk4-sys-dev \
-            libglib2.0-dev libgtk-layer-shell-dev libgtk-layer-shell0 gir1.2-gtklayershell-0.1 \
-            libgtk-4-dev gobject-introspection libgirepository1.0-dev gtk-doc-tools python3 valac \
-            git cmake gcc meson ninja-build
-
-      - name: Install gt4k layer shell
-        run: |
-          git clone https://github.com/wmww/gtk4-layer-shell
-          cd gtk4-layer-shell
-          meson setup -Dexamples=true -Ddocs=true -Dtests=true build
-          ninja -C build
-          sudo ninja -C build install
-          sudo ldconfig
+      - uses: ./.github/actions/setup
       
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2025-07-14
+          toolchain: nightly
           components: clippy, rustfmt
       
       - name: Cache Rust dependencies
@@ -72,23 +57,8 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Install ubuntu dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y librust-gdk4-sys-dev \
-            libglib2.0-dev libgtk-layer-shell-dev libgtk-layer-shell0 gir1.2-gtklayershell-0.1 \
-            libgtk-4-dev gobject-introspection libgirepository1.0-dev gtk-doc-tools python3 valac \
-            git cmake gcc meson ninja-build
-
-      - name: Install gt4k layer shell
-        run: |
-          git clone https://github.com/wmww/gtk4-layer-shell
-          cd gtk4-layer-shell
-          meson setup -Dexamples=true -Ddocs=true -Dtests=true build
-          ninja -C build
-          sudo ninja -C build install
-          sudo ldconfig
-
+      - uses: ./.github/actions/setup
+      
       - name: Install taplo toml toolkit
         run: cargo install --locked taplo-cli
       - name: Toml Formatting

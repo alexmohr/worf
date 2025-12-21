@@ -7,6 +7,7 @@
 [![Wayland](https://img.shields.io/badge/Wayland-FFB71B?style=for-the-badge&logo=wayland&logoColor=black)](https://wayland.freedesktop.org/)
 [![crates.io](https://img.shields.io/crates/v/worf-launcher?style=for-the-badge)](https://crates.io/crates/worf-launcher)
 [![docs.rs](https://img.shields.io/docsrs/worf-launcher?style=for-the-badge)](https://docs.rs/worf-launcher)
+[![Docs (Pages)](https://img.shields.io/badge/docs-github--pages-blue?style=for-the-badge&logo=github)](https://alexmohr.github.io/worf/)
 
 ---
 
@@ -293,7 +294,7 @@ layerrule = blur, worf
 🔧 **Developer-Friendly**: Worfs launcher and UI components are available as a separate crate for building custom launchers.
 
 * [crates.io/crates/worf-launcher](https://crates.io/crates/worf-launcher). 
-* [docs.rs/worf-launcher](https://docs.rs/worf-launcher).
+* [docs.rs/worf-launcher](https://alexmohr.github.io/worf/).
 
 ---
 

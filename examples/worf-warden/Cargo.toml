@@ -7,7 +7,7 @@ description = "Bitwarden frontend and password manager using the Worf API. Integ
 keywords = ["bitwarden", "password-manager", "worf", "wayland"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/alexmohr/worf"
-documentation = "https://github.com/alexmohr/worf#readme"
+documentation = "https://alexmohr.github.io/worf"
 homepage = "https://github.com/alexmohr/worf"
 readme = "Readme.md"
 

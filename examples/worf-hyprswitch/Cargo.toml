@@ -7,7 +7,7 @@ description = "Elegant window switcher for Hyprland, written in Rust using the W
 keywords = ["hyprland", "window-switcher", "wayland", "worf"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/alexmohr/worf"
-documentation = "https://github.com/alexmohr/worf#readme"
+documentation = "https://alexmohr.github.io/worf"
 homepage = "https://github.com/alexmohr/worf"
 readme = "Readme.md"
 
