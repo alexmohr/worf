@@ -2917,7 +2917,37 @@ dependencies = [
 ]
 
 [[package]]
-name = "worf"
+name = "worf-hyprspace"
+version = "0.1.0"
+dependencies = [
+ "Inflector",
+ "clap",
+ "env_logger",
+ "hyprland",
+ "log",
+ "nix",
+ "regex",
+ "serde",
+ "strum",
+ "strum_macros",
+ "worf-launcher",
+]
+
+[[package]]
+name = "worf-hyprswitch"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "freedesktop-icons",
+ "hyprland",
+ "rayon",
+ "sysinfo",
+ "toml",
+ "worf-launcher",
+]
+
+[[package]]
+name = "worf-launcher"
 version = "0.7.0"
 dependencies = [
  "clap",
@@ -2949,36 +2979,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "worf-hyprspace"
-version = "0.1.0"
-dependencies = [
- "Inflector",
- "clap",
- "env_logger",
- "hyprland",
- "log",
- "nix",
- "regex",
- "serde",
- "strum",
- "strum_macros",
- "worf",
-]
-
-[[package]]
-name = "worf-hyprswitch"
-version = "0.1.0"
-dependencies = [
- "env_logger",
- "freedesktop-icons",
- "hyprland",
- "rayon",
- "sysinfo",
- "toml",
- "worf",
-]
-
-[[package]]
 name = "worf-warden"
 version = "0.1.0"
 dependencies = [
@@ -2986,7 +2986,7 @@ dependencies = [
  "env_logger",
  "log",
  "serde",
- "worf",
+ "worf-launcher",
 ]
 
 [[package]]
