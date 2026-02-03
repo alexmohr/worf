@@ -33,7 +33,7 @@ impl<T: Clone> FileItemProvider<T> {
     fn resolve_icon_for_name(path: &Path) -> String {
         let type_result = fs::symlink_metadata(path)
             .map(|meta| meta.file_type())
-            .map(|file_type| {
+            .map_or(Some("system-lock-screen"), |file_type| {
                 if file_type.is_symlink() {
                     Some("edit-redo")
                 } else if file_type.is_char_device() {
@@ -47,8 +47,7 @@ impl<T: Clone> FileItemProvider<T> {
                 } else {
                     None
                 }
-            })
-            .unwrap_or(Some("system-lock-screen"));
+            });
 
         if let Some(tr) = type_result {
             return tr.to_owned();
