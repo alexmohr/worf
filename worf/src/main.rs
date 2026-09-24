@@ -95,16 +95,20 @@ fn main() {
         .init();
 
     let mut config = MainConfig::parse();
-    config.worf = if let Ok(config) =
-        config::load_worf_config(Some(&config.worf)).map_err(|e| e.to_string())
-    {
-        config
-    } else {
-        log::warn!(
-            "Failed to load config, using default config, the configuration should be located in \
-             $XDG_CONFIG_DIR/worf or if that variable is not defined in $HOME/.config/worf"
-        );
-        config::Config::default()
+    config.worf = match config::load_worf_config(Some(&config.worf)) {
+        Ok(config) => config,
+        Err(Error::ParsingError(e)) => {
+            log::error!("Failed to parse config, using defaults and command line arguments: {e}");
+            config.worf
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to load config ({e}), using defaults and command line arguments. The \
+                 configuration should be located in $XDG_CONFIG_DIR/worf or if that variable is \
+                 not defined in $HOME/.config/worf"
+            );
+            config.worf
+        }
     };
 
     if config.worf.prompt().is_none() {

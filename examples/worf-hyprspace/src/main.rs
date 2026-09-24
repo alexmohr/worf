@@ -471,7 +471,10 @@ fn main() -> Result<(), String> {
         .init();
 
     let mut cfg = HyprSpaceConfig::parse();
-    cfg.worf = worf::config::load_worf_config(Some(&cfg.worf)).unwrap_or(cfg.worf);
+    cfg.worf = worf::config::load_worf_config(Some(&cfg.worf)).unwrap_or_else(|e| {
+        log::error!("failed to load worf config, using command line arguments: {e}");
+        cfg.worf.clone()
+    });
     if cfg.worf.prompt().is_none() {
         cfg.worf.set_prompt(cfg.hypr_space_mode().to_string());
     }

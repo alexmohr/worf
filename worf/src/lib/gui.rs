@@ -959,11 +959,7 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
                     &ChildPosition::Front,
                 );
 
-                log::debug!(
-                    "Created {} menu items in {:?}",
-                    &lock.len(),
-                    start.elapsed()
-                );
+                log::debug!("Created {} menu items in {:?}", lock.len(), start.elapsed());
 
                 ControlFlow::Break
             } else {
@@ -1965,25 +1961,14 @@ fn set_menu_visibility_for_search<T: Clone>(
     query = filtered_query(search_ignored_words, &query);
 
     for (fb, menu_item) in items.iter_mut() {
-        let menu_item_search = format!(
+        let mut menu_item_search = format!(
             "{} {}",
-            menu_item
-                .action
-                .as_ref()
-                .map(|a| {
-                    if config.read().unwrap().insensitive() {
-                        a.to_lowercase()
-                    } else {
-                        a.clone()
-                    }
-                })
-                .unwrap_or_default(),
-            if config.read().unwrap().insensitive() {
-                menu_item.label.to_lowercase()
-            } else {
-                menu_item.label.clone()
-            }
+            menu_item.action.as_deref().unwrap_or_default(),
+            menu_item.label
         );
+        if config.read().unwrap().insensitive() {
+            menu_item_search = menu_item_search.to_lowercase();
+        }
 
         let (search_sort_score, visible) = match config.read().unwrap().match_method() {
             MatchMethod::Fuzzy => {

@@ -473,7 +473,10 @@ fn main() -> Result<(), String> {
         .init();
 
     let mut cfg = WardenArgs::parse();
-    cfg.worf = config::load_worf_config(Some(&cfg.worf)).unwrap_or(cfg.worf);
+    cfg.worf = config::load_worf_config(Some(&cfg.worf)).unwrap_or_else(|e| {
+        log::error!("failed to load worf config, using command line arguments: {e}");
+        cfg.worf.clone()
+    });
 
     let warden_config: WardenConfig =
         config::load_config(cfg.warden_config.as_deref(), "worf", "warden").unwrap_or_else(|e| {
