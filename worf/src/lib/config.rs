@@ -1067,12 +1067,49 @@ pub fn load_config<T: DeserializeOwned>(
     match config_path {
         Ok(path) => {
             log::debug!("loading config from {}", path.display());
-            let toml_content = fs::read_to_string(path).map_err(|e| Error::Io(format!("{e}")))?;
-            toml::from_str(&toml_content).map_err(|e| Error::ParsingError(format!("{e}")))
+            let toml_content = fs::read_to_string(&path).map_err(|e| Error::Io(format!("{e}")))?;
+            parse_config(&toml_content).map_err(|e| {
+                Error::ParsingError(format!("invalid config file {}: {e}", path.display()))
+            })
         }
 
         Err(e) => Err(Error::Io(format!("{e}"))),
     }
+}
+
+/// Parses a toml config. Top level keys with values that cannot be deserialized
+/// are reported and skipped, so a single invalid value does not discard the whole config.
+/// # Errors
+///
+/// Will return Err when the content is not valid toml or cannot be parsed
+/// even after removing invalid keys.
+fn parse_config<T: DeserializeOwned>(toml_content: &str) -> Result<T, String> {
+    let table: toml::Table = toml::from_str(toml_content).map_err(|e| format!("{e}"))?;
+    let full_err = match T::deserialize(table.clone()) {
+        Ok(config) => return Ok(config),
+        Err(e) => e,
+    };
+
+    let mut valid = toml::Table::new();
+    let mut skipped = false;
+    for (key, value) in table {
+        let mut single = toml::Table::new();
+        single.insert(key.clone(), value.clone());
+        if let Err(e) = T::deserialize(single) {
+            log::error!(
+                "ignoring invalid config value for key '{key}': {}",
+                e.message()
+            );
+            skipped = true;
+        } else {
+            valid.insert(key, value);
+        }
+    }
+
+    if !skipped {
+        return Err(format!("{full_err}"));
+    }
+    T::deserialize(valid).map_err(|_| format!("{full_err}"))
 }
 
 #[must_use]
@@ -1108,7 +1145,7 @@ pub fn merge_config_with_args(config: &mut Config, args: &Config) -> Result<Conf
         serde_json::to_value(config).map_err(|e| Error::ParsingError(e.to_string()))?;
 
     merge_json(&mut config_json, &args_json);
-    Ok(serde_json::from_value(config_json).unwrap_or_default())
+    serde_json::from_value(config_json).map_err(|e| Error::ParsingError(e.to_string()))
 }
 
 fn merge_json(a: &mut Value, b: &Value) {
@@ -1138,5 +1175,32 @@ mod tests {
 
         let config: Config = toml::from_str(toml_str).expect("Failed to parse TOML");
         assert_eq!(config.key_detection_type(), KeyDetectionType::Code);
+    }
+
+    #[test]
+    fn test_parse_config_skips_invalid_values() {
+        let toml_str = r#"
+        columns = "two"
+        insensitive = false
+        not_valid_key = 1
+    "#;
+
+        let config: Config = parse_config(toml_str).expect("invalid keys should be skipped");
+        assert_eq!(config.columns(), Config::default().columns());
+        assert!(!config.insensitive());
+    }
+
+    #[test]
+    fn test_parse_config_reports_syntax_errors() {
+        let toml_str = "allow_images = yes";
+        assert!(parse_config::<Config>(toml_str).is_err());
+    }
+
+    #[test]
+    fn test_merge_keeps_args_on_default_config() {
+        let mut config = Config::default();
+        let args = Config::parse_from(["worf", "--width", "100%"]);
+        let merged = merge_config_with_args(&mut config, &args).expect("merge failed");
+        assert_eq!(merged.width(), "100%");
     }
 }

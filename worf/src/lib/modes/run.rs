@@ -122,8 +122,8 @@ fn update_run_cache_and_run<T: Clone>(
         let args = [program.clone()];
 
         // This replaces the current process image
-        nix::unistd::execvp(&program, &args).map_err(|e| Error::RunFailed(e.to_string()))?;
-        Ok(())
+        let Err(e) = nix::unistd::execvp(&program, &args);
+        Err(Error::RunFailed(e.to_string()))
     } else {
         Err(Error::MissingAction)
     }
