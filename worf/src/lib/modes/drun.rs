@@ -50,9 +50,9 @@ impl<T: Clone + Send + Sync> ItemProvider<T> for DRunProvider<T> {
 }
 
 impl<T: Clone + Send + Sync> DRunProvider<T> {
-    pub(crate) fn new(menu_item_data: T, config: &Config) -> Self {
-        let (cache_path, d_run_cache) = load_cache("drun_cache", config).unwrap();
-        DRunProvider {
+    pub(crate) fn new(menu_item_data: T, config: &Config) -> Result<Self, Error> {
+        let (cache_path, d_run_cache) = load_cache("drun_cache", config)?;
+        Ok(DRunProvider {
             items: None,
             cache_path,
             cache: d_run_cache,
@@ -60,7 +60,7 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
             no_actions: config.no_actions(),
             sort_order: config.sort_order(),
             terminal: config.term(),
-        }
+        })
     }
 
     fn load(&self) -> Vec<MenuItem<T>> {
@@ -219,7 +219,7 @@ pub(crate) fn update_drun_cache_and_run<T: Clone>(
 /// # Panics
 /// When failing to unwrap the arc lock
 pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
-    let provider = Arc::new(Mutex::new(DRunProvider::new((), &config.read().unwrap())));
+    let provider = Arc::new(Mutex::new(DRunProvider::new((), &config.read().unwrap())?));
     let arc_provider = Arc::clone(&provider) as ArcProvider<()>;
     let selection_result = gui::show(config, arc_provider, None, None, ExpandMode::Verbatim, None);
     match selection_result {

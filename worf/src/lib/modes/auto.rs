@@ -40,15 +40,15 @@ struct AutoItemProvider {
 }
 
 impl AutoItemProvider {
-    fn new(config: &Config) -> Self {
-        AutoItemProvider {
-            drun: DRunProvider::new(AutoRunType::DRun, config),
+    fn new(config: &Config) -> Result<Self, Error> {
+        Ok(AutoItemProvider {
+            drun: DRunProvider::new(AutoRunType::DRun, config)?,
             file: FileItemProvider::new(AutoRunType::File, config.sort_order()),
             math: MathProvider::new(AutoRunType::Math),
             ssh: SshProvider::new(AutoRunType::Ssh, &config.sort_order()),
             search: SearchProvider::new(AutoRunType::WebSearch, config.search_query()),
             last_mode: None,
-        }
+        })
     }
 
     fn default_auto_elements(&mut self) -> ProviderData<AutoRunType> {
@@ -152,7 +152,7 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
 /// # Panics
 /// Panics if an internal static regex cannot be passed anymore, should never happen
 pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
-    let provider = Arc::new(Mutex::new(AutoItemProvider::new(&config.read().unwrap())));
+    let provider = Arc::new(Mutex::new(AutoItemProvider::new(&config.read().unwrap())?));
     let arc_provider = Arc::clone(&provider) as ArcProvider<AutoRunType>;
     let cache_path = provider.lock().unwrap().drun.cache_path.clone();
     let mut cache = provider.lock().unwrap().drun.cache.clone();
