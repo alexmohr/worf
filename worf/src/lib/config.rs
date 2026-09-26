@@ -831,7 +831,10 @@ impl Config {
 
     #[must_use]
     pub fn cache_file(&self) -> Option<String> {
-        self.cache_file.clone()
+        self.cache_file
+            .as_ref()
+            .filter(|path| !path.trim().is_empty())
+            .cloned()
     }
 
     #[must_use]

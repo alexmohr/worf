@@ -224,18 +224,26 @@ fn start_forked_cmd(mut cmd: Command) -> Result<(), Error> {
     Ok(())
 }
 
-/// Get the path of a given cache file
+/// Get the path of a given cache file.
+/// Falls back to the default cache location if the configured
+/// cache file cannot be created.
 /// # Errors
 /// Will return Error if the cache file cannot be created or not found.
 pub fn cache_file_path(config: &Config, name: &str) -> Result<PathBuf, Error> {
-    let path = if let Some(cfg) = config.cache_file() {
-        PathBuf::from(cfg)
-    } else {
-        dirs::cache_dir()
-            .map(|x| x.join(name))
-            .ok_or_else(|| Error::UpdateCacheError("cannot read cache file".to_owned()))?
-    };
+    if let Some(cfg) = config.cache_file() {
+        let path = PathBuf::from(cfg);
+        match create_file_if_not_exists(&path) {
+            Ok(()) => return Ok(path),
+            Err(e) => log::error!(
+                "Cannot use cache file {}: {e}, falling back to default",
+                path.display()
+            ),
+        }
+    }
 
+    let path = dirs::cache_dir()
+        .map(|x| x.join(name))
+        .ok_or_else(|| Error::UpdateCacheError("cannot read cache file".to_owned()))?;
     create_file_if_not_exists(&path)?;
     Ok(path)
 }
