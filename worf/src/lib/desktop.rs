@@ -4,7 +4,7 @@ use std::{
     ffi::OsStr,
     fs,
     hash::BuildHasher,
-    io,
+    io::{self, IsTerminal},
     os::unix::{fs::PermissionsExt, prelude::CommandExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -12,7 +12,6 @@ use std::{
     time::Instant,
 };
 
-use dashmap::DashMap;
 // re-export freedesktop_file_parser for easier access
 pub use freedesktop_file_parser::{DesktopFile, EntryType};
 use notify_rust::Notification;
@@ -128,8 +127,7 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
             }
         }
     }
-    let p = DashMap::new();
-    file_by_prio
+    let parsed: Vec<DesktopFile> = file_by_prio
         .into_values()
         .collect::<Vec<_>>()
         .into_par_iter()
@@ -138,13 +136,13 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
                 .ok()
                 .and_then(|content| freedesktop_file_parser::parse(&content).ok())
         })
-        .for_each(|parsed| {
-            let name = parsed.entry.name.default.clone();
-            p.insert(name, parsed);
-        });
+        .collect();
 
-    // Convert to Vec if needed, or just iterate over p directly
-    let p: Vec<_> = p.into_iter().map(|(_, v)| v).collect();
+    let mut by_name = HashMap::with_capacity(parsed.len());
+    for desktop_file in parsed {
+        by_name.insert(desktop_file.entry.name.default.clone(), desktop_file);
+    }
+    let p: Vec<_> = by_name.into_values().collect();
     log::debug!("Found {} desktop files in {:?}", p.len(), start.elapsed());
     p
 }
@@ -192,11 +190,16 @@ pub fn fork_if_configured(config: &Config) {
     if config.fork() && env::var(fork_env_var).is_err() {
         let mut cmd = Command::new(env::current_exe().expect("Failed to get current executable"));
 
-        for arg in env::args().skip(1) {
-            cmd.arg(arg);
-        }
+        cmd.args(env::args_os().skip(1));
+        // Marks the child so it does not fork again.
+        cmd.env(fork_env_var, "1");
+        // Keep pipes and redirections (i.e. for dmenu mode),
+        // but detach from the terminal so it can be closed.
+        cmd.stdin(stdio_unless_terminal(&io::stdin()))
+            .stdout(stdio_unless_terminal(&io::stdout()))
+            .stderr(stdio_unless_terminal(&io::stderr()));
 
-        start_forked_cmd(cmd).expect("Failed to fork to background");
+        detach_and_spawn(cmd).expect("Failed to fork to background");
         std::process::exit(0);
     }
 }
@@ -243,7 +246,19 @@ pub fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), Error> 
     start_forked(&exec, args)
 }
 
-fn start_forked<I, S>(exec: &str, args: I) -> Result<(), Error>
+fn stdio_unless_terminal(stream: &impl IsTerminal) -> Stdio {
+    if stream.is_terminal() {
+        Stdio::null()
+    } else {
+        Stdio::inherit()
+    }
+}
+
+/// Spawns `exec` with the given arguments as a new session, detached from worf.
+/// The arguments are passed verbatim, without splitting or expansion.
+/// # Errors
+/// Returns `Error::Io` if the process cannot be spawned.
+pub(crate) fn start_forked<I, S>(exec: &str, args: I) -> Result<(), Error>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -257,7 +272,10 @@ fn start_forked_cmd(mut cmd: Command) -> Result<(), Error> {
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    detach_and_spawn(cmd)
+}
 
+fn detach_and_spawn(mut cmd: Command) -> Result<(), Error> {
     unsafe {
         cmd.pre_exec(|| {
             libc::setsid();
