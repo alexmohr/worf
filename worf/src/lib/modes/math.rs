@@ -1,9 +1,4 @@
-use std::{
-    collections::VecDeque,
-    sync::{Arc, LazyLock, Mutex, RwLock},
-};
-
-use regex::Regex;
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
     Error,
@@ -61,7 +56,7 @@ impl<T: Clone> ItemProvider<T> for MathProvider<T> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum Token {
     Int(i64),
     Float(f64),
@@ -71,142 +66,137 @@ enum Token {
     Power,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Value {
     Int(i64),
     Float(f64),
 }
 
-/// Normalize base literals like 0x and 0b into decimal format
-fn normalize_bases(expr: &str) -> String {
-    static HEX_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"0x[0-9a-fA-F]+").unwrap());
-    static BIN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"0b[01]+").unwrap());
-    let expr = HEX_RE.replace_all(expr, |caps: &regex::Captures| {
-        i64::from_str_radix(&caps[0][2..], 16).unwrap().to_string()
-    });
-    BIN_RE
-        .replace_all(&expr, |caps: &regex::Captures| {
-            i64::from_str_radix(&caps[0][2..], 2).unwrap().to_string()
-        })
-        .to_string()
-}
+/// Binding power for unary `+` and `-`. Lower than `**` so `-2**2` is `-(2**2)`.
+const UNARY_BINDING_POWER: u8 = 13;
 
-fn insert_implicit_multiplication(tokens: &mut VecDeque<Token>, last_token: Option<&Token>) {
-    if matches!(
-        last_token,
-        Some(Token::Int(_) | Token::Float(_) | Token::Op(')'))
-    ) {
-        tokens.push_back(Token::Op('*'));
+/// Left and right binding power of infix operators (higher binds tighter).
+/// Follows C/Python precedence: `|` < `^` < `&` < shifts < `+ -` < `* /` < `**`.
+/// `**` is right associative.
+fn infix_binding_power(op: Token) -> Option<(u8, u8)> {
+    match op {
+        Token::Op('|') => Some((1, 2)),
+        Token::Op('^') => Some((3, 4)),
+        Token::Op('&') => Some((5, 6)),
+        Token::ShiftLeft | Token::ShiftRight => Some((7, 8)),
+        Token::Op('+' | '-') => Some((9, 10)),
+        Token::Op('*' | '/') => Some((11, 12)),
+        Token::Power => Some((16, 15)),
+        _ => None,
     }
 }
 
-/// Tokenize a normalized expression string into tokens
-#[allow(clippy::too_many_lines)]
-fn tokenize(expr: &str) -> Result<VecDeque<Token>, String> {
-    let mut tokens = VecDeque::new();
+fn implicit_multiplication_needed(last_token: Option<Token>) -> bool {
+    matches!(
+        last_token,
+        Some(Token::Int(_) | Token::Float(_) | Token::Op(')'))
+    )
+}
+
+/// Parses an integer literal with the given radix.
+/// Values up to `u64::MAX` are accepted and reinterpreted as two's complement,
+/// so `0xFFFFFFFFFFFFFFFF` is `-1`.
+fn parse_int_literal(digits: &str, radix: u32) -> Result<i64, String> {
+    #[allow(clippy::cast_possible_wrap)]
+    u64::from_str_radix(digits, radix)
+        .map(|n| n as i64)
+        .map_err(|_| "Integer literal out of range".to_owned())
+}
+
+/// Tokenize an expression string into tokens
+fn tokenize(expr: &str) -> Result<Vec<Token>, String> {
+    let mut tokens = Vec::new();
     let chars: Vec<char> = expr.chars().collect();
     let mut i = 0;
-    let mut last_token: Option<Token> = None;
 
     while i < chars.len() {
         let c = chars[i];
+        let next = chars.get(i + 1).copied();
 
         if c.is_whitespace() {
             i += 1;
             continue;
         }
 
-        // Multi-character operators
-        if i + 1 < chars.len() {
-            match &expr[i..=i + 1] {
-                "<<" => {
-                    tokens.push_back(Token::ShiftLeft);
-                    last_token = Some(Token::ShiftLeft);
-                    i += 2;
-                    continue;
-                }
-                ">>" => {
-                    tokens.push_back(Token::ShiftRight);
-                    last_token = Some(Token::ShiftRight);
-                    i += 2;
-                    continue;
-                }
-                "**" => {
-                    tokens.push_back(Token::Power);
-                    last_token = Some(Token::Power);
-                    i += 2;
-                    continue;
-                }
-                _ => {}
+        let token = match (c, next) {
+            ('<', Some('<')) => {
+                i += 2;
+                Token::ShiftLeft
             }
-        }
-
-        // Single-character operators, parentheses, or digits/float
-        match c {
-            '+' | '-' | '*' | '/' | '&' | '|' | '^' => {
-                let token = Token::Op(c);
-                tokens.push_back(token);
-                last_token = Some(token);
+            ('>', Some('>')) => {
+                i += 2;
+                Token::ShiftRight
+            }
+            ('*', Some('*')) => {
+                i += 2;
+                Token::Power
+            }
+            ('+' | '-' | '*' | '/' | '&' | '|' | '^' | ')', _) => {
                 i += 1;
+                Token::Op(c)
             }
-            '(' => {
-                insert_implicit_multiplication(&mut tokens, last_token.as_ref());
-                let token = Token::Op('(');
-                tokens.push_back(token);
-                last_token = Some(token);
-                i += 1;
-            }
-            ')' => {
-                let token = Token::Op(')');
-                tokens.push_back(token);
-                last_token = Some(token);
-                i += 1;
-            }
-            '0'..='9' | '.' => {
-                // Only insert implicit multiplication if the last token is ')'
-                // and the last token in tokens is not already an operator (except ')')
-                if let Some(Token::Op(')')) = last_token {
-                    if let Some(Token::Op(op)) = tokens.back() {
-                        if *op == ')' {
-                            tokens.push_back(Token::Op('*'));
-                        }
-                    } else {
-                        tokens.push_back(Token::Op('*'));
-                    }
+            ('(', _) => {
+                if implicit_multiplication_needed(tokens.last().copied()) {
+                    tokens.push(Token::Op('*'));
                 }
-                let start = i;
-                let mut has_dot = c == '.';
-                if c == '.' && (i + 1 >= chars.len() || !chars[i + 1].is_ascii_digit()) {
+                i += 1;
+                Token::Op('(')
+            }
+            ('0', Some(prefix @ ('x' | 'X' | 'b' | 'B'))) => {
+                let radix = if prefix.eq_ignore_ascii_case(&'x') {
+                    16
+                } else {
+                    2
+                };
+                let start = i + 2;
+                let mut end = start;
+                while end < chars.len() && chars[end].is_digit(radix) {
+                    end += 1;
+                }
+                if start == end {
+                    return Err("Invalid integer literal".to_owned());
+                }
+                let digits: String = chars[start..end].iter().collect();
+                if tokens.last() == Some(&Token::Op(')')) {
+                    tokens.push(Token::Op('*'));
+                }
+                i = end;
+                Token::Int(parse_int_literal(&digits, radix)?)
+            }
+            ('0'..='9' | '.', _) => {
+                if c == '.' && !next.is_some_and(|n| n.is_ascii_digit()) {
                     return Err("Invalid float literal".to_owned());
                 }
-                i += 1;
+                if tokens.last() == Some(&Token::Op(')')) {
+                    tokens.push(Token::Op('*'));
+                }
+                let start = i;
+                let mut has_dot = false;
                 while i < chars.len()
                     && (chars[i].is_ascii_digit() || (!has_dot && chars[i] == '.'))
                 {
-                    if chars[i] == '.' {
-                        has_dot = true;
-                    }
+                    has_dot |= chars[i] == '.';
                     i += 1;
                 }
                 let num_str: String = chars[start..i].iter().collect();
                 if has_dot {
-                    let n = num_str
-                        .parse::<f64>()
-                        .map_err(|_| "Invalid float literal".to_owned())?;
-                    let token = Token::Float(n);
-                    tokens.push_back(token);
-                    last_token = Some(token);
+                    Token::Float(
+                        num_str
+                            .parse::<f64>()
+                            .map_err(|_| "Invalid float literal".to_owned())?,
+                    )
                 } else {
-                    let n = num_str
-                        .parse::<i64>()
-                        .map_err(|_| "Invalid integer literal".to_owned())?;
-                    let token = Token::Int(n);
-                    tokens.push_back(token);
-                    last_token = Some(token);
+                    Token::Int(parse_int_literal(&num_str, 10)?)
                 }
             }
             _ => return Err("Invalid character in expression".to_owned()),
-        }
+        };
+        tokens.push(token);
     }
 
     Ok(tokens)
@@ -228,9 +218,16 @@ fn to_i64(v: &Value) -> i64 {
     }
 }
 
+fn shift_amount(v: &Value) -> Result<u32, String> {
+    u32::try_from(to_i64(v))
+        .ok()
+        .filter(|s| *s < i64::BITS)
+        .ok_or_else(|| format!("Shift amount must be between 0 and {}", i64::BITS - 1))
+}
+
 /// Apply an operator to two values
-fn apply_op(a: &Value, b: &Value, op: &Token) -> Value {
-    match op {
+fn apply_op(a: &Value, b: &Value, op: Token) -> Result<Value, String> {
+    Ok(match op {
         Token::Op('+') => Value::Float(to_f64(a) + to_f64(b)),
         Token::Op('-') => Value::Float(to_f64(a) - to_f64(b)),
         Token::Op('*') => Value::Float(to_f64(a) * to_f64(b)),
@@ -239,105 +236,78 @@ fn apply_op(a: &Value, b: &Value, op: &Token) -> Value {
         Token::Op('&') => Value::Int(to_i64(a) & to_i64(b)),
         Token::Op('|') => Value::Int(to_i64(a) | to_i64(b)),
         Token::Op('^') => Value::Int(to_i64(a) ^ to_i64(b)),
-        Token::ShiftLeft => Value::Int(to_i64(a) << to_i64(b)),
-        Token::ShiftRight => Value::Int(to_i64(a) >> to_i64(b)),
-        _ => panic!("Unknown operator"),
-    }
+        Token::ShiftLeft => Value::Int(to_i64(a) << shift_amount(b)?),
+        Token::ShiftRight => Value::Int(to_i64(a) >> shift_amount(b)?),
+        _ => return Err(format!("Unknown operator {op:?}")),
+    })
 }
 
-/// Return precedence of operator (lower number = higher precedence)
-fn precedence(op: &Token) -> u8 {
-    match op {
-        Token::Power => 1,
-        Token::ShiftLeft | Token::ShiftRight => 2,
-        Token::Op('*' | '/') => 3,
-        Token::Op('+' | '-') => 4,
-        Token::Op('&') => 5,
-        Token::Op('^') => 6,
-        Token::Op('|') => 7,
-        _ => 100,
-    }
+/// Precedence climbing parser that evaluates while parsing
+struct Parser {
+    tokens: Vec<Token>,
+    pos: usize,
 }
 
-/// Evaluate the tokenized expression using shunting yard algorithm
-fn eval_expr(tokens: &mut VecDeque<Token>) -> Result<Value, String> {
-    let mut values = Vec::new();
-    let mut ops = Vec::new();
+impl Parser {
+    fn next(&mut self) -> Option<Token> {
+        let token = self.tokens.get(self.pos).copied();
+        self.pos += 1;
+        token
+    }
 
-    while let Some(token) = tokens.pop_front() {
-        match token {
-            Token::Int(n) => values.push(Value::Int(n)),
-            Token::Float(f) => values.push(Value::Float(f)),
-            Token::Op('(') => {
-                ops.push(Token::Op('('));
-            }
-            Token::Op(')') => {
-                while let Some(top_op) = ops.last() {
-                    if let Token::Op('(') = top_op {
-                        break;
-                    }
-                    let b = values.pop().ok_or("Missing left operand")?;
-                    let a = values.pop().ok_or("Missing right operand")?;
-                    let op = ops.pop().ok_or("Missing operator")?;
-                    values.push(apply_op(&a, &b, &op));
-                }
-                if let Some(Token::Op('(')) = ops.last() {
-                    ops.pop(); // Remove '('
+    fn parse_operand(&mut self) -> Result<Value, String> {
+        match self.next() {
+            Some(Token::Int(n)) => Ok(Value::Int(n)),
+            Some(Token::Float(f)) => Ok(Value::Float(f)),
+            Some(Token::Op('(')) => {
+                let value = self.parse(0)?;
+                if self.next() == Some(Token::Op(')')) {
+                    Ok(value)
                 } else {
-                    return Err("Mismatched parentheses".to_owned());
+                    Err("Mismatched parentheses".to_owned())
                 }
             }
-            op @ (Token::Op(_) | Token::ShiftLeft | Token::ShiftRight | Token::Power) => {
-                while let Some(top_op) = ops.last() {
-                    // Only pop ops with higher or equal precedence, and not '('
-                    if let Token::Op('(') = top_op {
-                        break;
-                    }
-                    if precedence(&op) >= precedence(top_op) {
-                        let b = values.pop().ok_or("Missing left operand")?;
-                        let a = values.pop().ok_or("Missing right operand")?;
-                        let op = ops.pop().ok_or("Missing operator")?;
-                        values.push(apply_op(&a, &b, &op));
-                    } else {
-                        break;
-                    }
-                }
-                ops.push(op);
-            }
+            Some(Token::Op('-')) => match self.parse(UNARY_BINDING_POWER)? {
+                Value::Int(i) => Ok(Value::Int(i.wrapping_neg())),
+                Value::Float(f) => Ok(Value::Float(-f)),
+            },
+            Some(Token::Op('+')) => self.parse(UNARY_BINDING_POWER),
+            Some(Token::Op(')')) => Err("Mismatched parentheses".to_owned()),
+            Some(_) | None => Err("Missing operand".to_owned()),
         }
     }
 
-    // Final reduction: check if there are enough values for the remaining operators
-    if !ops.is_empty() && values.len() < 2 {
-        return Err(format!(
-            "Not enough values for the remaining operators (values: {values:?}, ops: {ops:?})",
-        ));
-    }
-    while let Some(op) = ops.pop() {
-        if let Token::Op('(') = op {
-            return Err("Mismatched parentheses".to_owned());
+    fn parse(&mut self, min_binding_power: u8) -> Result<Value, String> {
+        let mut lhs = self.parse_operand()?;
+        while let Some(op) = self.tokens.get(self.pos).copied() {
+            let Some((left_bp, right_bp)) = infix_binding_power(op) else {
+                break;
+            };
+            if left_bp < min_binding_power {
+                break;
+            }
+            self.pos += 1;
+            let rhs = self.parse(right_bp)?;
+            lhs = apply_op(&lhs, &rhs, op)?;
         }
-        let b = values.pop().ok_or_else(|| {
-            format!("Missing right operand in final evaluation (values: {values:?}, ops: {ops:?})")
-        })?;
-        let a = values.pop().ok_or_else(|| {
-            format!("Missing left operand in final evaluation (values: {values:?}, ops: {ops:?})")
-        })?;
-        values.push(apply_op(&a, &b, &op));
+        Ok(lhs)
     }
-
-    values.pop().ok_or("No result after evaluation".to_owned())
 }
 
-/// Entry point: takes raw input, normalizes and evaluates it
-fn calc(input: &str) -> String {
-    let normalized = normalize_bases(input);
-    let mut tokens = match tokenize(&normalized) {
-        Ok(t) => t,
-        Err(e) => return e,
-    };
+/// Evaluate the tokenized expression
+fn eval_expr(tokens: Vec<Token>) -> Result<Value, String> {
+    let mut parser = Parser { tokens, pos: 0 };
+    let value = parser.parse(0)?;
+    match parser.next() {
+        None => Ok(value),
+        Some(Token::Op(')')) => Err("Mismatched parentheses".to_owned()),
+        Some(_) => Err("Unexpected token in expression".to_owned()),
+    }
+}
 
-    match eval_expr(&mut tokens) {
+/// Entry point: takes raw input and evaluates it
+fn calc(input: &str) -> String {
+    match tokenize(input).and_then(eval_expr) {
         Ok(Value::Int(i)) => format!("{i} (0x{i:X}) (0b{i:b})"),
         Ok(Value::Float(f)) => format!("{f}"),
         Err(e) => e,
@@ -386,4 +356,67 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn eval(input: &str) -> Result<Value, String> {
+        tokenize(input).and_then(eval_expr)
+    }
+
+    #[test]
+    fn test_precedence() {
+        assert_eq!(eval("1 + 2 * 3"), Ok(Value::Float(7.0)));
+        assert_eq!(eval("(1 + 2) * 3"), Ok(Value::Float(9.0)));
+        assert_eq!(eval("1 << 2 + 1"), Ok(Value::Int(8)));
+        assert_eq!(eval("6 & 3 | 8"), Ok(Value::Int(10)));
+        assert_eq!(eval("2 ** 3 ** 2"), Ok(Value::Float(512.0)));
+    }
+
+    #[test]
+    fn test_unary_minus() {
+        assert_eq!(eval("-5"), Ok(Value::Int(-5)));
+        assert_eq!(eval("2 * -3"), Ok(Value::Float(-6.0)));
+        assert_eq!(eval("-2 ** 2"), Ok(Value::Float(-4.0)));
+        assert_eq!(eval("-(1 + 2)"), Ok(Value::Float(-3.0)));
+    }
+
+    #[test]
+    fn test_implicit_multiplication() {
+        assert_eq!(eval("2(3)"), Ok(Value::Float(6.0)));
+        assert_eq!(eval("(2)3"), Ok(Value::Float(6.0)));
+        assert_eq!(eval("(2)(3)"), Ok(Value::Float(6.0)));
+    }
+
+    #[test]
+    fn test_base_literals() {
+        assert_eq!(eval("0xff"), Ok(Value::Int(255)));
+        assert_eq!(eval("0b101 | 0x10"), Ok(Value::Int(21)));
+        assert_eq!(eval("0xFFFFFFFFFFFFFFFF"), Ok(Value::Int(-1)));
+        assert!(eval("0x1FFFFFFFFFFFFFFFF").is_err());
+        assert!(eval("10x5").is_err());
+    }
+
+    #[test]
+    fn test_invalid_input_does_not_panic() {
+        assert!(eval("3×4").is_err());
+        assert!(eval("1÷2").is_err());
+        assert!(eval("5€").is_err());
+        assert!(eval("99999999999999999999").is_err());
+        assert!(eval("1 << 64").is_err());
+        assert!(eval("1 << -1").is_err());
+        assert!(eval("1 2").is_err());
+        assert!(eval("1 +").is_err());
+        assert!(eval("(1 + 2").is_err());
+        assert!(eval("1 + 2)").is_err());
+        assert!(eval("").is_err());
+    }
+
+    #[test]
+    fn test_calc_output() {
+        assert_eq!(calc("1 + 1"), "2");
+        assert_eq!(calc("0x10"), "16 (0x10) (0b10000)");
+    }
 }
