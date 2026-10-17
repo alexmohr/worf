@@ -415,7 +415,9 @@ fn show(
                         keyboard_return(&warden_config);
                     }
                 } else {
-                    let pw = rbw_get_password(id, true)?;
+                    // Read the password instead of letting rbw copy it, so it is handled by
+                    // the configured text output mode.
+                    let pw = rbw_get_password(id, false)?;
                     match config.read().unwrap().text_output_mode() {
                         TextOutputMode::Clipboard => {
                             if let Err(e) = copy_to_clipboard(pw, None) {
