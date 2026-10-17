@@ -1,7 +1,7 @@
 use std::{
     fs,
     os::unix::fs::FileTypeExt,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, LazyLock, Mutex, RwLock},
 };
 
@@ -10,7 +10,7 @@ use regex::Regex;
 use crate::{
     Error,
     config::{Config, SortOrder, expand_path},
-    desktop::spawn_fork,
+    desktop::start_forked,
     gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
 };
 
@@ -124,7 +124,7 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
             items.push(MenuItem::new(
                 trimmed_search.clone(),
                 Some(FileItemProvider::<T>::resolve_icon_for_name(&path)),
-                Some(format!("xdg-open {}", path.display())),
+                Some(path.display().to_string()),
                 vec![],
                 None,
                 100.0,
@@ -133,9 +133,9 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
 
             if let Ok(entries) = path.read_dir() {
                 for entry in entries.flatten() {
-                    if let Some(mut path_str) =
-                        entry.path().to_str().map(std::string::ToString::to_string)
-                    {
+                    let entry_path = entry.path();
+                    if let Some(mut path_str) = entry_path.to_str().map(ToString::to_string) {
+                        let action = path_str.clone();
                         if trimmed_search.starts_with('~')
                             && let Some(home_dir) = dirs::home_dir()
                             && let Some(home_str) = home_dir.to_str()
@@ -143,14 +143,14 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
                             path_str = path_str.replace(home_str, "~");
                         }
 
-                        if entry.path().is_dir() {
+                        if entry_path.is_dir() {
                             path_str.push('/');
                         }
 
                         items.push(MenuItem::new(
                             path_str.clone(),
-                            Some(FileItemProvider::<T>::resolve_icon_for_name(&entry.path())),
-                            Some(format!("xdg-open {path_str}")),
+                            Some(FileItemProvider::<T>::resolve_icon_for_name(&entry_path)),
+                            Some(action),
                             vec![],
                             None,
                             0.0,
@@ -163,10 +163,8 @@ impl<T: Clone> ItemProvider<T> for FileItemProvider<T> {
             items.push({
                 MenuItem::new(
                     trimmed_search.clone(),
-                    Some(FileItemProvider::<T>::resolve_icon_for_name(
-                        &PathBuf::from(&trimmed_search),
-                    )),
-                    Some(format!("xdg-open {trimmed_search}")),
+                    Some(FileItemProvider::<T>::resolve_icon_for_name(&path)),
+                    Some(path.display().to_string()),
                     vec![],
                     None,
                     0.0,
@@ -215,8 +213,16 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
         None,
     )?;
     if let Some(action) = selection_result.menu.action {
-        spawn_fork(&action, selection_result.menu.working_dir.as_ref())
+        open(&action)
     } else {
         Err(Error::MissingAction)
     }
+}
+
+/// Opens the file or directory at `path` with `xdg-open`.
+/// The path is passed as a single argument, so it may contain spaces or `$`.
+/// # Errors
+/// Returns `Error::Io` if `xdg-open` cannot be spawned.
+pub(crate) fn open(path: &str) -> Result<(), Error> {
+    start_forked("xdg-open", [path])
 }

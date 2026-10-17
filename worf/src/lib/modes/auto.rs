@@ -11,7 +11,7 @@ use crate::{
     },
     modes::{
         drun::{DRunProvider, update_drun_cache_and_run},
-        file::FileItemProvider,
+        file::{self, FileItemProvider},
         math::MathProvider,
         search::SearchProvider,
         ssh,
@@ -74,28 +74,14 @@ impl AutoItemProvider {
     }
 }
 
-fn contains_math_functions_or_starts_with_number(input: &str) -> bool {
-    // Regex for function names (word boundaries to match whole words)
-    static MATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-            r"\b(
-            sqrt|abs|exp|ln|sin|cos|tan|
-            asin|acos|atan|atan2|
-            sinh|cosh|tanh|asinh|acosh|atanh|
-            floor|ceil|round|signum|min|max|
-            pi|e|
-            0x|0b|
-            \||&|<<|>>|\^
-        )\b",
-        )
-        .unwrap()
-    });
-
-    // Regex for strings that start with a number (including decimals)
+/// Returns true if the input starts like an arithmetic expression,
+/// i.e. a number (including `0x`/`0b` literals), optionally preceded by
+/// opening parentheses or a sign.
+fn looks_like_math_expression(input: &str) -> bool {
     static NUMBER_REGEX: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"^\s*[+-]?(\d+(\.\d*)?|\.\d+)").unwrap());
+        LazyLock::new(|| Regex::new(r"^[\s(]*[+-]?[\s(]*(\d|\.\d)").unwrap());
 
-    MATH_REGEX.is_match(input) || NUMBER_REGEX.is_match(input)
+    NUMBER_REGEX.is_match(input)
 }
 
 impl ItemProvider<AutoRunType> for AutoItemProvider {
@@ -105,7 +91,7 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
             _ => "",
         };
 
-        let (mode, provider_data) = if contains_math_functions_or_starts_with_number(search) {
+        let (mode, provider_data) = if looks_like_math_expression(search) {
             (AutoRunType::Math, self.math.get_elements(search_opt))
         } else if search.starts_with('$') || search.starts_with('/') || search.starts_with('~') {
             (AutoRunType::File, self.file.get_elements(search_opt))
@@ -191,7 +177,7 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
                     }
                     AutoRunType::File => {
                         if let Some(action) = selection_result.action {
-                            spawn_fork(&action, selection_result.working_dir.as_ref())?;
+                            file::open(&action)?;
                         }
                         break;
                     }
@@ -220,4 +206,28 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_looks_like_math_expression() {
+        for input in ["1+1", "0x10 | 1", "-5", "(1 + 2) * 3", "  .5*2", "-(2)"] {
+            assert!(looks_like_math_expression(input), "{input}");
+        }
+        for input in [
+            "e",
+            "emacs",
+            "max",
+            "~/e-book.pdf",
+            "/tmp",
+            "ssh host",
+            "?rust",
+            "a | b",
+        ] {
+            assert!(!looks_like_math_expression(input), "{input}");
+        }
+    }
 }
