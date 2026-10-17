@@ -1,8 +1,9 @@
 use std::{
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     marker::PhantomData,
     rc::Rc,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, LazyLock, Mutex, RwLock},
     thread,
     time::Instant,
 };
@@ -512,6 +513,37 @@ struct UiElements<T: Clone> {
     outer_box: gtk4::Box,
     scroll: ScrolledWindow,
     custom_key_box: gtk4::Box,
+    /// Incremented whenever the menu is rebuilt, so pending incremental builds can stop.
+    build_generation: Cell<u64>,
+}
+
+thread_local! {
+    /// The style sheet currently added to the display, if any.
+    static CSS_PROVIDER: RefCell<Option<CssProvider>> = const { RefCell::new(None) };
+}
+
+/// Loads the given style sheet, replacing the one loaded by a previous call.
+/// Modes that call `show` in a loop would otherwise stack up providers.
+fn load_css(css: Option<&str>) {
+    let Some(display) = Display::default() else {
+        return;
+    };
+    CSS_PROVIDER.with_borrow_mut(|current| {
+        if let Some(old) = current.take() {
+            gtk4::style_context_remove_provider_for_display(&display, &old);
+        }
+        if let Some(css) = css {
+            log::debug!("loading css from {css}");
+            let provider = CssProvider::new();
+            provider.load_from_file(&File::for_path(css));
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+            *current = Some(provider);
+        }
+    });
 }
 
 /// Shows the user interface and **blocks** until the user selected an entry
@@ -533,19 +565,7 @@ where
 {
     gtk4::init().map_err(|e| Error::Graphics(e.to_string()))?;
     log::debug!("Starting GUI");
-    if let Some(ref css) = config.read().unwrap().style() {
-        log::debug!("loading css from {css}");
-        let provider = CssProvider::new();
-        let css_file_path = File::for_path(css);
-        provider.load_from_file(&css_file_path);
-        if let Some(display) = Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-    }
+    load_css(config.read().unwrap().style().as_deref());
 
     let app = Application::builder().application_id("worf").build();
     let (sender, receiver) = channel::bounded(1);
@@ -620,6 +640,7 @@ fn build_ui<T>(
         outer_box: gtk4::Box::new(config.read().unwrap().orientation().into(), 0),
         scroll: ScrolledWindow::new(),
         custom_key_box: gtk4::Box::new(Orientation::Vertical, 0),
+        build_generation: Cell::new(0),
     });
 
     // handle keys as soon as possible
@@ -917,39 +938,47 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
             drop(b);
         }
         ui.menu_rows.write().unwrap().clear();
+        // Sorting while rows are added would re-sort the whole box for every batch,
+        // so the sort function is only set once all rows exist.
+        ui.main_box.unset_sort_func();
+
+        let generation = ui.build_generation.get().wrapping_add(1);
+        ui.build_generation.set(generation);
 
         let meta_clone = Rc::<MetaData<T>>::clone(meta);
         let ui_clone = Rc::<UiElements<T>>::clone(ui);
 
         glib::idle_add_local(move || {
-            let mut done = false;
-            {
-                ui_clone.main_box.unset_sort_func();
-                let mut lock = ui_clone.menu_rows.write().unwrap();
-
-                for _ in 0..25 {
-                    if let Some(item) = items.pop() {
-                        lock.insert(add_menu_item(&ui_clone, &meta_clone, &item), item);
-                    } else {
-                        done = true;
-                    }
-                }
-
-                let search_lock = ui_clone.search_text.lock().unwrap();
-                let menus = &mut *lock;
-                set_menu_visibility_for_search(
-                    &search_lock,
-                    menus,
-                    &meta_clone.config,
-                    meta_clone.search_ignored_words.as_ref(),
-                );
+            if ui_clone.build_generation.get() != generation {
+                // A newer build replaced this one, drop the remaining items.
+                return ControlFlow::Break;
             }
-            let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
-            ui_clone.main_box.set_sort_func(move |child1, child2| {
-                sort_flow_box_childs(child1, child2, &items_sort)
-            });
+
+            let mut batch = HashMap::new();
+            for _ in 0..25 {
+                let Some(item) = items.pop() else {
+                    break;
+                };
+                batch.insert(add_menu_item(&ui_clone, &meta_clone, &item), item);
+            }
+            let done = items.is_empty();
+
+            // Only the new rows need their visibility computed.
+            let search_text = ui_clone.search_text.lock().unwrap().clone();
+            set_menu_visibility_for_search(
+                &search_text,
+                &mut batch,
+                &meta_clone.config,
+                meta_clone.search_ignored_words.as_ref(),
+            );
+            ui_clone.menu_rows.write().unwrap().extend(batch);
 
             if done {
+                let items_sort = ArcMenuMap::clone(&ui_clone.menu_rows);
+                ui_clone.main_box.set_sort_func(move |child1, child2| {
+                    sort_flow_box_childs(child1, child2, &items_sort)
+                });
+
                 let lock = ui_clone.menu_rows.read().unwrap();
 
                 select_visible_child(
@@ -1100,6 +1129,17 @@ enum Direction {
     Down,
 }
 
+fn collapse_expanders<T: Clone>(ui: &UiElements<T>) {
+    let children: Vec<FlowBoxChild> = ui.menu_rows.read().unwrap().keys().cloned().collect();
+    for child in children {
+        if let Some(c) = child.child()
+            && let Ok(expander) = c.downcast::<Expander>()
+        {
+            expander.set_expanded(false);
+        }
+    }
+}
+
 fn move_selection<T: Clone + Send + 'static>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
@@ -1117,10 +1157,19 @@ fn move_selection<T: Clone + Send + 'static>(
     // If the selected FlowBoxChild contains an expanded Expander and one of its
     // ListBox rows is focused, handle edge navigation between sub-items and
     // the surrounding FlowBox children.
-    let list_items = ui.menu_rows.read().unwrap();
-    let visible_items_count = list_items.iter().filter(|(_, menu)| menu.visible).count();
-    if let Some(selected_item) = list_items.get(selected)
-        && !selected_item.sub_elements.is_empty()
+    // Read everything needed from the menu rows up front, so no lock is held while
+    // widgets are changed below (which can trigger handlers that need the lock).
+    let (total, visible_items_count, sub_element_count) = {
+        let list_items = ui.menu_rows.read().unwrap();
+        (
+            list_items.len(),
+            list_items.iter().filter(|(_, menu)| menu.visible).count(),
+            list_items
+                .get(selected)
+                .map_or(0, |item| item.sub_elements.len()),
+        )
+    };
+    if sub_element_count > 0
         && let Some(parent_widget) = selected.child()
         && let Ok(expander) = parent_widget.downcast::<Expander>()
         && expander.is_expanded()
@@ -1129,13 +1178,12 @@ fn move_selection<T: Clone + Send + 'static>(
     {
         let idx = selected_row.index();
         // Count children using the model data (MenuItem.sub_elements)
-        let child_count = selected_item.sub_elements.len();
+        let child_count = sub_element_count;
 
         // Moving down from the last sub-item -> select next FlowBox child
         #[allow(clippy::cast_sign_loss)]
         if *direction == Direction::Down && (idx as usize) == child_count.saturating_sub(1) {
             // find index of `selected` inside main_box using the number of menu_rows
-            let total = ui.menu_rows.read().unwrap().len();
             let mut sel_index: Option<usize> = None;
             for i in 0..total {
                 if let Some(child) = ui.main_box.child_at_index(i.try_into().unwrap_or(0))
@@ -1161,7 +1209,6 @@ fn move_selection<T: Clone + Send + 'static>(
                 }
             }
         }
-        drop(list_items);
 
         // Moving up from the first sub-item -> focus parent expander
         if *direction == Direction::Up {
@@ -1177,13 +1224,7 @@ fn move_selection<T: Clone + Send + 'static>(
             };
         }
     } else {
-        ui.menu_rows.read().unwrap().iter().for_each(|(child, _)| {
-            if let Some(c) = child.child()
-                && let Ok(expander) = c.downcast::<Expander>()
-            {
-                expander.set_expanded(false);
-            }
-        });
+        collapse_expanders(ui);
     }
 
     let Some(first_child) = find_visible_child(
@@ -1776,7 +1817,8 @@ fn create_menu_row<T: Clone + 'static + Send>(
     row.set_halign(Align::Fill);
     row.set_widget_name("row");
 
-    let row_box = gtk4::Box::new(meta.config.read().unwrap().row_box_orientation().into(), 0);
+    let config = meta.config.read().unwrap();
+    let row_box = gtk4::Box::new(config.row_box_orientation().into(), 0);
     row_box.set_hexpand(true);
     row_box.set_vexpand(false);
     row_box.set_halign(Align::Fill);
@@ -1785,13 +1827,12 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     let (label_img, label_text) = parse_label(&element_to_add.label);
 
-    let config = meta.config.read().unwrap();
-    if meta.config.read().unwrap().allow_images() {
+    if config.allow_images() {
         let img = lookup_icon(
             element_to_add.icon_path.as_ref().map(AsRef::as_ref),
             &config,
         )
-        .or(lookup_icon(label_img.as_ref().map(AsRef::as_ref), &config));
+        .or_else(|| lookup_icon(label_img.as_ref().map(AsRef::as_ref), &config));
 
         if let Some(image) = img {
             image.set_widget_name("img");
@@ -1800,16 +1841,16 @@ fn create_menu_row<T: Clone + 'static + Send>(
     }
 
     let label = Label::new(label_text.as_ref().map(AsRef::as_ref));
-    label.set_use_markup(meta.config.read().unwrap().allow_markup());
-    label.set_natural_wrap_mode(meta.config.read().unwrap().line_wrap().into());
+    label.set_use_markup(config.allow_markup());
+    label.set_natural_wrap_mode(config.line_wrap().into());
     label.set_hexpand(true);
     label.set_widget_name("text");
     label.set_wrap(true);
-    if let Some(max_width_chars) = meta.config.read().unwrap().line_max_width_chars() {
+    if let Some(max_width_chars) = config.line_max_width_chars() {
         label.set_max_width_chars(max_width_chars);
     }
 
-    if let Some(max_len) = meta.config.read().unwrap().line_max_chars()
+    if let Some(max_len) = config.line_max_chars()
         && let Some(text) = label_text.as_ref()
         && text.chars().count() > max_len
     {
@@ -1822,19 +1863,10 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     row_box.append(&label);
 
-    if meta
-        .config
-        .read()
-        .unwrap()
-        .content_halign()
-        .eq(&config::Align::Start)
-        || meta
-            .config
-            .read()
-            .unwrap()
-            .content_halign()
-            .eq(&config::Align::Fill)
-    {
+    if matches!(
+        config.content_halign(),
+        config::Align::Start | config::Align::Fill
+    ) {
         label.set_xalign(0.0);
     }
 
@@ -1845,11 +1877,8 @@ fn create_menu_row<T: Clone + 'static + Send>(
     let click = GestureClick::new();
     click.set_button(gtk4::gdk::BUTTON_PRIMARY);
 
-    let presses = if meta.config.read().unwrap().single_click() {
-        1
-    } else {
-        2
-    };
+    let presses = if config.single_click() { 1 } else { 2 };
+    drop(config);
 
     click.connect_pressed(move |_gesture, n_press, _x, _y| {
         if n_press == presses
@@ -1910,14 +1939,11 @@ fn parse_label(label: &str) -> (Option<String>, Option<String>) {
 }
 
 fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
+    static IMG_REGEX: LazyLock<Regex> = LazyLock::new(known_image_extension_regex_pattern);
     if let Some(image_path) = icon_path {
-        let img_regex = Regex::new(&format!(
-            r"((?i).*{})",
-            known_image_extension_regex_pattern()
-        ));
         let image = if image_path.starts_with('/') {
             Image::from_file(image_path)
-        } else if img_regex.unwrap().is_match(image_path) {
+        } else if IMG_REGEX.is_match(image_path) {
             if let Some(img) = freedesktop_icons::lookup(image_path)
                 .with_size(config.image_size())
                 .with_scale(1)
@@ -1944,21 +1970,31 @@ fn set_menu_visibility_for_search<T: Clone>(
     config: &Arc<RwLock<Config>>,
     search_ignored_words: Option<&Vec<Regex>>,
 ) {
-    if query.is_empty() {
-        for (fb, menu_item) in items.iter_mut() {
-            menu_item.search_sort_score = 0.0;
-            menu_item.visible = true;
-            fb.set_visible(menu_item.visible);
-        }
-    }
+    let (insensitive, match_method, fuzzy_min_score) = {
+        let config = config.read().unwrap();
+        (
+            config.insensitive(),
+            config.match_method(),
+            config.fuzzy_min_score(),
+        )
+    };
 
-    let mut query = if config.read().unwrap().insensitive() {
-        query.to_owned().to_lowercase()
+    let query = if insensitive {
+        query.to_lowercase()
     } else {
         query.to_owned()
     };
+    let query = filtered_query(search_ignored_words, &query);
 
-    query = filtered_query(search_ignored_words, &query);
+    // Fuzzy matching scores everything 0 against an empty query, so handle it here.
+    if query.trim().is_empty() {
+        for (fb, menu_item) in items.iter_mut() {
+            menu_item.search_sort_score = menu_item.initial_sort_score;
+            menu_item.visible = true;
+            fb.set_visible(menu_item.visible);
+        }
+        return;
+    }
 
     for (fb, menu_item) in items.iter_mut() {
         let mut menu_item_search = format!(
@@ -1966,21 +2002,18 @@ fn set_menu_visibility_for_search<T: Clone>(
             menu_item.action.as_deref().unwrap_or_default(),
             menu_item.label
         );
-        if config.read().unwrap().insensitive() {
+        if insensitive {
             menu_item_search = menu_item_search.to_lowercase();
         }
 
-        let (search_sort_score, visible) = match config.read().unwrap().match_method() {
+        let (search_sort_score, visible) = match match_method {
             MatchMethod::Fuzzy => {
                 let mut score = strsim::jaro_winkler(&query, &menu_item_search);
                 if score == 0.0 {
                     score = -1.0;
                 }
 
-                (
-                    score,
-                    score > config.read().unwrap().fuzzy_min_score() && score > 0.0,
-                )
+                (score, score > fuzzy_min_score && score > 0.0)
             }
             MatchMethod::Contains => {
                 if menu_item_search.contains(&query) {
