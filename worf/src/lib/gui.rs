@@ -13,7 +13,7 @@ use gdk4::{
     Display, Rectangle,
     gio::File,
     glib::{self, Propagation, SignalHandlerId},
-    prelude::{Cast, DisplayExt, MonitorExt, ObjectExt, SurfaceExt},
+    prelude::{Cast, DisplayExt, DisplayExtManual, MonitorExt, ObjectExt, SurfaceExt},
 };
 use gtk4::{
     Align, Application, ApplicationWindow, CssProvider, EventControllerKey, Expander, FlowBox,
@@ -426,6 +426,25 @@ fn modifiers_from_mask(mask: gdk4::ModifierType) -> HashSet<Modifier> {
     }
 
     modifiers
+}
+
+/// Modifiers that are relevant to match a key binding.
+/// Lock keys like `CapsLock` are ignored, so bindings work regardless of their state.
+fn significant_modifiers(modifiers: &HashSet<Modifier>) -> HashSet<Modifier> {
+    modifiers
+        .iter()
+        .filter(|m| !matches!(m, Modifier::CapsLock | Modifier::None))
+        .copied()
+        .collect()
+}
+
+/// Returns the key the given hardware key code produces without any modifier.
+fn unshifted_key(key_code: u32) -> Option<gdk4::Key> {
+    Display::default()?
+        .map_keycode(key_code)?
+        .into_iter()
+        .find(|(keymap_key, _)| keymap_key.group() == 0 && keymap_key.level() == 0)
+        .map(|(_, key)| key)
 }
 
 impl From<config::Layer> for gtk4_layer_shell::Layer {
@@ -1265,24 +1284,30 @@ fn handle_custom_keys<T: Clone + 'static + Send>(
 ) -> Propagation {
     let detection_type = meta.config.read().unwrap().key_detection_type();
     if let Some(custom_keys) = custom_keys {
-        let mods = modifiers_from_mask(modifier_type);
-        for custom_key in &custom_keys.bindings {
-            let custom_key_match = if detection_type == KeyDetectionType::Code {
+        let mods = significant_modifiers(&modifiers_from_mask(modifier_type));
+        // With Shift held the key value is the shifted symbol (i.e. `!` for `1`),
+        // so also compare the unshifted key of the same physical key.
+        let unshifted_key = unshifted_key(key_code);
+        let custom_key = custom_keys.bindings.iter().find(|custom_key| {
+            let key_match = if detection_type == KeyDetectionType::Code {
                 custom_key.key == key_code.into()
             } else {
                 custom_key.key == keyboard_key.to_upper().into()
-            } && mods.is_subset(&custom_key.modifiers);
+                    || unshifted_key.is_some_and(|k| custom_key.key == k.to_upper().into())
+            };
+            key_match && significant_modifiers(&custom_key.modifiers) == mods
+        });
 
-            log::debug!("custom key {custom_key:?}, match {custom_key_match}");
-
-            if custom_key_match {
-                let search_lock = ui.search_text.lock().unwrap();
-                if let Err(e) =
-                    handle_selected_item(ui, meta, Some(&search_lock), None, Some(custom_key))
-                {
-                    log::error!("{e}");
-                }
+        if let Some(custom_key) = custom_key {
+            log::debug!("custom key {custom_key:?} matched");
+            let search_text = ui.search_text.lock().unwrap().clone();
+            if let Err(e) =
+                handle_selected_item(ui, meta, Some(&search_text), None, Some(custom_key))
+            {
+                log::error!("{e}");
             }
+            // The key is handled, it must not end up in the search.
+            return Propagation::Stop;
         }
     }
 
