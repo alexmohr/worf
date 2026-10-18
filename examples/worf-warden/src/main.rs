@@ -1,7 +1,8 @@
 use std::{
     collections::HashMap,
     env,
-    process::Command,
+    io::Write,
+    process::{Command, Stdio},
     sync::{Arc, Mutex, RwLock},
     thread::sleep,
     time::Duration,
@@ -116,13 +117,27 @@ fn groups() -> String {
 
 fn keyboard_type(text: &str, cfg: &WardenConfig) {
     let mut cmd = Command::new(cfg.typing_cmd());
-    for arg in cfg.typing_cmd_args() {
-        cmd.arg(arg);
-    }
-    cmd.arg(text);
+    cmd.args(cfg.typing_cmd_args());
 
-    cmd.output()
-        .unwrap_or_else(|_| panic!("Failed to execute {}", cfg.typing_cmd()));
+    if cfg.typing_stdin {
+        // Arguments are visible to every local user (i.e. via ps), stdin is not.
+        cmd.stdin(Stdio::piped());
+        let mut child = cmd
+            .spawn()
+            .unwrap_or_else(|_| panic!("Failed to execute {}", cfg.typing_cmd()));
+        if let Some(mut stdin) = child.stdin.take()
+            && let Err(e) = stdin.write_all(text.as_bytes())
+        {
+            log::error!("Failed to write to {}: {e}", cfg.typing_cmd());
+        }
+        if let Err(e) = child.wait() {
+            log::error!("Failed to wait for {}: {e}", cfg.typing_cmd());
+        }
+    } else {
+        cmd.arg(text);
+        cmd.output()
+            .unwrap_or_else(|_| panic!("Failed to execute {}", cfg.typing_cmd()));
+    }
 }
 
 fn keyboard_return(config: &WardenConfig) {
@@ -454,6 +469,9 @@ fn show(
 struct WardenConfig {
     typing_cmd: Option<String>,
     typing_cmd_args: Option<Vec<String>>,
+    /// Pass the text to type on stdin instead of as last argument.
+    #[serde(default)]
+    typing_stdin: bool,
     custom_auto_types: HashMap<String, String>,
 }
 
