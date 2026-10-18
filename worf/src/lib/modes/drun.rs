@@ -78,7 +78,7 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                     &locale_variants,
                     &file.entry.name.variants,
                     &file.entry.name.default,
-                )?;
+                );
 
                 let (action, working_dir, in_terminal) = match &file.entry.entry_type {
                     EntryType::Application(app) => (
@@ -124,31 +124,30 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
 
                 if !self.no_actions {
                     for action in file.actions.values() {
-                        if let Some(action_name) = lookup_name_with_locale(
+                        let action_name = lookup_name_with_locale(
                             &locale_variants,
                             &action.name.variants,
                             &action.name.default,
-                        ) {
-                            let action_icon = action
-                                .icon
-                                .as_ref()
-                                .map(|s| s.content.clone())
-                                .or(icon.clone())
-                                .unwrap_or("application-x-executable".to_string());
+                        );
+                        let action_icon = action
+                            .icon
+                            .as_ref()
+                            .map(|s| s.content.clone())
+                            .or(icon.clone())
+                            .unwrap_or("application-x-executable".to_string());
 
-                            let action =
-                                self.get_action(in_terminal, action.exec.clone(), &action_name);
+                        let action =
+                            self.get_action(in_terminal, action.exec.clone(), &action_name);
 
-                            entry.sub_elements.push(MenuItem::new(
-                                action_name,
-                                Some(action_icon),
-                                action,
-                                Vec::new(),
-                                working_dir.clone(),
-                                0.0,
-                                Some(self.data.clone()),
-                            ));
-                        }
+                        entry.sub_elements.push(MenuItem::new(
+                            action_name,
+                            Some(action_icon),
+                            action,
+                            Vec::new(),
+                            working_dir.clone(),
+                            0.0,
+                            Some(self.data.clone()),
+                        ));
                     }
                 }
                 Some(entry)
