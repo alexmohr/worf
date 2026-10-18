@@ -395,7 +395,7 @@ impl FromStr for Key {
 #[derive(Default)]
 pub struct Config {
     /// Forks the menu so you can close the terminal
-    #[clap(short = 'f', long = "fork")]
+    #[clap(short = 'f', long = "fork", num_args = 0..=1, default_missing_value = "true")]
     fork: Option<bool>,
 
     /// Selects a config file to use
@@ -430,11 +430,11 @@ pub struct Config {
     normal_window: Option<bool>,
 
     /// Set to 'false' to disable images, defaults to true
-    #[clap(short = 'I', long = "allow-images")]
+    #[clap(short = 'I', long = "allow-images", num_args = 0..=1, default_missing_value = "true")]
     allow_images: Option<bool>,
 
     /// If `true` pango markup is parsed
-    #[clap(short = 'm', long = "allow-markup")]
+    #[clap(short = 'm', long = "allow-markup", num_args = 0..=1, default_missing_value = "true")]
     allow_markup: Option<bool>,
 
     /// If set to a value a custom cache file will be used
@@ -462,7 +462,7 @@ pub struct Config {
     password: Option<String>,
 
     /// Defines whether the scrollbar is visible
-    #[clap(short = 'b', long = "hide-scroll")]
+    #[clap(short = 'b', long = "hide-scroll", num_args = 0..=1, default_missing_value = "true")]
     hide_scroll: Option<bool>,
 
     /// Defines the matching method, defaults to contains
@@ -471,7 +471,7 @@ pub struct Config {
 
     /// Control if search is case-insensitive or not.
     /// Defaults to true
-    #[clap(short = 'i', long = "insensitive")]
+    #[clap(short = 'i', long = "insensitive", num_args = 0..=1, default_missing_value = "true")]
     insensitive: Option<bool>,
 
     /// set where the window is displayed.
@@ -484,7 +484,7 @@ pub struct Config {
     location: Option<Vec<Anchor>>,
 
     /// If set to `true` sub actions will be disabled
-    #[clap(short = 'a', long = "no-actions")]
+    #[clap(short = 'a', long = "no-actions", num_args = 0..=1, default_missing_value = "true")]
     no_actions: Option<bool>,
 
     /// If set, the given amount tof lines will be shown
@@ -530,7 +530,7 @@ pub struct Config {
     content_halign: Option<Align>,
 
     /// center content on vertical axis
-    #[clap(long = "content-vcenter")]
+    #[clap(long = "content-vcenter", num_args = 0..=1, default_missing_value = "true")]
     content_vcenter: Option<bool>,
 
     /// Vertical alignment
@@ -542,7 +542,7 @@ pub struct Config {
     image_size: Option<u16>,
 
     /// If set to `true` the search field will be hidden.
-    #[clap(long = "hide-search")]
+    #[clap(long = "hide-search", num_args = 0..=1, default_missing_value = "true")]
     hide_search: Option<bool>,
 
     /// can be set to a key to toggle the search bar.
@@ -571,13 +571,13 @@ pub struct Config {
 
     /// If enabled, worf will resize according to the amount of displayed rows
     /// defaults to false
-    #[clap(long = "dynamic-lines")]
+    #[clap(long = "dynamic-lines", num_args = 0..=1, default_missing_value = "true")]
     dynamic_lines: Option<bool>,
 
     /// If enabled, dynamic lines do not exceed the maximum height specified in the
     /// `height` option. It does ot evaluate the `lines` option though
     /// defaults to true
-    #[clap(long = "dynamic-lines-limit")]
+    #[clap(long = "dynamic-lines-limit", num_args = 0..=1, default_missing_value = "true")]
     dynamic_lines_limit: Option<bool>,
 
     /// Defines the layer worf is running on.
@@ -588,7 +588,7 @@ pub struct Config {
 
     /// If set to `true` single click instead of double click will select
     /// Defaults to `false`
-    #[clap(long = "single-click")]
+    #[clap(long = "single-click", num_args = 0..=1, default_missing_value = "true")]
     single_click: Option<bool>,
 
     /// Minimum score for a fuzzy search to be shown
@@ -616,7 +616,7 @@ pub struct Config {
     line_max_width_chars: Option<i32>,
 
     /// Display only icon in emoji mode
-    #[clap(long = "emoji-hide-string")]
+    #[clap(long = "emoji-hide-string", num_args = 0..=1, default_missing_value = "true")]
     emoji_hide_label: Option<bool>,
 
     /// Defines the key detection type.
@@ -631,27 +631,31 @@ pub struct Config {
 
     /// Blur the background of the screen
     /// can be styled via `background`
-    #[clap(long = "blurred-background")]
+    #[clap(long = "blurred-background", num_args = 0..=1, default_missing_value = "true")]
     blurred_background: Option<bool>,
 
     /// Set the background to full screen.
     /// Might look better for some things, but
     /// there can only be one fullscreened app at the time.
     /// Defaults to false.
-    #[clap(long = "blurred-background-fullscreen")]
+    #[clap(
+        long = "blurred-background-fullscreen",
+        num_args = 0..=1,
+        default_missing_value = "true"
+    )]
     blurred_background_fullscreen: Option<bool>,
 
     /// Allow submitting selected entry with expand key if there is only 1 item left.
-    #[clap(long = "submit-with-expand")]
+    #[clap(long = "submit-with-expand", num_args = 0..=1, default_missing_value = "true")]
     submit_with_expand: Option<bool>,
 
     /// Auto select when only 1 possible choice is left
-    #[clap(long = "auto-select-on-search")]
+    #[clap(long = "auto-select-on-search", num_args = 0..=1, default_missing_value = "true")]
     auto_select_on_search: Option<bool>,
 
     /// Jump to the first/last entry when at the end/start and down/up is pressed
     /// Defaults to true
-    #[clap(long = "rollover")]
+    #[clap(long = "rollover", num_args = 0..=1, default_missing_value = "true")]
     rollover: Option<bool>,
 
     /// For text modes, defines which output is used.
@@ -1204,6 +1208,14 @@ mod tests {
         let args = Config::parse_from(["worf", "--width", "100%"]);
         let merged = merge_config_with_args(&mut config, &args).expect("merge failed");
         assert_eq!(merged.width(), "100%");
+    }
+
+    #[test]
+    fn test_bool_options_work_as_flags() {
+        let args = Config::parse_from(["worf", "--fork", "-i", "false", "--rollover=false"]);
+        assert!(args.fork());
+        assert!(!args.insensitive());
+        assert!(!args.rollover());
     }
 
     #[test]
