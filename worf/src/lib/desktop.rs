@@ -9,6 +9,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::LazyLock,
+    thread,
     time::Instant,
 };
 
@@ -336,7 +337,10 @@ fn detach_and_spawn(mut cmd: Command) -> Result<(), Error> {
         });
     }
 
-    cmd.spawn().map_err(|e| Error::Io(e.to_string()))?;
+    let mut child = cmd.spawn().map_err(|e| Error::Io(e.to_string()))?;
+    // Reap the child when it exits, so it does not stay a zombie while worf keeps running.
+    // The thread does not keep worf alive, it ends with the process.
+    thread::spawn(move || child.wait());
     Ok(())
 }
 
