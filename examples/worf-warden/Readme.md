@@ -21,6 +21,7 @@ Special variables:
 * `$P` -- Password
 * `$T` -- Two factor
 * `$S` -- Sleep in milliseconds
+* `$$` -- A literal `$`
 * `_` -- All underscores are removed and used to make the string more readable
 
 The default is `$U\t$P` which is user, tab, password.  
