@@ -139,7 +139,7 @@ sudo apt install ./target/debian/worf-launcher-xxxx.deb
 
 Worf configuration files are looked up in the following directories
 * Configuration file passed on the command line with `--conf`
-* `$XDG_CONF_DIR/worf/config`
+* `$XDG_CONFIG_HOME/worf/config`
 * `$HOME/.config/worf/config`
 
 When no file is found, the defaults will be used.
