@@ -94,7 +94,10 @@ impl ItemProvider<AutoRunType> for AutoItemProvider {
         let (mode, provider_data) = if looks_like_math_expression(search) {
             (AutoRunType::Math, self.math.get_elements(search_opt))
         } else if search.starts_with('$') || search.starts_with('/') || search.starts_with('~') {
-            (AutoRunType::File, self.file.get_elements(search_opt))
+            (
+                AutoRunType::File,
+                self.file.get_elements(search_opt.map(str::trim_start)),
+            )
         } else if search.starts_with("ssh") {
             (AutoRunType::Ssh, self.ssh.get_elements(search_opt))
         } else if search.starts_with('?') {
