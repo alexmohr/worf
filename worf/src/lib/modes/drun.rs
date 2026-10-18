@@ -12,8 +12,8 @@ use crate::{
     Error,
     config::{Config, SortOrder},
     desktop::{
-        find_desktop_files, get_locale_variants, lookup_name_with_locale, save_cache_file,
-        spawn_fork,
+        find_desktop_files, get_locale_variants, lookup_name_with_locale, parse_exec,
+        save_cache_file, spawn_fork,
     },
     gui::{self, ArcProvider, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
@@ -90,14 +90,9 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                 };
 
                 let cmd_exists = action
-                    .as_ref()
-                    .and_then(|a| {
-                        a.split(' ')
-                            .next()
-                            .map(|cmd| cmd.replace('"', ""))
-                            .map(|cmd| PathBuf::from(&cmd).exists() || which::which(&cmd).is_ok())
-                    })
-                    .unwrap_or(false);
+                    .as_deref()
+                    .and_then(|a| parse_exec(a).into_iter().next())
+                    .is_some_and(|cmd| PathBuf::from(&cmd).exists() || which::which(&cmd).is_ok());
 
                 if !cmd_exists {
                     log::warn!(

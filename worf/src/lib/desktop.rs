@@ -204,46 +204,98 @@ pub fn fork_if_configured(config: &Config) {
     }
 }
 
+/// Splits a command line like the `Exec` key of desktop entries into arguments.
+///
+/// Arguments are separated by whitespace. Double quoted parts may contain whitespace
+/// and the escapes `\"`, `` \` ``, `\$` and `\\`. Single quoted parts are taken
+/// literally. Quoted and unquoted parts next to each other form one argument,
+/// i.e. `FOO="a b"` is `FOO=a b`.
+///
+/// Field codes (`%f`, `%U`, ...) are removed as worf does not pass files or URLs,
+/// `%%` becomes a literal `%`.
+#[must_use]
+pub fn parse_exec(cmd: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    // None until the current argument has any content, so `""` is an empty argument.
+    let mut current: Option<String> = None;
+    let mut chars = cmd.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            c if c.is_whitespace() => {
+                if let Some(arg) = current.take() {
+                    args.push(arg);
+                }
+            }
+            '"' => {
+                let arg = current.get_or_insert_with(String::new);
+                while let Some(c) = chars.next() {
+                    match c {
+                        '"' => break,
+                        '\\' => match chars.peek() {
+                            Some(&escaped @ ('"' | '`' | '$' | '\\')) => {
+                                arg.push(escaped);
+                                chars.next();
+                            }
+                            _ => arg.push('\\'),
+                        },
+                        _ => arg.push(c),
+                    }
+                }
+            }
+            '\'' => {
+                let arg = current.get_or_insert_with(String::new);
+                for c in chars.by_ref() {
+                    if c == '\'' {
+                        break;
+                    }
+                    arg.push(c);
+                }
+            }
+            '%' => {
+                let arg = current.get_or_insert_with(String::new);
+                match chars.next() {
+                    // `%%` is a literal `%`, a trailing `%` is kept as well
+                    Some('%') | None => arg.push('%'),
+                    Some(code) if code.is_ascii_alphabetic() => {
+                        // A field code that is a whole argument is removed with it.
+                        if arg.is_empty() && chars.peek().is_none_or(|c| c.is_whitespace()) {
+                            current = None;
+                        }
+                    }
+                    Some(other) => {
+                        arg.push('%');
+                        arg.push(other);
+                    }
+                }
+            }
+            _ => current.get_or_insert_with(String::new).push(c),
+        }
+    }
+
+    if let Some(arg) = current {
+        args.push(arg);
+    }
+    args
+}
+
 /// Spawn a new process and forks it away from the current worf process
+/// The command is split with [`parse_exec`], it is not run through a shell.
 /// # Errors
 /// * No action in menu item
 /// * Cannot run command (i.e. not found)
-/// # Panics
-/// When internal regex unwrapping fails. Should not happen as the regex is static
 pub fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), Error> {
-    static RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r#"'([^']*)'|"([^"]*)"|(\S+)"#).unwrap());
-    let re = &*RE;
-    let parts: Vec<String> = re
-        .captures_iter(cmd)
-        .map(|cap| {
-            cap.get(1)
-                .or_else(|| cap.get(2))
-                .or_else(|| cap.get(3))
-                .unwrap()
-                .as_str()
-                .to_string()
-        })
-        .collect();
-
-    if parts.is_empty() {
+    let mut parts = parse_exec(cmd).into_iter();
+    let Some(exec) = parts.next() else {
         return Err(Error::MissingAction);
-    }
+    };
 
     if let Some(dir) = working_dir {
         env::set_current_dir(dir)
             .map_err(|e| Error::RunFailed(format!("cannot set workdir {e}")))?;
     }
 
-    let exec = parts[0].replace('"', "");
-    let args: Vec<_> = parts
-        .iter()
-        .skip(1)
-        .filter(|arg| !arg.starts_with('%'))
-        .map(|arg| expand_path(arg))
-        .collect();
-
-    start_forked(&exec, args)
+    start_forked(&expand_path(&exec).to_string_lossy(), parts)
 }
 
 fn stdio_unless_terminal(stream: &impl IsTerminal) -> Stdio {
@@ -409,5 +461,31 @@ pub fn copy_to_clipboard(text: String, notify_body: Option<&str>) -> Result<(), 
                 .map_err(|e| Error::Io(e.to_string()))?;
             Err(Error::Clipboard(e.to_string()))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_exec() {
+        assert_eq!(parse_exec("firefox %u"), vec!["firefox"]);
+        assert_eq!(
+            parse_exec(r#""/opt/My App/app" --flag"#),
+            vec!["/opt/My App/app", "--flag"]
+        );
+        assert_eq!(
+            parse_exec(r#"env FOO="a b" app"#),
+            vec!["env", "FOO=a b", "app"]
+        );
+        assert_eq!(
+            parse_exec(r#"sh -c "echo \"hi\" \$HOME \\ done""#),
+            vec!["sh", "-c", r#"echo "hi" $HOME \ done"#]
+        );
+        assert_eq!(parse_exec("printf 100%%"), vec!["printf", "100%"]);
+        assert_eq!(parse_exec("app --file=%f"), vec!["app", "--file="]);
+        assert_eq!(parse_exec("app '' 'a b'"), vec!["app", "", "a b"]);
+        assert_eq!(parse_exec("  "), Vec::<String>::new());
     }
 }
