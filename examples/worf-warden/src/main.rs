@@ -129,71 +129,82 @@ fn keyboard_return(config: &WardenConfig) {
     keyboard_type("\n", config);
 }
 
-fn keyboard_auto_type(cmd: &str, id: &str, config: &WardenConfig) -> Result<(), String> {
-    let mut input = cmd.replace('_', "");
+#[derive(Debug, PartialEq)]
+enum AutoTypeStep {
+    Text(String),
+    User,
+    Password,
+    Totp,
+    Sleep(Duration),
+}
 
-    while !input.is_empty() {
-        // Remove up to and including the first '$'
+/// Parses an auto type template like `$U\t$P`, see the Readme for the format.
+/// Underscores are ignored, `$$` types a literal `$`.
+fn parse_auto_type(template: &str) -> Vec<AutoTypeStep> {
+    let mut steps = Vec::new();
+    let mut text = String::new();
+    let mut chars = template.chars().filter(|c| *c != '_').peekable();
 
-        if let Some(pos) = input.find('$') {
-            // Extract substring before '$'
-            let extracted = input[..pos].to_string();
-
-            // Remove extracted part + '$' from input
-            input.drain(..=pos);
-
-            if !extracted.is_empty() {
-                keyboard_type(extracted.as_str(), config);
-            }
+    while let Some(c) = chars.next() {
+        if c != '$' {
+            text.push(c);
+            continue;
         }
 
-        // Match the next character
-        match input.chars().next() {
+        let step = match chars.next() {
+            Some('U') => AutoTypeStep::User,
+            Some('P') => AutoTypeStep::Password,
+            Some('T') => AutoTypeStep::Totp,
             Some('S') => {
-                // Remove the 'S' command character
-                input.remove(0);
-
-                // Collect digits following 'S'
-                let digits: String = input.chars().take_while(|c| c.is_ascii_digit()).collect();
-
-                // Remove the digits from input
-                let len = digits.len();
-                input.drain(..len);
-
-                // Parse and sleep
-                if let Ok(ms) = digits.parse::<u64>() {
-                    sleep(Duration::from_millis(ms));
-                } else {
-                    log::error!("Failed to parse digits: {digits}");
+                let mut digits = String::new();
+                while let Some(d) = chars.next_if(char::is_ascii_digit) {
+                    digits.push(d);
                 }
+                match digits.parse::<u64>() {
+                    Ok(ms) => AutoTypeStep::Sleep(Duration::from_millis(ms)),
+                    Err(_) => {
+                        log::error!("Missing milliseconds after '$S'");
+                        continue;
+                    }
+                }
+            }
+            Some('$') => {
+                text.push('$');
                 continue;
             }
-
-            Some('U') => {
-                let user = rbw_get_user(id, false)?;
-                keyboard_type(&user, config);
+            Some(other) => {
+                log::error!("Unknown auto type command '${other}', typing it as text");
+                text.push('$');
+                text.push(other);
+                continue;
             }
-
-            Some('P') => {
-                let pw = rbw_get_password(id, false)?;
-                keyboard_type(&pw, config);
-            }
-
-            Some('T') => {
-                let totp = rbw_get_totp(id, false)?;
-                keyboard_type(&totp, config);
-            }
-
-            Some(c) => {
-                log::error!("Unknown character found: {c}");
-            }
-
             None => {
                 log::error!("No command found after '$'");
+                continue;
             }
-        }
+        };
 
-        input.drain(..1);
+        if !text.is_empty() {
+            steps.push(AutoTypeStep::Text(std::mem::take(&mut text)));
+        }
+        steps.push(step);
+    }
+
+    if !text.is_empty() {
+        steps.push(AutoTypeStep::Text(text));
+    }
+    steps
+}
+
+fn keyboard_auto_type(cmd: &str, id: &str, config: &WardenConfig) -> Result<(), String> {
+    for step in parse_auto_type(cmd) {
+        match step {
+            AutoTypeStep::Text(text) => keyboard_type(&text, config),
+            AutoTypeStep::User => keyboard_type(&rbw_get_user(id, false)?, config),
+            AutoTypeStep::Password => keyboard_type(&rbw_get_password(id, false)?, config),
+            AutoTypeStep::Totp => keyboard_type(&rbw_get_totp(id, false)?, config),
+            AutoTypeStep::Sleep(duration) => sleep(duration),
+        }
     }
 
     Ok(())
@@ -513,4 +524,31 @@ fn main() -> Result<(), String> {
         &worf_config.read().unwrap(),
     )?));
     show(worf_config, provider, warden_config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_auto_type() {
+        use AutoTypeStep::{Password, Sleep, Text, User};
+
+        assert_eq!(
+            parse_auto_type("$U\t$P"),
+            vec![User, Text("\t".to_owned()), Password]
+        );
+        assert_eq!(
+            parse_auto_type("$U_\n_$S_500_$P\nUser ✓"),
+            vec![
+                User,
+                Text("\n".to_owned()),
+                Sleep(Duration::from_millis(500)),
+                Password,
+                Text("\nUser ✓".to_owned()),
+            ]
+        );
+        assert_eq!(parse_auto_type("a$$b"), vec![Text("a$b".to_owned())]);
+        assert_eq!(parse_auto_type("$✓"), vec![Text("$✓".to_owned())]);
+    }
 }
