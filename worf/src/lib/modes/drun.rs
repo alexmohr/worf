@@ -12,8 +12,8 @@ use crate::{
     Error,
     config::{Config, SortOrder},
     desktop::{
-        find_desktop_files, get_locale_variants, lookup_name_with_locale, parse_exec,
-        save_cache_file, spawn_fork,
+        find_desktop_files, get_locale_variants, load_cache_file, lookup_name_with_locale,
+        parse_exec, save_cache_file, spawn_fork,
     },
     gui::{self, ArcProvider, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
@@ -195,6 +195,10 @@ pub(crate) fn update_drun_cache_and_run<T: Clone>(
     cache: &mut HashMap<String, i64>,
     selection_result: MenuItem<T>,
 ) -> Result<(), crate::Error> {
+    // Another worf may have updated the cache since it was loaded.
+    if let Ok(current) = load_cache_file(cache_path) {
+        *cache = current;
+    }
     *cache.entry(selection_result.label).or_insert(0) += 1;
     if let Err(e) = save_cache_file(cache_path, cache) {
         log::warn!("cannot save drun cache {e:?}");
