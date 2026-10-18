@@ -148,9 +148,15 @@ fn main() -> Result<(), String> {
         config::load_worf_config(Some(&args)).unwrap_or(args),
     ));
 
-    let cache_path = desktop::cache_file_path(&config.read().unwrap(), "worf-hyprswitch")
-        .map_err(|err| err.to_string())?;
-    let mut cache = load_icon_cache(&cache_path).map_err(|e| e.to_string())?;
+    // The icon cache has its own file, `cache_file` from the config is the drun usage cache
+    // and has a different format. The cache is optional, it only speeds up icon lookup.
+    let cache_path = dirs::cache_dir()
+        .map(|dir| dir.join("worf-hyprswitch"))
+        .ok_or_else(|| "cannot find the cache directory".to_owned())?;
+    let mut cache = load_icon_cache(&cache_path).unwrap_or_else(|e| {
+        log::warn!("cannot load icon cache, starting with an empty one: {e}");
+        HashMap::new()
+    });
 
     let provider = Arc::new(Mutex::new(WindowProvider::new(
         &config.read().unwrap(),
@@ -169,9 +175,9 @@ fn main() -> Result<(), String> {
         });
         let updated_toml = toml::to_string(&cache);
         match updated_toml {
-            Ok(toml) => {
-                fs::write(cache_path, toml).map_err(|e| Error::UpdateCacheError(e.to_string()))
-            }
+            Ok(toml) => desktop::create_file_if_not_exists(&cache_path).and_then(|()| {
+                fs::write(&cache_path, toml).map_err(|e| Error::UpdateCacheError(e.to_string()))
+            }),
             Err(e) => Err(Error::UpdateCacheError(e.to_string())),
         }
     });
@@ -185,6 +191,8 @@ fn main() -> Result<(), String> {
         Err("No window data found".to_owned())
     };
 
-    update_cache.join().unwrap().map_err(|e| e.to_string())?;
+    if let Err(e) = update_cache.join().unwrap() {
+        log::warn!("cannot save icon cache: {e}");
+    }
     return_value
 }
