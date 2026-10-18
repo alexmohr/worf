@@ -622,6 +622,25 @@ where
     receiver.try_recv().unwrap_or(Err(Error::NoSelection))
 }
 
+fn free_ui_on_shutdown<T: Clone + 'static>(ui: &Rc<UiElements<T>>) {
+    // Signal handlers on the widgets hold the UI, so it is never freed on its own.
+    // Destroying the windows on shutdown drops the handlers and breaks those cycles,
+    // which matters for modes that call `show` in a loop.
+    let shutdown_ui = Rc::downgrade(ui);
+    ui.app.connect_shutdown(move |_| {
+        if let Some(ui) = shutdown_ui.upgrade() {
+            // Stops a pending incremental build.
+            ui.build_generation
+                .set(ui.build_generation.get().wrapping_add(1));
+            ui.menu_rows.write().unwrap().clear();
+            ui.window.destroy();
+            if let Some(background) = &ui.background {
+                background.destroy();
+            }
+        }
+    });
+}
+
 fn build_ui<T>(
     config: &Arc<RwLock<Config>>,
     meta: &Rc<MetaData<T>>,
@@ -666,6 +685,7 @@ fn build_ui<T>(
         custom_key_box: gtk4::Box::new(Orientation::Vertical, 0),
         build_generation: Cell::new(0),
     });
+    free_ui_on_shutdown(&ui_elements);
 
     // handle keys as soon as possible
     setup_key_event_handler(&ui_elements, meta, custom_keys);
