@@ -1923,7 +1923,13 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     row.upcast()
 }
+/// Parses labels in the wofi format `img:<path>:text:<text>`.
+/// Labels that do not start with `img:` or `text:` are plain text.
 fn parse_label(label: &str) -> (Option<String>, Option<String>) {
+    if !label.starts_with("img:") && !label.starts_with("text:") {
+        return (None, Some(label.to_owned()));
+    }
+
     let mut img = None;
     let mut text = None;
 
@@ -2162,5 +2168,45 @@ pub fn apply_sort<T: Clone>(items: &mut [MenuItem<T>], order: &SortOrder) {
 
             items.sort_by(|l, r| into_core_order(sort_menu_items_by_score(Some(l), Some(r))));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn label(img: Option<&str>, text: Option<&str>) -> (Option<String>, Option<String>) {
+        (img.map(ToOwned::to_owned), text.map(ToOwned::to_owned))
+    }
+
+    #[test]
+    fn test_parse_label_tagged() {
+        assert_eq!(
+            parse_label("img:/a.png:text:Hello"),
+            label(Some("/a.png"), Some("Hello"))
+        );
+        assert_eq!(
+            parse_label("text:a:b:img:icon"),
+            label(Some("icon"), Some("a:b"))
+        );
+        assert_eq!(parse_label("img:icon"), label(Some("icon"), None));
+        assert_eq!(
+            parse_label("img:icon:Without text tag"),
+            label(Some("icon"), Some("Without text tag"))
+        );
+    }
+
+    #[test]
+    fn test_parse_label_plain() {
+        assert_eq!(parse_label("Firefox"), label(None, Some("Firefox")));
+        assert_eq!(parse_label("img"), label(None, Some("img")));
+        assert_eq!(
+            parse_label("foo:text:bar"),
+            label(None, Some("foo:text:bar"))
+        );
+        assert_eq!(
+            parse_label("10:00 meeting:img:x"),
+            label(None, Some("10:00 meeting:img:x"))
+        );
     }
 }
