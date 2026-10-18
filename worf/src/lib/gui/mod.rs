@@ -13,12 +13,12 @@ use gdk4::{
     Display, Rectangle,
     gio::{self, File},
     glib::{self, Propagation, SignalHandlerId},
-    prelude::{Cast, DisplayExt, DisplayExtManual, MonitorExt, ObjectExt, SurfaceExt},
+    prelude::{Cast, DisplayExt, MonitorExt, ObjectExt, SurfaceExt},
 };
 use gtk4::{
     Align, Application, ApplicationWindow, CssProvider, EventControllerKey, Expander, FlowBox,
-    FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, NaturalWrapMode, Ordering,
-    Orientation, PolicyType, ScrolledWindow, SearchEntry, Widget,
+    FlowBoxChild, GestureClick, Image, Label, ListBox, ListBoxRow, NaturalWrapMode, Orientation,
+    PolicyType, ScrolledWindow, SearchEntry, Widget,
     glib::ControlFlow,
     prelude::{
         AdjustmentExt, ApplicationExt, ApplicationExtManual, BoxExt, EditableExt,
@@ -33,21 +33,35 @@ use regex::Regex;
 use crate::{
     Error,
     config::{
-        self, Anchor, Config, CustomKeyHintLocation, Key, KeyDetectionType, MatchMethod, SortOrder,
-        WrapMode,
+        self, Anchor, Config, CustomKeyHintLocation, Key, KeyDetectionType, SortOrder, WrapMode,
     },
     desktop,
     desktop::known_image_extension_regex_pattern,
 };
 
+mod keys;
+mod label;
+mod search;
+
+pub use keys::Modifier;
+use keys::{
+    has_command_modifier, is_key_match, modifiers_from_mask, significant_modifiers, unshifted_key,
+};
+use label::{parse_label, truncate_markup};
+pub use search::{apply_sort, filtered_query};
+use search::{set_menu_visibility_for_search, sort_flow_box_childs};
+
 pub type ArcMenuMap<T> = Arc<RwLock<HashMap<FlowBoxChild, MenuItem<T>>>>;
+
 pub type ArcProvider<T> = Arc<Mutex<dyn ItemProvider<T> + Send>>;
+
 pub type ArcFactory<T> = Arc<Mutex<dyn ItemFactory<T> + Send>>;
 
 pub struct Selection<T: Clone + Send> {
     pub menu: MenuItem<T>,
     pub custom_key: Option<KeyBinding>,
 }
+
 type SelectionSender<T> = Sender<Result<Selection<T>, Error>>;
 
 pub struct ProviderData<T: Clone> {
@@ -135,14 +149,6 @@ impl From<config::Align> for Align {
     }
 }
 
-fn into_core_order(gtk_order: Ordering) -> core::cmp::Ordering {
-    match gtk_order {
-        Ordering::Smaller => core::cmp::Ordering::Less,
-        Ordering::Larger => core::cmp::Ordering::Greater,
-        _ => core::cmp::Ordering::Equal,
-    }
-}
-
 /// An entry in the list of selectable items in the UI.
 /// Supports nested items but these cannot nested again (only nesting with depth == 1 is supported)
 #[derive(Clone, PartialEq)]
@@ -169,292 +175,10 @@ pub struct MenuItem<T: Clone> {
     visible: bool,
 }
 
-impl From<gtk4::gdk::Key> for Key {
-    fn from(value: gdk4::Key) -> Self {
-        match value {
-            // Letters
-            gdk4::Key::A => Key::A,
-            gdk4::Key::B => Key::B,
-            gdk4::Key::C => Key::C,
-            gdk4::Key::D => Key::D,
-            gdk4::Key::E => Key::E,
-            gdk4::Key::F => Key::F,
-            gdk4::Key::G => Key::G,
-            gdk4::Key::H => Key::H,
-            gdk4::Key::I => Key::I,
-            gdk4::Key::J => Key::J,
-            gdk4::Key::K => Key::K,
-            gdk4::Key::L => Key::L,
-            gdk4::Key::M => Key::M,
-            gdk4::Key::N => Key::N,
-            gdk4::Key::O => Key::O,
-            gdk4::Key::P => Key::P,
-            gdk4::Key::Q => Key::Q,
-            gdk4::Key::R => Key::R,
-            gdk4::Key::S => Key::S,
-            gdk4::Key::T => Key::T,
-            gdk4::Key::U => Key::U,
-            gdk4::Key::V => Key::V,
-            gdk4::Key::W => Key::W,
-            gdk4::Key::X => Key::X,
-            gdk4::Key::Y => Key::Y,
-            gdk4::Key::Z => Key::Z,
-
-            // Numbers
-            gdk4::Key::_0 => Key::Num0,
-            gdk4::Key::_1 => Key::Num1,
-            gdk4::Key::_2 => Key::Num2,
-            gdk4::Key::_3 => Key::Num3,
-            gdk4::Key::_4 => Key::Num4,
-            gdk4::Key::_5 => Key::Num5,
-            gdk4::Key::_6 => Key::Num6,
-            gdk4::Key::_7 => Key::Num7,
-            gdk4::Key::_8 => Key::Num8,
-            gdk4::Key::_9 => Key::Num9,
-
-            // Function Keys
-            gdk4::Key::F1 => Key::F1,
-            gdk4::Key::F2 => Key::F2,
-            gdk4::Key::F3 => Key::F3,
-            gdk4::Key::F4 => Key::F4,
-            gdk4::Key::F5 => Key::F5,
-            gdk4::Key::F6 => Key::F6,
-            gdk4::Key::F7 => Key::F7,
-            gdk4::Key::F8 => Key::F8,
-            gdk4::Key::F9 => Key::F9,
-            gdk4::Key::F10 => Key::F10,
-            gdk4::Key::F11 => Key::F11,
-            gdk4::Key::F12 => Key::F12,
-
-            // Navigation / Editing
-            gdk4::Key::Escape => Key::Escape,
-            gdk4::Key::Return | gdk4::Key::KP_Enter => Key::Enter,
-            gdk4::Key::space => Key::Space,
-            gdk4::Key::Tab => Key::Tab,
-            gdk4::Key::BackSpace => Key::Backspace,
-            gdk4::Key::Insert => Key::Insert,
-            gdk4::Key::Delete => Key::Delete,
-            gdk4::Key::Home => Key::Home,
-            gdk4::Key::End => Key::End,
-            gdk4::Key::Page_Up => Key::PageUp,
-            gdk4::Key::Page_Down => Key::PageDown,
-            gdk4::Key::Left => Key::Left,
-            gdk4::Key::Right => Key::Right,
-            gdk4::Key::Up => Key::Up,
-            gdk4::Key::Down => Key::Down,
-
-            // Special characters
-            gdk4::Key::exclam => Key::Exclamation,
-            gdk4::Key::at => Key::At,
-            gdk4::Key::numbersign => Key::Hash,
-            gdk4::Key::dollar => Key::Dollar,
-            gdk4::Key::percent => Key::Percent,
-            gdk4::Key::asciicircum => Key::Caret,
-            gdk4::Key::ampersand => Key::Ampersand,
-            gdk4::Key::asterisk => Key::Asterisk,
-            gdk4::Key::parenleft => Key::LeftParen,
-            gdk4::Key::parenright => Key::RightParen,
-            gdk4::Key::minus => Key::Minus,
-            gdk4::Key::underscore => Key::Underscore,
-            gdk4::Key::equal => Key::Equal,
-            gdk4::Key::plus => Key::Plus,
-            gdk4::Key::bracketleft => Key::LeftBracket,
-            gdk4::Key::bracketright => Key::RightBracket,
-            gdk4::Key::braceleft => Key::LeftBrace,
-            gdk4::Key::braceright => Key::RightBrace,
-            gdk4::Key::backslash => Key::Backslash,
-            gdk4::Key::bar => Key::Pipe,
-            gdk4::Key::semicolon => Key::Semicolon,
-            gdk4::Key::colon => Key::Colon,
-            gdk4::Key::apostrophe => Key::Apostrophe,
-            gdk4::Key::quotedbl => Key::Quote,
-            gdk4::Key::comma => Key::Comma,
-            gdk4::Key::period => Key::Period,
-            gdk4::Key::slash => Key::Slash,
-            gdk4::Key::question => Key::Question,
-            gdk4::Key::grave => Key::Grave,
-            gdk4::Key::asciitilde => Key::Tilde,
-            _ => Key::None,
-        }
-    }
-}
-
-impl From<u32> for Key {
-    fn from(value: u32) -> Self {
-        match value {
-            // Letters
-            38 => Key::A,
-            56 => Key::B,
-            54 => Key::C,
-            40 => Key::D,
-            26 => Key::E,
-            41 => Key::F,
-            42 => Key::G,
-            43 => Key::H,
-            31 => Key::I,
-            44 => Key::J,
-            45 => Key::K,
-            46 => Key::L,
-            58 => Key::M,
-            57 => Key::N,
-            32 => Key::O,
-            33 => Key::P,
-            24 => Key::Q,
-            27 => Key::R,
-            39 => Key::S,
-            28 => Key::T,
-            30 => Key::U,
-            55 => Key::V,
-            25 => Key::W,
-            53 => Key::X,
-            29 => Key::Y,
-            52 => Key::Z,
-
-            // Numbers
-            10 => Key::Num1,
-            11 => Key::Num2,
-            12 => Key::Num3,
-            13 => Key::Num4,
-            14 => Key::Num5,
-            15 => Key::Num6,
-            16 => Key::Num7,
-            17 => Key::Num8,
-            18 => Key::Num9,
-            19 => Key::Num0,
-
-            // Function Keys
-            67 => Key::F1,
-            68 => Key::F2,
-            69 => Key::F3,
-            70 => Key::F4,
-            71 => Key::F5,
-            72 => Key::F6,
-            73 => Key::F7,
-            74 => Key::F8,
-            75 => Key::F9,
-            76 => Key::F10,
-            77 => Key::F11,
-            78 => Key::F12,
-
-            // Navigation / Editing
-            9 => Key::Escape,
-            36 | 104 => Key::Enter,
-            65 => Key::Space,
-            23 => Key::Tab,
-            22 => Key::Backspace,
-            118 => Key::Insert,
-            119 => Key::Delete,
-            110 => Key::Home,
-            115 => Key::End,
-            112 => Key::PageUp,
-            117 => Key::PageDown,
-            113 => Key::Left,
-            114 => Key::Right,
-            111 => Key::Up,
-            116 => Key::Down,
-
-            // Special characters
-            20 => Key::Exclamation,
-            63 => Key::At,
-            3 => Key::Hash,
-            4 => Key::Dollar,
-            5 => Key::Percent,
-            6 => Key::Caret,
-            7 => Key::Ampersand,
-            8 => Key::Asterisk,
-            34 => Key::LeftParen,
-            35 => Key::RightParen,
-            48 => Key::Minus,
-            47 => Key::Underscore,
-            21 => Key::Equal,
-            49 => Key::Plus,
-            51 => Key::Backslash,
-            94 => Key::Pipe,
-            50 => Key::Quote,
-            59 => Key::Comma,
-            60 => Key::Period,
-            61 => Key::Slash,
-            62 => Key::Question,
-            96 => Key::Grave,
-            97 => Key::Tilde,
-            _ => Key::None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Modifier {
-    Shift,
-    Control,
-    Alt,
-    Super,
-    Meta,
-    CapsLock,
-    None,
-}
-
 #[derive(PartialEq)]
 pub enum ExpandMode {
     Verbatim,
     WithSpace,
-}
-
-fn modifiers_from_mask(mask: gdk4::ModifierType) -> HashSet<Modifier> {
-    let mut modifiers = HashSet::new();
-
-    if mask.contains(gdk4::ModifierType::SHIFT_MASK) {
-        modifiers.insert(Modifier::Shift);
-    }
-    if mask.contains(gdk4::ModifierType::CONTROL_MASK) {
-        modifiers.insert(Modifier::Control);
-    }
-    if mask.contains(gdk4::ModifierType::ALT_MASK) {
-        modifiers.insert(Modifier::Alt);
-    }
-    if mask.contains(gdk4::ModifierType::SUPER_MASK) {
-        modifiers.insert(Modifier::Super);
-    }
-    if mask.contains(gdk4::ModifierType::META_MASK) {
-        modifiers.insert(Modifier::Meta);
-    }
-    if mask.contains(gdk4::ModifierType::LOCK_MASK) {
-        modifiers.insert(Modifier::CapsLock);
-    }
-
-    if modifiers.is_empty() {
-        modifiers.insert(Modifier::None);
-    }
-
-    modifiers
-}
-
-/// True if a modifier is held that turns a key press into a shortcut instead of text input.
-fn has_command_modifier(mask: gdk4::ModifierType) -> bool {
-    mask.intersects(
-        gdk4::ModifierType::CONTROL_MASK
-            | gdk4::ModifierType::ALT_MASK
-            | gdk4::ModifierType::SUPER_MASK
-            | gdk4::ModifierType::META_MASK,
-    )
-}
-
-/// Modifiers that are relevant to match a key binding.
-/// Lock keys like `CapsLock` are ignored, so bindings work regardless of their state.
-fn significant_modifiers(modifiers: &HashSet<Modifier>) -> HashSet<Modifier> {
-    modifiers
-        .iter()
-        .filter(|m| !matches!(m, Modifier::CapsLock | Modifier::None))
-        .copied()
-        .collect()
-}
-
-/// Returns the key the given hardware key code produces without any modifier.
-fn unshifted_key(key_code: u32) -> Option<gdk4::Key> {
-    Display::default()?
-        .map_keycode(key_code)?
-        .into_iter()
-        .find(|(keymap_key, _)| keymap_key.group() == 0 && keymap_key.level() == 0)
-        .map(|(_, key)| key)
 }
 
 impl From<config::Layer> for gtk4_layer_shell::Layer {
@@ -1069,23 +793,6 @@ fn setup_key_event_handler<T: Clone + 'static + Send>(
     connect_key_handler(&ui_elements.window, ui_elements, meta, custom_keys.cloned());
 }
 
-fn is_key_match(
-    key_opt: Option<Key>,
-    key_detection_type: &KeyDetectionType,
-    key_code: u32,
-    gdk_key: gdk4::Key,
-) -> bool {
-    if let Some(key) = key_opt {
-        if key_detection_type == &KeyDetectionType::Code {
-            key == key_code.into()
-        } else {
-            key == gdk_key.to_upper().into()
-        }
-    } else {
-        false
-    }
-}
-
 fn handle_key_press<T: Clone + 'static + Send>(
     ui: &Rc<UiElements<T>>,
     meta: &Rc<MetaData<T>>,
@@ -1549,51 +1256,6 @@ where
     Propagation::Stop
 }
 
-fn sort_flow_box_childs<T: Clone>(
-    child1: &FlowBoxChild,
-    child2: &FlowBoxChild,
-    items_lock: &ArcMenuMap<T>,
-) -> Ordering {
-    // Hidden children go last, so they never get between visible ones.
-    match (child1.is_visible(), child2.is_visible()) {
-        (false, false) => return Ordering::Equal,
-        (false, true) => return Ordering::Larger,
-        (true, false) => return Ordering::Smaller,
-        (true, true) => {}
-    }
-
-    let lock = items_lock.read().unwrap();
-    sort_menu_items_by_score(lock.get(child1), lock.get(child2))
-}
-
-fn sort_menu_items_by_score<T: Clone>(
-    m1: Option<&MenuItem<T>>,
-    m2: Option<&MenuItem<T>>,
-) -> Ordering {
-    match (m1, m2) {
-        (Some(menu1), Some(menu2)) => {
-            fn compare(a: f64, b: f64) -> Ordering {
-                if a > b {
-                    Ordering::Smaller
-                } else if a < b {
-                    Ordering::Larger
-                } else {
-                    Ordering::Equal
-                }
-            }
-
-            if menu1.search_sort_score > 0.0 || menu2.search_sort_score > 0.0 {
-                compare(menu1.search_sort_score, menu2.search_sort_score)
-            } else {
-                compare(menu1.initial_sort_score, menu2.initial_sort_score)
-            }
-        }
-        (Some(_), None) => Ordering::Larger,
-        (None, Some(_)) => Ordering::Smaller,
-        (None, None) => Ordering::Equal,
-    }
-}
-
 fn window_show_resize<T: Clone + 'static>(config: &Config, ui: &Rc<UiElements<T>>) {
     let Some(geometry) = get_monitor_geometry(ui.window.surface().as_ref()) else {
         return;
@@ -1953,106 +1615,6 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     row.upcast()
 }
-/// Truncates pango markup to `max_len` visible chars and appends `...`.
-/// Tags are not counted and stay intact, entities like `&amp;` count as one char.
-/// Returns `None` if the text is short enough.
-fn truncate_markup(markup: &str, max_len: usize) -> Option<String> {
-    let mut result = String::with_capacity(markup.len());
-    let mut open_tags: Vec<&str> = Vec::new();
-    let mut visible = 0;
-    let mut rest = markup;
-
-    while let Some(c) = rest.chars().next() {
-        if c == '<'
-            && let Some(end) = rest.find('>')
-        {
-            let tag = &rest[..=end];
-            let inner = tag[1..tag.len() - 1].trim();
-            if let Some(closing) = inner.strip_prefix('/') {
-                if open_tags.last() == Some(&closing.trim()) {
-                    open_tags.pop();
-                }
-            } else if !inner.ends_with('/') {
-                open_tags.push(inner.split_whitespace().next().unwrap_or_default());
-            }
-            result.push_str(tag);
-            rest = &rest[end + 1..];
-            continue;
-        }
-
-        if visible == max_len {
-            result.push_str("...");
-            for tag in open_tags.iter().rev() {
-                result.push_str("</");
-                result.push_str(tag);
-                result.push('>');
-            }
-            return Some(result);
-        }
-
-        let len = if c == '&'
-            && let Some(end) = rest.find(';')
-            && end <= 10
-            && !rest[..end].contains(char::is_whitespace)
-        {
-            end + 1
-        } else {
-            c.len_utf8()
-        };
-        result.push_str(&rest[..len]);
-        rest = &rest[len..];
-        visible += 1;
-    }
-
-    None
-}
-
-/// Parses labels in the wofi format `img:<path>:text:<text>`.
-/// Labels that do not start with `img:` or `text:` are plain text.
-fn parse_label(label: &str) -> (Option<String>, Option<String>) {
-    if !label.starts_with("img:") && !label.starts_with("text:") {
-        return (None, Some(label.to_owned()));
-    }
-
-    let mut img = None;
-    let mut text = None;
-
-    let parts: Vec<&str> = label.split(':').collect();
-    let mut i = 0;
-
-    while i < parts.len() {
-        match parts.get(i) {
-            Some(&"img") => {
-                if i + 1 < parts.len() {
-                    img = Some(parts[i + 1].to_string());
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            Some(&"text") => {
-                i += 1;
-                let mut text_parts = Vec::new();
-                while i < parts.len() && parts[i] != "img" && parts[i] != "text" {
-                    text_parts.push(parts[i]);
-                    i += 1;
-                }
-                text = Some(text_parts.join(":").trim().to_string());
-            }
-            other => {
-                // Treat as fallback text if no text tag is present
-                if text.is_none() {
-                    text = Some((*other.unwrap_or(&"")).to_string());
-                } else {
-                    text = Some(text.unwrap() + ":" + (*other.unwrap_or(&"")));
-                }
-                i += 1;
-            }
-        }
-    }
-
-    (img, text)
-}
 
 fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
     static IMG_REGEX: LazyLock<Regex> = LazyLock::new(known_image_extension_regex_pattern);
@@ -2078,90 +1640,6 @@ fn lookup_icon(icon_path: Option<&str>, config: &Config) -> Option<Image> {
     } else {
         None
     }
-}
-
-fn set_menu_visibility_for_search<T: Clone>(
-    query: &str,
-    items: &mut HashMap<FlowBoxChild, MenuItem<T>>,
-    config: &Arc<RwLock<Config>>,
-    search_ignored_words: Option<&Vec<Regex>>,
-) {
-    let (insensitive, match_method, fuzzy_min_score) = {
-        let config = config.read().unwrap();
-        (
-            config.insensitive(),
-            config.match_method(),
-            config.fuzzy_min_score(),
-        )
-    };
-
-    let query = if insensitive {
-        query.to_lowercase()
-    } else {
-        query.to_owned()
-    };
-    let query = filtered_query(search_ignored_words, &query);
-
-    // Fuzzy matching scores everything 0 against an empty query, so handle it here.
-    if query.trim().is_empty() {
-        for (fb, menu_item) in items.iter_mut() {
-            menu_item.search_sort_score = menu_item.initial_sort_score;
-            menu_item.visible = true;
-            fb.set_visible(menu_item.visible);
-        }
-        return;
-    }
-
-    for (fb, menu_item) in items.iter_mut() {
-        let mut menu_item_search = format!(
-            "{} {}",
-            menu_item.action.as_deref().unwrap_or_default(),
-            menu_item.label
-        );
-        if insensitive {
-            menu_item_search = menu_item_search.to_lowercase();
-        }
-
-        let (search_sort_score, visible) = match match_method {
-            MatchMethod::Fuzzy => {
-                let mut score = strsim::jaro_winkler(&query, &menu_item_search);
-                if score == 0.0 {
-                    score = -1.0;
-                }
-
-                (score, score > fuzzy_min_score && score > 0.0)
-            }
-            MatchMethod::Contains => {
-                if menu_item_search.contains(&query) {
-                    (1.0, true)
-                } else {
-                    (0.0, false)
-                }
-            }
-            MatchMethod::MultiContains => {
-                let contains = query.split(' ').all(|x| menu_item_search.contains(x));
-                (if contains { 1.0 } else { 0.0 }, contains)
-            }
-            MatchMethod::None => {
-                (1.0, true) // items are always shown
-            }
-        };
-
-        menu_item.search_sort_score = search_sort_score + menu_item.initial_sort_score;
-        menu_item.visible = visible;
-        fb.set_visible(menu_item.visible);
-    }
-}
-
-#[must_use]
-pub fn filtered_query(search_ignored_words: Option<&Vec<Regex>>, query: &str) -> String {
-    let mut query = query.to_owned();
-    if let Some(s) = search_ignored_words.as_ref() {
-        s.iter().for_each(|rgx| {
-            query = rgx.replace_all(&query, "").to_string();
-        });
-    }
-    query
 }
 
 enum ChildPosition {
@@ -2223,92 +1701,5 @@ fn percent_or_absolute(value: &str, base_value: i32) -> Option<i32> {
         }
     } else {
         value.parse::<i32>().ok()
-    }
-}
-
-/// Sorts menu items in alphabetical order, while maintaining the initial score
-pub fn apply_sort<T: Clone>(items: &mut [MenuItem<T>], order: &SortOrder) {
-    match order {
-        SortOrder::Default => {}
-        SortOrder::Alphabetical => {
-            // we won't deal w/ enough items that this matters
-            #[allow(clippy::cast_precision_loss)]
-            let item_count = items.len() as f64;
-            let special_score = item_count;
-            // The alphabetical position is only a tie-breaker. All positions together
-            // stay below 1e-6, so they do not outweigh the search score (0..1).
-            let regular_step = 1e-6 / item_count.max(1.0);
-            let mut regular_score = 0.0;
-            items.sort_by(|l, r| r.label.cmp(&l.label));
-
-            for item in items.iter_mut() {
-                if item.initial_sort_score == 0.0 {
-                    item.initial_sort_score += regular_score;
-                    regular_score += regular_step;
-                } else {
-                    item.initial_sort_score += special_score;
-                }
-            }
-
-            items.sort_by(|l, r| into_core_order(sort_menu_items_by_score(Some(l), Some(r))));
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn label(img: Option<&str>, text: Option<&str>) -> (Option<String>, Option<String>) {
-        (img.map(ToOwned::to_owned), text.map(ToOwned::to_owned))
-    }
-
-    #[test]
-    fn test_parse_label_tagged() {
-        assert_eq!(
-            parse_label("img:/a.png:text:Hello"),
-            label(Some("/a.png"), Some("Hello"))
-        );
-        assert_eq!(
-            parse_label("text:a:b:img:icon"),
-            label(Some("icon"), Some("a:b"))
-        );
-        assert_eq!(parse_label("img:icon"), label(Some("icon"), None));
-        assert_eq!(
-            parse_label("img:icon:Without text tag"),
-            label(Some("icon"), Some("Without text tag"))
-        );
-    }
-
-    #[test]
-    fn test_truncate_markup() {
-        assert_eq!(truncate_markup("short", 10), None);
-        assert_eq!(truncate_markup("<b>short</b>", 5), None);
-        assert_eq!(
-            truncate_markup("<b>bold text</b> rest", 4),
-            Some("<b>bold...</b>".to_owned())
-        );
-        assert_eq!(
-            truncate_markup("a &amp; b and more", 3),
-            Some("a &amp;...".to_owned())
-        );
-        assert_eq!(
-            truncate_markup("<span color='red'>über</span>long", 5),
-            Some("<span color='red'>über</span>l...".to_owned())
-        );
-    }
-
-    #[test]
-    fn test_parse_label_plain() {
-        assert_eq!(parse_label("Firefox"), label(None, Some("Firefox")));
-        assert_eq!(parse_label("img"), label(None, Some("img")));
-        assert_eq!(
-            parse_label("foo:text:bar"),
-            label(None, Some("foo:text:bar"))
-        );
-        assert_eq!(
-            parse_label("10:00 meeting:img:x"),
-            label(None, Some("10:00 meeting:img:x"))
-        );
     }
 }
