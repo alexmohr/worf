@@ -8,7 +8,7 @@ pub mod config;
 /// Desktop action like parsing desktop files and launching programs
 #[path = "lib/desktop.rs"]
 pub mod desktop;
-#[path = "lib/gui.rs"]
+#[path = "lib/gui/mod.rs"]
 /// All things related to the user interface
 pub mod gui;
 /// Out of the box supported modes, like drun, dmenu, etc...
