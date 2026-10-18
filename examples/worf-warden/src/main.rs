@@ -459,6 +459,7 @@ impl WardenConfig {
 }
 
 #[derive(Debug, Parser, Clone)]
+#[clap(version, disable_version_flag = true)]
 struct WardenArgs {
     /// Configuration file for worf warden
     #[clap(long = "warden-config")]
