@@ -351,7 +351,7 @@ fn detach_and_spawn(mut cmd: Command) -> Result<(), Error> {
 /// Will return Error if the cache file cannot be created or not found.
 pub fn cache_file_path(config: &Config, name: &str) -> Result<PathBuf, Error> {
     if let Some(cfg) = config.cache_file() {
-        let path = PathBuf::from(cfg);
+        let path = expand_path(&cfg);
         match create_file_if_not_exists(&path) {
             Ok(()) => return Ok(path),
             Err(e) => log::error!(
@@ -411,10 +411,13 @@ pub fn save_cache_file<S: BuildHasher>(
     Ok(())
 }
 
-/// Crates a new file if it does not exist yet.
+/// Crates a new file and its parent directories if it does not exist yet.
 /// # Errors
 /// `Errors::Io` if creating the file failed
 pub fn create_file_if_not_exists(path: &PathBuf) -> Result<(), Error> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| Error::Io(e.to_string()))?;
+    }
     let file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
