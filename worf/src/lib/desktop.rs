@@ -80,19 +80,27 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
         ));
     }
 
-    if let Ok(xdg_data_home) = env::var("XDG_DATA_HOME") {
-        let x = PathBuf::from(&xdg_data_home);
+    // Relative paths are invalid according to the XDG base directory spec and would
+    // be resolved against the current directory, so they are ignored (as are empty ones).
+    let absolute_dir = |dir: &str| Some(PathBuf::from(dir)).filter(|p| p.is_absolute());
+
+    if let Some(x) = env::var("XDG_DATA_HOME")
+        .ok()
+        .and_then(|d| absolute_dir(&d))
+    {
         paths.push((prio, x.join("applications")));
         paths.push((prio, x.join("flatpak/exports/share/applications")));
     }
 
-    prio += 1;
+    // Earlier entries in XDG_DATA_DIRS take precedence over later ones.
     if let Ok(xdg_data_dirs) = env::var("XDG_DATA_DIRS") {
-        for dir in xdg_data_dirs.split(':') {
-            paths.push((prio, PathBuf::from(dir).join("applications")));
+        for dir in xdg_data_dirs.split(':').filter_map(absolute_dir) {
+            prio += 1;
+            paths.push((prio, dir.join("applications")));
         }
     }
 
+    prio += 1;
     paths.push((prio, PathBuf::from("/usr/local/share/applications")));
     paths.push((
         prio,
