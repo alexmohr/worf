@@ -19,39 +19,47 @@ pub(crate) struct SshProvider<T: Clone> {
 
 impl<T: Clone> SshProvider<T> {
     pub(crate) fn new(menu_item_data: T, order: &SortOrder) -> Self {
-        static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*Host\s+(.+)$").unwrap());
-        let re = &*RE;
         let mut items: Vec<_> = dirs::home_dir()
             .map(|home| home.join(".ssh").join("config"))
-            .filter(|path| path.exists())
-            .map(|path| fs::read_to_string(&path).unwrap_or_default())
+            .and_then(|path| fs::read_to_string(&path).ok())
+            .map_or_else(Vec::new, |content| parse_hosts(&content))
             .into_iter()
-            .flat_map(|content| {
-                re.captures_iter(&content)
-                    .flat_map(|cap| {
-                        cap[1]
-                            .split_whitespace()
-                            .map(|host| {
-                                log::debug!("found ssh host {host}");
-                                MenuItem::new(
-                                    host.to_owned(),
-                                    Some("computer".to_owned()),
-                                    Some(format!("ssh {host}")),
-                                    vec![],
-                                    None,
-                                    0.0,
-                                    Some(menu_item_data.clone()),
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>()
+            .map(|host| {
+                log::debug!("found ssh host {host}");
+                MenuItem::new(
+                    host.clone(),
+                    Some("computer".to_owned()),
+                    Some(format!("ssh {host}")),
+                    vec![],
+                    None,
+                    0.0,
+                    Some(menu_item_data.clone()),
+                )
             })
             .collect();
 
         gui::apply_sort(&mut items, order);
         Self { items }
     }
+}
+
+/// Returns the hosts of all `Host` lines in an ssh config.
+/// Patterns (`*`, `?`, negations) are skipped, they are not hosts one can connect to.
+fn parse_hosts(content: &str) -> Vec<String> {
+    // Keywords are case insensitive and may be followed by '=' instead of a space.
+    static RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?mi)^\s*Host(?:\s*=\s*|\s+)(.+)$").unwrap());
+
+    RE.captures_iter(content)
+        .flat_map(|cap| {
+            let hosts = cap[1].split('#').next().unwrap_or_default();
+            hosts
+                .split_whitespace()
+                .map(|host| host.trim_matches('"').to_owned())
+                .collect::<Vec<_>>()
+        })
+        .filter(|host| !host.is_empty() && !host.contains(['*', '?', '!']))
+        .collect()
 }
 
 impl<T: Clone> ItemProvider<T> for SshProvider<T> {
@@ -118,4 +126,25 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
         log::error!("No item selected");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_hosts() {
+        let config = "
+Host server1 server2 # comment
+    HostName example.com
+host=lowercase
+Host *.corp
+Host *
+Host !excluded other
+";
+        assert_eq!(
+            parse_hosts(config),
+            vec!["server1", "server2", "lowercase", "other"]
+        );
+    }
 }
