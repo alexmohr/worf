@@ -34,6 +34,11 @@ The location of the configuration file follows the same rules as worf itself.
 ```toml
 typing_cmd = "ydotool"
 typing_cmd_args = ["type"]
+# By default the text is passed as last argument to the typing command, where other
+# local users can see it (i.e. with `ps`) while it is typed. If the typing tool can read
+# from stdin, enable this and set the arguments for it, for example:
+# typing_stdin = true
+# typing_cmd_args = ["type", "--file", "-"]  # ydotool
 
 [custom_auto_types]
 # This will use User, enter, password for the demo entry.
