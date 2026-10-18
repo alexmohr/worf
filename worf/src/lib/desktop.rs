@@ -36,24 +36,41 @@ pub fn known_image_extension_regex_pattern() -> Regex {
     RE.clone()
 }
 
-/// Helper function to retrieve a file with given regex.
-fn find_files(folder: &Path, file_name: &Regex) -> Option<Vec<PathBuf>> {
-    if !folder.exists() || !folder.is_dir() {
-        return None;
+/// Finds all files matching `file_name` in `folder` and its subdirectories.
+/// Returns the desktop file id (the path relative to `folder` with `/` replaced by `-`,
+/// as defined by the desktop entry spec) and the path of each file.
+/// Symlinks are followed but not resolved, so the id is the one of the link.
+fn find_files(folder: &Path, file_name: &Regex) -> Vec<(String, PathBuf)> {
+    fn walk(dir: &Path, prefix: &str, file_name: &Regex, depth: usize) -> Vec<(String, PathBuf)> {
+        // Guards against symlink loops.
+        const MAX_DEPTH: usize = 8;
+        let Ok(entries) = fs::read_dir(dir) else {
+            return Vec::new();
+        };
+
+        let mut files = Vec::new();
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if path.is_dir() {
+                if depth < MAX_DEPTH {
+                    files.extend(walk(
+                        &path,
+                        &format!("{prefix}{name}-"),
+                        file_name,
+                        depth + 1,
+                    ));
+                }
+            } else if file_name.is_match(name) {
+                files.push((format!("{prefix}{name}"), path));
+            }
+        }
+        files
     }
-    fs::read_dir(folder).ok().map(|entries| {
-        entries
-            .filter_map(Result::ok)
-            .par_bridge() // Convert to parallel iterator
-            .filter_map(|entry| entry.path().canonicalize().ok())
-            .filter(|entry| {
-                entry
-                    .file_name()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|name| file_name.is_match(name))
-            })
-            .collect()
-    })
+
+    walk(folder, "", file_name, 0)
 }
 
 /// Parse all desktop files in known locations
@@ -108,31 +125,24 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
     ));
     paths.push((prio, PathBuf::from("/usr/share/applications")));
 
-    let files: Vec<(usize, PathBuf)> = paths
+    let files: Vec<(usize, String, PathBuf)> = paths
         .into_par_iter()
         .filter(|(_, dir)| dir.exists())
-        .filter_map(|(prio, dir)| {
-            find_files(&dir, &DESKTOP_RE).map(|v| {
-                v.into_iter()
-                    .map(move |file| (prio, file))
-                    .collect::<Vec<_>>()
-            })
+        .flat_map_iter(|(prio, dir)| {
+            find_files(&dir, &DESKTOP_RE)
+                .into_iter()
+                .map(move |(id, file)| (prio, id, file))
         })
-        .flatten()
         .collect();
 
+    // Files with the same desktop file id override each other, the highest priority
+    // (smallest value) wins.
     let mut file_by_prio: HashMap<String, (usize, PathBuf)> = HashMap::new();
-    for (prio, path) in files {
-        if let Some(name) = path.file_name().and_then(|x| x.to_str()) {
-            match file_by_prio.get(name) {
-                None => {
-                    file_by_prio.insert(name.to_string(), (prio, path));
-                }
-                Some((existing_prio, _)) if prio < *existing_prio => {
-                    // Smaller prio value = higher priority
-                    file_by_prio.insert(name.to_string(), (prio, path));
-                }
-                _ => {} // keep existing
+    for (prio, id, path) in files {
+        match file_by_prio.get(&id) {
+            Some((existing_prio, _)) if *existing_prio <= prio => {}
+            _ => {
+                file_by_prio.insert(id, (prio, path));
             }
         }
     }
@@ -542,6 +552,24 @@ mod tests {
         assert_eq!(parse_exec("app --file=%f"), vec!["app", "--file="]);
         assert_eq!(parse_exec("app '' 'a b'"), vec!["app", "", "a b"]);
         assert_eq!(parse_exec("  "), Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_find_files_uses_desktop_file_ids() {
+        let dir = env::temp_dir().join(format!("worf-test-ids-{}", std::process::id()));
+        fs::create_dir_all(dir.join("kde")).unwrap();
+        fs::write(dir.join("a.desktop"), "").unwrap();
+        fs::write(dir.join("kde").join("b.desktop"), "").unwrap();
+        fs::write(dir.join("readme.txt"), "").unwrap();
+
+        let re = Regex::new(r"\.desktop$").unwrap();
+        let mut ids: Vec<String> = find_files(&dir, &re)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        ids.sort();
+        assert_eq!(ids, vec!["a.desktop", "kde-b.desktop"]);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
