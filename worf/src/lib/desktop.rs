@@ -216,18 +216,18 @@ fn locale_variants(locale: &str) -> Vec<String> {
     variants
 }
 
-/// Lookup a value from a hashmap with respect to current locale
+/// Lookup a value from a hashmap with respect to current locale.
+/// Returns `fallback` if there is no value for any of the locale variants.
 #[must_use]
 pub fn lookup_name_with_locale<S: BuildHasher>(
     locale_variants: &[String],
     variants: &HashMap<String, String, S>,
     fallback: &str,
-) -> Option<String> {
+) -> String {
     locale_variants
         .iter()
         .find_map(|local| variants.get(local))
-        .map(std::borrow::ToOwned::to_owned)
-        .or_else(|| Some(fallback.to_owned()))
+        .map_or_else(|| fallback.to_owned(), ToOwned::to_owned)
 }
 
 /// Fork into background if configured
