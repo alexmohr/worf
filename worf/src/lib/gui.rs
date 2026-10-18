@@ -1350,14 +1350,16 @@ fn update_view<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, query: &str)
 where
     T: Clone + Send + 'static,
 {
-    let mut menu_rows = ui.menu_rows.write().unwrap();
     set_menu_visibility_for_search(
         query,
-        &mut menu_rows,
+        &mut ui.menu_rows.write().unwrap(),
         &meta.config,
         meta.search_ignored_words.as_ref(),
     );
+    // Scores changed, so sort again. The sort function needs the lock, so it must not be held.
+    ui.main_box.invalidate_sort();
 
+    let menu_rows = ui.menu_rows.read().unwrap();
     select_visible_child(&*menu_rows, &ui.main_box, &ui.scroll, &ChildPosition::Front);
 
     if meta.config.read().unwrap().auto_select_on_search() {
@@ -1496,18 +1498,16 @@ fn sort_flow_box_childs<T: Clone>(
     child2: &FlowBoxChild,
     items_lock: &ArcMenuMap<T>,
 ) -> Ordering {
+    // Hidden children go last, so they never get between visible ones.
+    match (child1.is_visible(), child2.is_visible()) {
+        (false, false) => return Ordering::Equal,
+        (false, true) => return Ordering::Larger,
+        (true, false) => return Ordering::Smaller,
+        (true, true) => {}
+    }
+
     let lock = items_lock.read().unwrap();
-    let m1 = lock.get(child1);
-    let m2 = lock.get(child2);
-
-    if !child1.is_visible() {
-        return Ordering::Smaller;
-    }
-    if !child2.is_visible() {
-        return Ordering::Larger;
-    }
-
-    sort_menu_items_by_score(m1, m2)
+    sort_menu_items_by_score(lock.get(child1), lock.get(child2))
 }
 
 fn sort_menu_items_by_score<T: Clone>(
@@ -2112,14 +2112,18 @@ pub fn apply_sort<T: Clone>(items: &mut [MenuItem<T>], order: &SortOrder) {
         SortOrder::Alphabetical => {
             // we won't deal w/ enough items that this matters
             #[allow(clippy::cast_precision_loss)]
-            let special_score = items.len() as f64;
+            let item_count = items.len() as f64;
+            let special_score = item_count;
+            // The alphabetical position is only a tie-breaker. All positions together
+            // stay below 1e-6, so they do not outweigh the search score (0..1).
+            let regular_step = 1e-6 / item_count.max(1.0);
             let mut regular_score = 0.0;
             items.sort_by(|l, r| r.label.cmp(&l.label));
 
             for item in items.iter_mut() {
                 if item.initial_sort_score == 0.0 {
                     item.initial_sort_score += regular_score;
-                    regular_score += 1.0;
+                    regular_score += regular_step;
                 } else {
                     item.initial_sort_score += special_score;
                 }
