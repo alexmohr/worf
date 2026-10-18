@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env,
     ffi::OsStr,
     fs,
@@ -128,9 +128,10 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
             }
         }
     }
-    let parsed: Vec<DesktopFile> = file_by_prio
-        .into_values()
-        .collect::<Vec<_>>()
+    // Sorted, so the result does not depend on the order of the hash map.
+    let mut files: Vec<(usize, PathBuf)> = file_by_prio.into_values().collect();
+    files.sort();
+    let parsed: Vec<DesktopFile> = files
         .into_par_iter()
         .filter_map(|(_, desktop_file)| {
             fs::read_to_string(&desktop_file)
@@ -139,11 +140,20 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
         })
         .collect();
 
-    let mut by_name = HashMap::with_capacity(parsed.len());
-    for desktop_file in parsed {
-        by_name.insert(desktop_file.entry.name.default.clone(), desktop_file);
-    }
-    let p: Vec<_> = by_name.into_values().collect();
+    // Different files can describe the same application (i.e. a package and a local copy).
+    // Only entries with the same name and command are duplicates, different applications
+    // may share a name. The first, highest priority entry is kept.
+    let mut seen = HashSet::with_capacity(parsed.len());
+    let p: Vec<_> = parsed
+        .into_iter()
+        .filter(|desktop_file| {
+            let exec = match &desktop_file.entry.entry_type {
+                EntryType::Application(app) => app.exec.clone(),
+                _ => None,
+            };
+            seen.insert((desktop_file.entry.name.default.clone(), exec))
+        })
+        .collect();
     log::debug!("Found {} desktop files in {:?}", p.len(), start.elapsed());
     p
 }
