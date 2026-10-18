@@ -1878,13 +1878,18 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     if let Some(max_len) = config.line_max_chars()
         && let Some(text) = label_text.as_ref()
-        && text.chars().count() > max_len
     {
-        let end = text
-            .char_indices()
-            .nth(max_len)
-            .map_or(text.len(), |(idx, _)| idx);
-        label.set_text(&format!("{}...", &text[..end]));
+        if config.allow_markup() {
+            if let Some(truncated) = truncate_markup(text, max_len) {
+                label.set_markup(&truncated);
+            }
+        } else if text.chars().count() > max_len {
+            let end = text
+                .char_indices()
+                .nth(max_len)
+                .map_or(text.len(), |(idx, _)| idx);
+            label.set_text(&format!("{}...", &text[..end]));
+        }
     }
 
     row_box.append(&label);
@@ -1923,6 +1928,60 @@ fn create_menu_row<T: Clone + 'static + Send>(
 
     row.upcast()
 }
+/// Truncates pango markup to `max_len` visible chars and appends `...`.
+/// Tags are not counted and stay intact, entities like `&amp;` count as one char.
+/// Returns `None` if the text is short enough.
+fn truncate_markup(markup: &str, max_len: usize) -> Option<String> {
+    let mut result = String::with_capacity(markup.len());
+    let mut open_tags: Vec<&str> = Vec::new();
+    let mut visible = 0;
+    let mut rest = markup;
+
+    while let Some(c) = rest.chars().next() {
+        if c == '<'
+            && let Some(end) = rest.find('>')
+        {
+            let tag = &rest[..=end];
+            let inner = tag[1..tag.len() - 1].trim();
+            if let Some(closing) = inner.strip_prefix('/') {
+                if open_tags.last() == Some(&closing.trim()) {
+                    open_tags.pop();
+                }
+            } else if !inner.ends_with('/') {
+                open_tags.push(inner.split_whitespace().next().unwrap_or_default());
+            }
+            result.push_str(tag);
+            rest = &rest[end + 1..];
+            continue;
+        }
+
+        if visible == max_len {
+            result.push_str("...");
+            for tag in open_tags.iter().rev() {
+                result.push_str("</");
+                result.push_str(tag);
+                result.push('>');
+            }
+            return Some(result);
+        }
+
+        let len = if c == '&'
+            && let Some(end) = rest.find(';')
+            && end <= 10
+            && !rest[..end].contains(char::is_whitespace)
+        {
+            end + 1
+        } else {
+            c.len_utf8()
+        };
+        result.push_str(&rest[..len]);
+        rest = &rest[len..];
+        visible += 1;
+    }
+
+    None
+}
+
 /// Parses labels in the wofi format `img:<path>:text:<text>`.
 /// Labels that do not start with `img:` or `text:` are plain text.
 fn parse_label(label: &str) -> (Option<String>, Option<String>) {
@@ -2193,6 +2252,24 @@ mod tests {
         assert_eq!(
             parse_label("img:icon:Without text tag"),
             label(Some("icon"), Some("Without text tag"))
+        );
+    }
+
+    #[test]
+    fn test_truncate_markup() {
+        assert_eq!(truncate_markup("short", 10), None);
+        assert_eq!(truncate_markup("<b>short</b>", 5), None);
+        assert_eq!(
+            truncate_markup("<b>bold text</b> rest", 4),
+            Some("<b>bold...</b>".to_owned())
+        );
+        assert_eq!(
+            truncate_markup("a &amp; b and more", 3),
+            Some("a &amp;...".to_owned())
+        );
+        assert_eq!(
+            truncate_markup("<span color='red'>über</span>long", 5),
+            Some("<span color='red'>über</span>l...".to_owned())
         );
     }
 
