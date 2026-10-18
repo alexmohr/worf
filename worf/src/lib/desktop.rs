@@ -290,12 +290,13 @@ pub fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), Error> 
         return Err(Error::MissingAction);
     };
 
+    let mut cmd = Command::new(expand_path(&exec));
+    cmd.args(parts);
     if let Some(dir) = working_dir {
-        env::set_current_dir(dir)
-            .map_err(|e| Error::RunFailed(format!("cannot set workdir {e}")))?;
+        // Only for the child, worf itself keeps its working directory.
+        cmd.current_dir(expand_path(dir));
     }
-
-    start_forked(&expand_path(&exec).to_string_lossy(), parts)
+    start_forked_cmd(cmd)
 }
 
 fn stdio_unless_terminal(stream: &impl IsTerminal) -> Stdio {
