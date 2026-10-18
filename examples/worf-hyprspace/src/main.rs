@@ -14,7 +14,6 @@ use hyprland::{
     prelude::HyprData,
     shared::HyprDataActive,
 };
-use nix::libc::{SIGTERM, kill};
 use regex::Regex;
 use serde::Deserialize;
 use strum::IntoEnumIterator;
@@ -584,8 +583,14 @@ fn process_inputs(
             let (_ws, selected_id, _new) =
                 workspace_from_selection(action, cfg.max_workspace_id())?;
 
-            process_clients_on_workspace(selected_id, |client| unsafe {
-                kill(client.pid, SIGTERM);
+            // Close the windows instead of killing their processes, a process can have
+            // windows on other workspaces too (i.e. browsers or terminal servers).
+            process_clients_on_workspace(selected_id, |client| {
+                if let Err(e) = Dispatch::call(DispatchType::CloseWindow(
+                    WindowIdentifier::Address(client.address.clone()),
+                )) {
+                    log::warn!("cannot close window {}, err={e}", client.title);
+                }
             })?;
 
             let active_ws = Workspace::get_active()

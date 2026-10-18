@@ -2887,7 +2887,6 @@ dependencies = [
  "env_logger",
  "hyprland",
  "log",
- "nix",
  "regex",
  "serde",
  "strum",
