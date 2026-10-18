@@ -803,7 +803,7 @@ impl Config {
             let terminals = [
                 ("gnome-terminal", vec!["--"]),
                 ("konsole", vec!["-e"]),
-                ("xfce4-terminal", vec!["--command"]),
+                ("xfce4-terminal", vec!["-x"]),
                 ("xterm", vec!["-e"]),
                 ("alacritty", vec!["-e"]),
                 ("lxterminal", vec!["-e"]),

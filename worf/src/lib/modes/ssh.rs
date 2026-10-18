@@ -8,7 +8,7 @@ use regex::Regex;
 use crate::{
     Error,
     config::{Config, SortOrder},
-    desktop::spawn_fork,
+    desktop::{parse_exec, start_forked},
     gui::{self, ExpandMode, ItemProvider, MenuItem, ProviderData},
 };
 
@@ -71,24 +71,31 @@ impl<T: Clone> ItemProvider<T> for SshProvider<T> {
 }
 
 pub(crate) fn launch<T: Clone>(menu_item: &MenuItem<T>, config: &Config) -> Result<(), Error> {
-    let ssh_cmd = if let Some(action) = &menu_item.action {
-        action.clone()
-    } else {
-        let cmd = config
-            .term()
-            .map(|s| format!("{s} ssh {}", menu_item.label));
-        if let Some(cmd) = cmd {
-            cmd
-        } else {
-            return Err(Error::MissingAction);
-        }
-    };
+    let host = menu_item.label.trim();
+    if host.is_empty() {
+        return Err(Error::MissingAction);
+    }
+    let term = config
+        .term()
+        .ok_or_else(|| Error::RunFailed("no terminal found to run ssh in".to_owned()))?;
 
-    let cmd = format!(
-        "{} bash -c \"source ~/.bashrc; {ssh_cmd}\"",
-        config.term().unwrap_or_default()
+    let mut args = parse_exec(&term);
+    if args.is_empty() {
+        return Err(Error::RunFailed("terminal command is empty".to_owned()));
+    }
+    let exec = args.remove(0);
+    // The host is passed as argument to bash, so it is never interpreted by the shell.
+    args.extend(
+        [
+            "bash",
+            "-c",
+            "source ~/.bashrc; exec ssh -- \"$1\"",
+            "bash",
+            host,
+        ]
+        .map(ToOwned::to_owned),
     );
-    spawn_fork(&cmd, menu_item.working_dir.as_ref())
+    start_forked(&exec, args)
 }
 
 /// Shows the ssh mode
