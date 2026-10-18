@@ -1107,7 +1107,11 @@ fn parse_config<T: DeserializeOwned>(toml_content: &str) -> Result<T, String> {
     for (key, value) in table {
         let mut single = toml::Table::new();
         single.insert(key.clone(), value.clone());
-        if let Err(e) = T::deserialize(single) {
+        // Other required fields are missing in a single key table, that says nothing
+        // about this key.
+        if let Err(e) = T::deserialize(single)
+            && !e.message().starts_with("missing field")
+        {
             log::error!(
                 "ignoring invalid config value for key '{key}': {}",
                 e.message()
@@ -1200,6 +1204,18 @@ mod tests {
         let config: Config = parse_config(toml_str).expect("invalid keys should be skipped");
         assert_eq!(config.columns(), Config::default().columns());
         assert!(!config.insensitive());
+    }
+
+    #[test]
+    fn test_parse_config_with_required_fields() {
+        #[derive(Deserialize, Debug)]
+        struct Required {
+            a: i32,
+            b: i32,
+        }
+        let parsed = parse_config::<Required>("a = 1\nb = 2").expect("parse failed");
+        assert_eq!((parsed.a, parsed.b), (1, 2));
+        assert!(parse_config::<Required>("a = 1\nb = \"x\"").is_err());
     }
 
     #[test]
