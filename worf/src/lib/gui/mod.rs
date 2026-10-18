@@ -3,7 +3,10 @@ use std::{
     collections::{HashMap, HashSet},
     marker::PhantomData,
     rc::Rc,
-    sync::{Arc, LazyLock, Mutex, RwLock},
+    sync::{
+        Arc, LazyLock, Mutex, RwLock,
+        atomic::{AtomicU64, Ordering as AtomicOrdering},
+    },
     thread,
     time::Instant,
 };
@@ -12,7 +15,7 @@ use crossbeam::channel::{self, Sender};
 use gdk4::{
     Display, Rectangle,
     gio::{self, File},
-    glib::{self, Propagation, SignalHandlerId},
+    glib::{self, MainContext, Propagation, SignalHandlerId},
     prelude::{Cast, DisplayExt, MonitorExt, ObjectExt, SurfaceExt},
 };
 use gtk4::{
@@ -268,6 +271,8 @@ struct UiElements<T: Clone> {
     custom_key_box: gtk4::Box,
     /// Incremented whenever the menu is rebuilt, so pending incremental builds can stop.
     build_generation: Cell<u64>,
+    /// Id of the latest search sent to the item provider, older results are dropped.
+    provider_request: Arc<AtomicU64>,
 }
 
 thread_local! {
@@ -413,6 +418,7 @@ fn build_ui<T>(
         scroll: ScrolledWindow::new(),
         custom_key_box: gtk4::Box::new(Orientation::Vertical, 0),
         build_generation: Cell::new(0),
+        provider_request: Arc::new(AtomicU64::new(0)),
     });
     free_ui_on_shutdown(&ui_elements);
 
@@ -1100,13 +1106,40 @@ fn update_view_from_provider<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, 
 where
     T: Clone + Send + 'static,
 {
-    let data = meta.item_provider.lock().unwrap().get_elements(Some(query));
-    if let Some(filtered_list) = data.items {
-        // The view is updated once the new rows exist.
-        build_ui_from_menu_items(ui, meta, filtered_list);
-    } else {
-        update_view(ui, meta, query);
-    }
+    // Providers can be slow (i.e. file mode reads directories), so they run in the background
+    // to keep the UI responsive while typing. Only the result of the latest search is used.
+    let request = ui.provider_request.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+    let latest = Arc::clone(&ui.provider_request);
+    let provider = Arc::clone(&meta.item_provider);
+    let provider_query = query.to_owned();
+    let query = query.to_owned();
+    let ui = Rc::clone(ui);
+    let meta = Rc::clone(meta);
+
+    MainContext::default().spawn_local(async move {
+        let result = gio::spawn_blocking(move || {
+            // Skip the work if another search was started in the meantime.
+            (latest.load(AtomicOrdering::SeqCst) == request)
+                .then(|| provider.lock().unwrap().get_elements(Some(&provider_query)))
+        })
+        .await;
+
+        // A newer search replaced this one, or the window was closed in the meantime.
+        // The provider still ran for the latest search, modes may rely on its state.
+        if ui.provider_request.load(AtomicOrdering::SeqCst) != request || !ui.window.is_visible() {
+            return;
+        }
+        match result {
+            Ok(Some(ProviderData {
+                items: Some(filtered_list),
+            })) => {
+                // The view is updated once the new rows exist.
+                build_ui_from_menu_items(&ui, &meta, filtered_list);
+            }
+            Ok(_) => update_view(&ui, &meta, &query),
+            Err(_) => log::error!("item provider panicked while searching for {query}"),
+        }
+    });
 }
 
 fn update_view<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, query: &str)
