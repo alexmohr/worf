@@ -19,7 +19,7 @@ Worf is yet another style launcher, heavily inspired by **wofi**, **rofi**, and 
 - 🧮 **Math** - Including binary/hex conversion and bitwise operations (`&`, `|`, `^`, `<<`, `>>`)
 - 🚀 **DRun** - Desktop application launcher
 - 📁 **File** - File browser and launcher
-- 🖥️E **SSH** - Quick SSH connection launcher
+- 🖥️ **SSH** - Quick SSH connection launcher
 - ⚡ **Run** - Command execution
 - 😊 **Emoji** - Emoji picker
 - 🔍 **Web Search** - Quick web searches
