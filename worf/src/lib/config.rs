@@ -1018,20 +1018,24 @@ pub fn path_alternatives(base_paths: Vec<Option<PathBuf>>, sub_path: &PathBuf) -
         .collect()
 }
 
+/// Returns `full_path` if given, otherwise the first existing alternative.
+/// An explicitly given path that does not exist is an error, it does not fall back
+/// to the alternatives, so a typo does not silently load another file.
 /// # Errors
 ///
 /// Will return `Err` if it is not able to find any valid path
 pub fn resolve_path(full_path: Option<&str>, alternatives: Vec<PathBuf>) -> Result<PathBuf, Error> {
     log::debug!("resolving path for {full_path:?}, with alternatives: {alternatives:?}");
-    full_path
-        .map(PathBuf::from)
-        .and_then(|p| p.canonicalize().ok().filter(|c| c.exists()))
-        .or_else(|| {
-            alternatives
-                .into_iter()
-                .filter(|p| p.exists())
-                .find_map(|pb| pb.canonicalize().ok().filter(|c| c.exists()))
-        })
+    if let Some(full_path) = full_path {
+        return expand_path(full_path).canonicalize().map_err(|e| {
+            log::error!("{full_path}: {e}");
+            Error::MissingFile
+        });
+    }
+
+    alternatives
+        .into_iter()
+        .find_map(|pb| pb.canonicalize().ok())
         .ok_or(Error::MissingFile)
 }
 
