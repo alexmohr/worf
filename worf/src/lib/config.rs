@@ -1,6 +1,7 @@
-use std::{env, fs, path::PathBuf, str::FromStr};
+use std::{env, fs, path::PathBuf, str::FromStr, sync::LazyLock};
 
 use clap::{Parser, ValueEnum};
+use regex::Regex;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
@@ -1130,23 +1131,37 @@ fn parse_config<T: DeserializeOwned>(toml_content: &str) -> Result<T, String> {
 
 #[must_use]
 pub fn expand_path(input: &str) -> PathBuf {
-    let mut path = input.to_string();
+    expand_path_with(input, dirs::home_dir(), |name| env::var(name).ok())
+}
 
-    // Expand ~ to home directory
-    if path.starts_with('~')
-        && let Some(home_dir) = dirs::home_dir()
-    {
-        path = path.replacen('~', home_dir.to_str().unwrap_or(""), 1);
-    }
+/// Expands a leading `~` and `$NAME` or `${NAME}` variables.
+/// Unknown variables are kept as they are.
+fn expand_path_with(
+    input: &str,
+    home_dir: Option<PathBuf>,
+    var: impl Fn(&str) -> Option<String>,
+) -> PathBuf {
+    static VAR_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\$(?:\{(\w+)\}|(\w+))").unwrap());
 
-    // Expand $VAR style environment variables
-    if path.contains('$') {
-        for (key, value) in env::vars() {
-            let var_pattern = format!("${key}");
-            if path.contains(&var_pattern) {
-                path = path.replace(&var_pattern, &value);
-            }
+    // Only `~` and `~/...`, `~user` is another users home.
+    let mut path = match (input.strip_prefix('~'), home_dir) {
+        (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with('/') => {
+            format!("{}{rest}", home.display())
         }
+        _ => input.to_owned(),
+    };
+
+    if path.contains('$') {
+        path = VAR_RE
+            .replace_all(&path, |caps: &regex::Captures| {
+                let name = caps
+                    .get(1)
+                    .or_else(|| caps.get(2))
+                    .map_or("", |m| m.as_str());
+                var(name).unwrap_or_else(|| caps[0].to_owned())
+            })
+            .into_owned();
     }
 
     PathBuf::from(path)
@@ -1204,6 +1219,24 @@ mod tests {
         let config: Config = parse_config(toml_str).expect("invalid keys should be skipped");
         assert_eq!(config.columns(), Config::default().columns());
         assert!(!config.insensitive());
+    }
+
+    #[test]
+    fn test_expand_path() {
+        let home = Some(PathBuf::from("/home/me"));
+        let var = |name: &str| match name {
+            "HOME" => Some("/home/me".to_owned()),
+            "HOMEDIR" => Some("/srv".to_owned()),
+            _ => None,
+        };
+        let expand = |input: &str| expand_path_with(input, home.clone(), var);
+
+        assert_eq!(expand("~"), PathBuf::from("/home/me"));
+        assert_eq!(expand("~/a"), PathBuf::from("/home/me/a"));
+        assert_eq!(expand("~other/a"), PathBuf::from("~other/a"));
+        assert_eq!(expand("$HOMEDIR/x"), PathBuf::from("/srv/x"));
+        assert_eq!(expand("${HOME}dir"), PathBuf::from("/home/medir"));
+        assert_eq!(expand("$UNKNOWN/x"), PathBuf::from("$UNKNOWN/x"));
     }
 
     #[test]
