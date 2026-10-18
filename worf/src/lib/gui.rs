@@ -1162,10 +1162,6 @@ fn move_selection<T: Clone + Send + 'static>(
     meta: &Rc<MetaData<T>>,
     direction: &Direction,
 ) -> Propagation {
-    if !meta.config.read().unwrap().rollover() {
-        return Propagation::Proceed;
-    }
-
     let selected_children = ui.main_box.selected_children();
     let Some(selected) = selected_children.first() else {
         return Propagation::Proceed;
@@ -1242,6 +1238,11 @@ fn move_selection<T: Clone + Send + 'static>(
         }
     } else {
         collapse_expanders(ui);
+    }
+
+    // Everything below wraps around at the start and end of the list.
+    if !meta.config.read().unwrap().rollover() {
+        return Propagation::Proceed;
     }
 
     let Some(first_child) = find_visible_child(
