@@ -461,25 +461,25 @@ pub fn copy_to_clipboard(text: String, notify_body: Option<&str>) -> Result<(), 
     opts.serve_requests(ServeRequests::Only(1));
     let result = opts.copy(Source::Bytes(text.into_bytes().into()), MimeType::Text);
 
+    // The notification is only informational, failing to show it (i.e. because no
+    // notification daemon runs) must not turn a successful copy into an error.
+    let mut notification = Notification::new();
     match result {
         Ok(()) => {
-            let mut notification = Notification::new();
             notification.summary("Copied to clipboard");
             if let Some(notify_body) = notify_body {
                 notification.body(notify_body);
             }
-
-            notification.show().map_err(|e| Error::Io(e.to_string()))?;
-            Ok(())
         }
-        Err(e) => {
-            Notification::new()
-                .summary("Failed to copy to clipboard")
-                .show()
-                .map_err(|e| Error::Io(e.to_string()))?;
-            Err(Error::Clipboard(e.to_string()))
+        Err(_) => {
+            notification.summary("Failed to copy to clipboard");
         }
     }
+    if let Err(e) = notification.show() {
+        log::warn!("Cannot show notification: {e}");
+    }
+
+    result.map_err(|e| Error::Clipboard(e.to_string()))
 }
 
 #[cfg(test)]
