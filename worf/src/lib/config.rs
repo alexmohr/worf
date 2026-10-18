@@ -426,9 +426,8 @@ pub struct Config {
     prompt: Option<String>,
 
     /// If true a normal window instead of a layer shell will be used
-    #[clap(short = 'n', long = "normal-window")]
-    #[serde(default = "default_false")]
-    normal_window: bool,
+    #[clap(short = 'n', long = "normal-window", num_args = 0..=1, default_missing_value = "true")]
+    normal_window: Option<bool>,
 
     /// Set to 'false' to disable images, defaults to true
     #[clap(short = 'I', long = "allow-images")]
@@ -705,7 +704,7 @@ impl Config {
 
     #[must_use]
     pub fn normal_window(&self) -> bool {
-        self.normal_window
+        self.normal_window.unwrap_or(false)
     }
 
     #[must_use]
@@ -1205,5 +1204,17 @@ mod tests {
         let args = Config::parse_from(["worf", "--width", "100%"]);
         let merged = merge_config_with_args(&mut config, &args).expect("merge failed");
         assert_eq!(merged.width(), "100%");
+    }
+
+    #[test]
+    fn test_merge_keeps_normal_window_from_config() {
+        let mut config = parse_config::<Config>("normal_window = true").expect("parse failed");
+        let args = Config::parse_from(["worf"]);
+        let merged = merge_config_with_args(&mut config, &args).expect("merge failed");
+        assert!(merged.normal_window());
+
+        let args = Config::parse_from(["worf", "-n"]);
+        let merged = merge_config_with_args(&mut Config::default(), &args).expect("merge failed");
+        assert!(merged.normal_window());
     }
 }
