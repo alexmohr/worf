@@ -537,30 +537,25 @@ fn process_inputs(
             return process_inputs(cfg, pattern, provider);
         }
         Mode::Rename => {
-            if let Some(action) = action {
+            if let Some(workspace) = action.and_then(|a| a.workspace) {
                 cfg.worf
                     .set_prompt(format!("Rename {} to  ", result.menu.label));
                 let provider = Arc::new(Mutex::new(EmptyProvider {}));
                 let rename_result = show_gui(cfg, pattern, provider)?;
 
                 let new_name = if cfg.add_id_prefix() {
-                    let ws_id = action
-                        .workspace
-                        .as_ref()
-                        .map(|ws| ws.id.to_string())
-                        .unwrap_or_default();
-                    format!("{}: {}", ws_id, rename_result.menu.label)
+                    format!("{}: {}", workspace.id, rename_result.menu.label)
                 } else {
                     rename_result.menu.label.to_string()
                 };
 
-                Dispatch::call(DispatchType::RenameWorkspace(
-                    action.workspace.as_ref().unwrap().id,
-                    Some(&new_name),
-                ))
-                .map_err(|e| e.to_string())?;
+                Dispatch::call(DispatchType::RenameWorkspace(workspace.id, Some(&new_name)))
+                    .map_err(|e| e.to_string())?;
             } else {
-                Err("Action is not set, cannot rename workspace".to_owned())?;
+                Err(format!(
+                    "Workspace {} does not exist, cannot rename it",
+                    result.menu.label
+                ))?;
             }
         }
         Mode::SwitchToWorkspace => {
