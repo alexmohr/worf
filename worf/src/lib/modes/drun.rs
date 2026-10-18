@@ -12,8 +12,8 @@ use crate::{
     Error,
     config::{Config, SortOrder},
     desktop::{
-        find_desktop_files, get_locale_variants, load_cache_file, lookup_name_with_locale,
-        parse_exec, save_cache_file, spawn_fork,
+        ExecFields, expand_field_codes, find_desktop_files_with_paths, get_locale_variants,
+        load_cache_file, lookup_name_with_locale, parse_exec, save_cache_file, spawn_fork,
     },
     gui::{self, ArcProvider, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
@@ -68,12 +68,12 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
         let default_icon = "application-x-executable".to_string();
         let start = Instant::now();
 
-        let entries: Vec<MenuItem<T>> = find_desktop_files()
+        let entries: Vec<MenuItem<T>> = find_desktop_files_with_paths()
             .into_par_iter()
-            .filter(|file| {
+            .filter(|(_, file)| {
                 !file.entry.no_display.unwrap_or(false) && !file.entry.hidden.unwrap_or(false)
             })
-            .filter_map(|file| {
+            .filter_map(|(path, file)| {
                 let name = lookup_name_with_locale(
                     &locale_variants,
                     &file.entry.name.variants,
@@ -109,6 +109,13 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                     .map(|s| s.content.clone())
                     .or(Some(default_icon.clone()));
 
+                let exec_fields = ExecFields {
+                    icon: file.entry.icon.as_ref().map(|i| i.content.as_str()),
+                    name: &name,
+                    desktop_file: Some(&path),
+                };
+                let action = action.map(|a| expand_field_codes(&a, &exec_fields));
+
                 #[allow(clippy::cast_precision_loss)] // we won't deal with enough values anyways
                 let sort_score = *self.cache.get(&name).unwrap_or(&0) as f64;
 
@@ -136,8 +143,11 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                             .or(icon.clone())
                             .unwrap_or("application-x-executable".to_string());
 
-                        let action =
-                            self.get_action(in_terminal, action.exec.clone(), &action_name);
+                        let exec = action
+                            .exec
+                            .as_ref()
+                            .map(|a| expand_field_codes(a, &exec_fields));
+                        let action = self.get_action(in_terminal, exec, &action_name);
 
                         entry.sub_elements.push(MenuItem::new(
                             action_name,
