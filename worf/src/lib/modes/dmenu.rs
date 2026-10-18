@@ -17,10 +17,12 @@ struct DMenuProvider {
 impl DMenuProvider {
     fn new(sort_order: &SortOrder) -> DMenuProvider {
         log::debug!("parsing stdin");
-        let mut input = String::new();
-        io::stdin()
-            .read_to_string(&mut input)
-            .expect("Failed to read from stdin");
+        let mut bytes = Vec::new();
+        if let Err(e) = io::stdin().read_to_end(&mut bytes) {
+            log::error!("Failed to read from stdin: {e}");
+        }
+        // Input is not always valid UTF-8, i.e. file names in another encoding.
+        let input = String::from_utf8_lossy(&bytes);
 
         let mut items: Vec<MenuItem<String>> = input
             .lines()
