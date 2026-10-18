@@ -974,16 +974,12 @@ fn build_ui_from_menu_items<T: Clone + 'static + Send>(
                     sort_flow_box_childs(child1, child2, &items_sort)
                 });
 
-                let lock = ui_clone.menu_rows.read().unwrap();
-
-                select_visible_child(
-                    &*lock,
-                    &ui_clone.main_box,
-                    &ui_clone.scroll,
-                    &ChildPosition::Front,
+                log::debug!(
+                    "Created {} menu items in {:?}",
+                    ui_clone.menu_rows.read().unwrap().len(),
+                    start.elapsed()
                 );
-
-                log::debug!("Created {} menu items in {:?}", lock.len(), start.elapsed());
+                update_view(&ui_clone, &meta_clone, &search_text);
 
                 ControlFlow::Break
             } else {
@@ -1341,9 +1337,11 @@ where
 {
     let data = meta.item_provider.lock().unwrap().get_elements(Some(query));
     if let Some(filtered_list) = data.items {
+        // The view is updated once the new rows exist.
         build_ui_from_menu_items(ui, meta, filtered_list);
+    } else {
+        update_view(ui, meta, query);
     }
-    update_view(ui, meta, query);
 }
 
 fn update_view<T>(ui: &Rc<UiElements<T>>, meta: &Rc<MetaData<T>>, query: &str)
@@ -1362,7 +1360,7 @@ where
     let menu_rows = ui.menu_rows.read().unwrap();
     select_visible_child(&*menu_rows, &ui.main_box, &ui.scroll, &ChildPosition::Front);
 
-    if meta.config.read().unwrap().auto_select_on_search() {
+    if !query.is_empty() && meta.config.read().unwrap().auto_select_on_search() {
         let visible_items: Vec<_> = menu_rows.iter().filter(|(_, menu)| menu.visible).collect();
 
         let item = if visible_items.len() == 1 {
