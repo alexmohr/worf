@@ -228,7 +228,7 @@ impl From<gtk4::gdk::Key> for Key {
 
             // Navigation / Editing
             gdk4::Key::Escape => Key::Escape,
-            gdk4::Key::Return => Key::Enter,
+            gdk4::Key::Return | gdk4::Key::KP_Enter => Key::Enter,
             gdk4::Key::space => Key::Space,
             gdk4::Key::Tab => Key::Tab,
             gdk4::Key::BackSpace => Key::Backspace,
@@ -338,7 +338,7 @@ impl From<u32> for Key {
 
             // Navigation / Editing
             9 => Key::Escape,
-            36 => Key::Enter,
+            36 | 104 => Key::Enter,
             65 => Key::Space,
             23 => Key::Tab,
             22 => Key::Backspace,
@@ -426,6 +426,16 @@ fn modifiers_from_mask(mask: gdk4::ModifierType) -> HashSet<Modifier> {
     }
 
     modifiers
+}
+
+/// True if a modifier is held that turns a key press into a shortcut instead of text input.
+fn has_command_modifier(mask: gdk4::ModifierType) -> bool {
+    mask.intersects(
+        gdk4::ModifierType::CONTROL_MASK
+            | gdk4::ModifierType::ALT_MASK
+            | gdk4::ModifierType::SUPER_MASK
+            | gdk4::ModifierType::META_MASK,
+    )
 }
 
 /// Modifiers that are relevant to match a key binding.
@@ -1110,7 +1120,10 @@ fn handle_key_press<T: Clone + 'static + Send>(
             return move_selection(ui, meta, &Direction::Down);
         }
         _ => {
-            if let Some(c) = keyboard_key.to_unicode() {
+            if let Some(c) = keyboard_key.to_unicode()
+                && !c.is_control()
+                && !has_command_modifier(modifier_type)
+            {
                 let mut query = {
                     let search_text = ui.search_text.lock().unwrap();
                     search_text.clone()
