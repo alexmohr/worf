@@ -82,6 +82,18 @@ fn find_files(folder: &Path, file_name: &Regex) -> Vec<(String, PathBuf)> {
 /// When it cannot parse the internal regex
 #[must_use]
 pub fn find_desktop_files() -> Vec<DesktopFile> {
+    find_desktop_files_with_paths()
+        .into_iter()
+        .map(|(_, desktop_file)| desktop_file)
+        .collect()
+}
+
+/// Like [`find_desktop_files`], but also returns the path of each desktop file.
+/// # Panics
+///
+/// When it cannot parse the internal regex
+#[must_use]
+pub fn find_desktop_files_with_paths() -> Vec<(PathBuf, DesktopFile)> {
     static DESKTOP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i).*\.desktop$").unwrap());
 
     let mut paths = Vec::<(usize, PathBuf)>::new();
@@ -149,12 +161,13 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
     // Sorted, so the result does not depend on the order of the hash map.
     let mut files: Vec<(usize, PathBuf)> = file_by_prio.into_values().collect();
     files.sort();
-    let parsed: Vec<DesktopFile> = files
+    let parsed: Vec<(PathBuf, DesktopFile)> = files
         .into_par_iter()
-        .filter_map(|(_, desktop_file)| {
-            fs::read_to_string(&desktop_file)
+        .filter_map(|(_, path)| {
+            fs::read_to_string(&path)
                 .ok()
                 .and_then(|content| freedesktop_file_parser::parse(&content).ok())
+                .map(|desktop_file| (path, desktop_file))
         })
         .collect();
 
@@ -164,7 +177,7 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
     let mut seen = HashSet::with_capacity(parsed.len());
     let p: Vec<_> = parsed
         .into_iter()
-        .filter(|desktop_file| {
+        .filter(|(_, desktop_file)| {
             let exec = match &desktop_file.entry.entry_type {
                 EntryType::Application(app) => app.exec.clone(),
                 _ => None,
@@ -325,6 +338,65 @@ pub fn parse_exec(cmd: &str) -> Vec<String> {
         args.push(arg);
     }
     args
+}
+
+/// Values for the field codes of an `Exec` line that refer to the desktop entry itself.
+pub struct ExecFields<'a> {
+    /// The `Icon` key, used for `%i`
+    pub icon: Option<&'a str>,
+    /// The translated `Name`, used for `%c`
+    pub name: &'a str,
+    /// Path of the desktop file, used for `%k`
+    pub desktop_file: Option<&'a Path>,
+}
+
+/// Expands the field codes `%i`, `%c` and `%k` of an `Exec` line, as defined by the desktop
+/// entry spec. The values are quoted, so the result can be split with [`parse_exec`].
+/// `%i` becomes `--icon <icon>`, or nothing if there is no icon.
+/// Other field codes are kept, [`parse_exec`] removes them.
+#[must_use]
+pub fn expand_field_codes(exec: &str, fields: &ExecFields) -> String {
+    fn quote(value: &str) -> String {
+        let mut quoted = String::with_capacity(value.len() + 2);
+        quoted.push('"');
+        for c in value.chars() {
+            if matches!(c, '"' | '`' | '$' | '\\') {
+                quoted.push('\\');
+            }
+            quoted.push(c);
+        }
+        quoted.push('"');
+        quoted
+    }
+
+    let mut result = String::with_capacity(exec.len());
+    let mut chars = exec.chars();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            result.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('i') => {
+                if let Some(icon) = fields.icon.filter(|i| !i.is_empty()) {
+                    result.push_str("--icon ");
+                    result.push_str(&quote(icon));
+                }
+            }
+            Some('c') => result.push_str(&quote(fields.name)),
+            Some('k') => {
+                if let Some(path) = fields.desktop_file {
+                    result.push_str(&quote(&path.to_string_lossy()));
+                }
+            }
+            Some(other) => {
+                result.push('%');
+                result.push(other);
+            }
+            None => result.push('%'),
+        }
+    }
+    result
 }
 
 /// Spawn a new process and forks it away from the current worf process
@@ -580,6 +652,38 @@ mod tests {
         );
         assert_eq!(locale_variants("pt_BR.UTF-8"), vec!["pt_BR", "pt"]);
         assert_eq!(locale_variants("fr"), vec!["fr"]);
+    }
+
+    #[test]
+    fn test_expand_field_codes() {
+        let path = PathBuf::from("/usr/share/applications/my app.desktop");
+        let fields = ExecFields {
+            icon: Some("my-icon"),
+            name: "My \"App\"",
+            desktop_file: Some(&path),
+        };
+        let expanded = expand_field_codes("app %i --name=%c %k %U 100%%", &fields);
+        assert_eq!(
+            parse_exec(&expanded),
+            vec![
+                "app",
+                "--icon",
+                "my-icon",
+                "--name=My \"App\"",
+                "/usr/share/applications/my app.desktop",
+                "100%",
+            ]
+        );
+
+        let no_icon = ExecFields {
+            icon: None,
+            name: "x",
+            desktop_file: None,
+        };
+        assert_eq!(
+            parse_exec(&expand_field_codes("app %i %k", &no_icon)),
+            vec!["app"]
+        );
     }
 
     #[test]
