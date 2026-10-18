@@ -107,7 +107,7 @@ fn main() {
         Err(e) => {
             log::warn!(
                 "Failed to load config ({e}), using defaults and command line arguments. The \
-                 configuration should be located in $XDG_CONFIG_DIR/worf or if that variable is \
+                 configuration should be located in $XDG_CONFIG_HOME/worf or if that variable is \
                  not defined in $HOME/.config/worf"
             );
             config.worf

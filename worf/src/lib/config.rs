@@ -410,8 +410,8 @@ pub struct Config {
     version: Option<bool>,
 
     /// Defines the style sheet to be loaded.
-    /// Defaults to `$XDG_CONF_DIR/worf/style.css`
-    /// or `$HOME/.config/worf/style.css` if `$XDG_CONF_DIR` is not set.
+    /// Defaults to `$XDG_CONFIG_HOME/worf/style.css`
+    /// or `$HOME/.config/worf/style.css` if `$XDG_CONFIG_HOME` is not set.
     #[clap(long = "style")]
     style: Option<String>,
 
