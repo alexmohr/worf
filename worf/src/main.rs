@@ -40,7 +40,10 @@ pub enum Mode {
 
 #[derive(Debug, Parser)]
 #[clap(
-    about = "Worf is a wofi like launcher, written in rust, it aims to be a drop-in replacement"
+    about = "Worf is a wofi like launcher, written in rust, it aims to be a drop-in replacement",
+    name = "worf",
+    version,
+    disable_version_flag = true
 )]
 struct MainConfig {
     /// Defines the mode worf is running in
@@ -113,11 +116,6 @@ fn main() {
 
     if config.worf.prompt().is_none() {
         config.worf.set_prompt(config.show.to_string());
-    }
-
-    if config.worf.version() {
-        println!("worf version {}", env!("CARGO_PKG_VERSION"));
-        return;
     }
 
     fork_if_configured(&config.worf); // may exit the program

@@ -77,7 +77,11 @@ impl Display for Mode {
 }
 
 #[derive(Debug, Clone, Parser, Deserialize)]
-#[clap(about = "Worf-Hyprspace is a Hyprland workspace manager built on top of Worf")]
+#[clap(
+    about = "Worf-Hyprspace is a Hyprland workspace manager built on top of Worf",
+    version,
+    disable_version_flag = true
+)]
 struct HyprSpaceConfig {
     #[command(flatten)]
     worf: worf::config::Config,

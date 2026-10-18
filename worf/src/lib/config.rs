@@ -390,7 +390,9 @@ impl FromStr for Key {
 
 #[derive(Debug, Deserialize, Serialize, Clone, Parser)]
 #[clap(
-    about = "Worf is a wofi like launcher, written in rust, it aims to be a drop-in replacement"
+    about = "Worf is a wofi like launcher, written in rust, it aims to be a drop-in replacement",
+    version,
+    disable_version_flag = true
 )]
 #[derive(Default)]
 pub struct Config {
@@ -403,9 +405,9 @@ pub struct Config {
     cfg_path: Option<String>,
 
     /// Prints the version and then exits
-    #[clap(short = 'v', long = "version")]
-    #[serde(default = "default_false")]
-    version: bool,
+    #[clap(short = 'v', long = "version", action = clap::ArgAction::Version)]
+    #[serde(skip)]
+    version: Option<bool>,
 
     /// Defines the style sheet to be loaded.
     /// Defaults to `$XDG_CONF_DIR/worf/style.css`
@@ -914,8 +916,12 @@ impl Config {
     }
 
     #[must_use]
+    #[deprecated(
+        since = "0.8.0",
+        note = "`--version` is handled by clap, which prints the version and exits"
+    )]
     pub fn version(&self) -> bool {
-        self.version
+        self.version.unwrap_or(false)
     }
 
     #[must_use]
@@ -971,10 +977,6 @@ impl Config {
             .clone()
             .unwrap_or(TextOutputMode::Clipboard)
     }
-}
-
-fn default_false() -> bool {
-    false
 }
 
 #[must_use]
