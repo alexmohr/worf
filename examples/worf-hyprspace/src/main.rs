@@ -462,9 +462,12 @@ fn handle_workspace_action<F>(
 where
     F: FnOnce(WorkspaceIdentifierWithSpecial) -> DispatchType,
 {
-    let (workspace, id, _new) = workspace_from_selection(action, cfg.max_workspace_id())?;
+    let (workspace, id, new) = workspace_from_selection(action, cfg.max_workspace_id())?;
     Dispatch::call(dispatch_builder(workspace)).map_err(|e| e.to_string())?;
-    set_workspace_name(label, id, cfg.add_id_prefix())?;
+    // Only a workspace created for the typed label gets named, existing ones keep their name.
+    if new {
+        set_workspace_name(label, id, cfg.add_id_prefix())?;
+    }
     Ok(())
 }
 
