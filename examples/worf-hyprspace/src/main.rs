@@ -60,7 +60,7 @@ impl FromStr for Mode {
             "movecurrentwindowtootherworkspacesilent" => {
                 Ok(Mode::MoveCurrentWindowToOtherWorkspaceSilent)
             }
-            "moveallwindowstootherworkspace" => Ok(Mode::MoveCurrentWindowToOtherWorkspace),
+            "moveallwindowstootherworkspace" => Ok(Mode::MoveAllWindowsToOtherWorkSpace),
             "deleteworkspace" => Ok(Mode::DeleteWorkspace),
             _ => Err(format!("Invalid mode: {s}")),
         }
