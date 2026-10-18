@@ -11,7 +11,7 @@ use std::{
 use crossbeam::channel::{self, Sender};
 use gdk4::{
     Display, Rectangle,
-    gio::File,
+    gio::{self, File},
     glib::{self, Propagation, SignalHandlerId},
     prelude::{Cast, DisplayExt, DisplayExtManual, MonitorExt, ObjectExt, SurfaceExt},
 };
@@ -596,7 +596,12 @@ where
     log::debug!("Starting GUI");
     load_css(config.read().unwrap().style().as_deref());
 
-    let app = Application::builder().application_id("worf").build();
+    // No application id: "worf" is not a valid id (it needs a dot) and every worf process
+    // must run on its own instead of handing over to a running instance.
+    // Without an id the wayland app_id is the program name, "worf".
+    let app = Application::builder()
+        .flags(gio::ApplicationFlags::NON_UNIQUE)
+        .build();
     // Unbounded, so a second send on the main thread can never block it.
     let (sender, receiver) = channel::unbounded();
 
