@@ -151,21 +151,40 @@ pub fn find_desktop_files() -> Vec<DesktopFile> {
 /// Return all possible locales based on the users preferences
 #[must_use]
 pub fn get_locale_variants() -> Vec<String> {
-    let locale = env::var("LC_ALL")
-        .or_else(|_| env::var("LC_MESSAGES"))
-        .or_else(|_| env::var("LANG"))
-        .unwrap_or_else(|_| "c".to_string());
+    // Empty variables count as unset, like in glibc.
+    let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .find_map(|var| env::var(var).ok().filter(|v| !v.is_empty()))
+        .unwrap_or_else(|| "C".to_owned());
+    locale_variants(&locale)
+}
 
-    let lang = locale.split('.').next().unwrap_or(&locale).to_lowercase();
+/// Locale keys to look up for `locale` (i.e. `de_DE.UTF-8@euro`), most specific first,
+/// as defined by the desktop entry spec: `lang_COUNTRY@MODIFIER`, `lang_COUNTRY`,
+/// `lang@MODIFIER`, `lang`. The case is kept, desktop files use keys like `pt_BR`.
+fn locale_variants(locale: &str) -> Vec<String> {
+    let (locale, modifier) = match locale.split_once('@') {
+        Some((locale, modifier)) => (locale, Some(modifier)),
+        None => (locale, None),
+    };
+    // The encoding is not part of the key.
+    let locale = locale.split('.').next().unwrap_or(locale);
+    let (lang, country) = match locale.split_once('_') {
+        Some((lang, country)) => (lang, Some(country)),
+        None => (locale, None),
+    };
+
     let mut variants = vec![];
-
-    if let Some((lang_part, region)) = lang.split_once('_') {
-        variants.push(format!("{lang_part}_{region}")); // en_us
-        variants.push(lang_part.to_string()); // en
-    } else {
-        variants.push(lang.clone()); // e.g. "fr"
+    if let Some(country) = country {
+        if let Some(modifier) = modifier {
+            variants.push(format!("{lang}_{country}@{modifier}"));
+        }
+        variants.push(format!("{lang}_{country}"));
     }
-
+    if let Some(modifier) = modifier {
+        variants.push(format!("{lang}@{modifier}"));
+    }
+    variants.push(lang.to_owned());
     variants
 }
 
@@ -505,6 +524,16 @@ mod tests {
         assert_eq!(parse_exec("app --file=%f"), vec!["app", "--file="]);
         assert_eq!(parse_exec("app '' 'a b'"), vec!["app", "", "a b"]);
         assert_eq!(parse_exec("  "), Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_locale_variants() {
+        assert_eq!(
+            locale_variants("de_DE.UTF-8@euro"),
+            vec!["de_DE@euro", "de_DE", "de@euro", "de"]
+        );
+        assert_eq!(locale_variants("pt_BR.UTF-8"), vec!["pt_BR", "pt"]);
+        assert_eq!(locale_variants("fr"), vec!["fr"]);
     }
 
     #[test]
