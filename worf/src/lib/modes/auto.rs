@@ -150,7 +150,8 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
             Arc::clone(&arc_provider),
             Some(Arc::new(Mutex::new(DefaultItemFactory::new()))),
             Some(
-                vec!["ssh", "emoji", "^\\$\\w+", "^\\?\\s*"]
+                // Only the mode prefixes, a host may contain i.e. "ssh" as well.
+                vec!["^ssh\\s*", "^emoji\\s*", "^\\$\\w+", "^\\?\\s*"]
                     .into_iter()
                     .map(|s| Regex::new(s).unwrap())
                     .collect(),
@@ -160,7 +161,7 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
         );
 
         if let Ok(selection_result) = selection_result {
-            let mut selection_result = selection_result.menu;
+            let selection_result = selection_result.menu;
             if let Some(data) = &selection_result.data {
                 match data {
                     AutoRunType::Math => {
@@ -195,9 +196,10 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
                         unreachable!("Auto mode should never be set for show.")
                     }
                 }
-            } else if selection_result.label.starts_with("ssh") {
-                selection_result.label = selection_result.label.chars().skip(4).collect();
+            } else if provider.lock().unwrap().last_mode == Some(AutoRunType::Ssh) {
+                // "ssh <host>" without a matching configured host, the label is the typed host.
                 ssh::launch(&selection_result, &config.read().unwrap())?;
+                break;
             }
         } else {
             log::error!("No item selected");
