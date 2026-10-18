@@ -12,7 +12,7 @@ use crossbeam::channel::{self, Sender};
 use gdk4::{
     Display, Rectangle,
     gio::File,
-    glib::{self, MainContext, Propagation, SignalHandlerId},
+    glib::{self, Propagation, SignalHandlerId},
     prelude::{Cast, DisplayExt, MonitorExt, ObjectExt, SurfaceExt},
 };
 use gtk4::{
@@ -568,7 +568,8 @@ where
     load_css(config.read().unwrap().style().as_deref());
 
     let app = Application::builder().application_id("worf").build();
-    let (sender, receiver) = channel::bounded(1);
+    // Unbounded, so a second send on the main thread can never block it.
+    let (sender, receiver) = channel::unbounded();
 
     let meta = Rc::new(MetaData {
         item_provider,
@@ -586,16 +587,10 @@ where
 
     let gtk_args: [&str; 0] = [];
     app.run_with_args(&gtk_args);
-    // Use glib's MainContext to handle the receiver asynchronously
-    let main_context = MainContext::default();
-    let receiver_result = main_context.block_on(async {
-        MainContext::default()
-            .spawn_local(async move { receiver.recv().map_err(|e| Error::Io(e.to_string())) })
-            .await
-            .unwrap_or_else(|e| Err(Error::Io(e.to_string())))
-    });
 
-    receiver_result?
+    // The selection is sent from the main loop before it quits. If the window was closed
+    // in another way (i.e. by the compositor) nothing was sent.
+    receiver.try_recv().unwrap_or(Err(Error::NoSelection))
 }
 
 fn build_ui<T>(
