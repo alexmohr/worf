@@ -10,7 +10,7 @@ use std::{
 use crate::{
     Error,
     config::{Config, SortOrder},
-    desktop::{is_executable, save_cache_file},
+    desktop::{is_executable, load_cache_file, save_cache_file},
     gui::{self, ArcProvider, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
 };
@@ -112,6 +112,10 @@ fn update_run_cache_and_run<T: Clone>(
     cache: &mut HashMap<String, i64>,
     selection_result: MenuItem<T>,
 ) -> Result<(), Error> {
+    // Another worf may have updated the cache since it was loaded.
+    if let Ok(current) = load_cache_file(cache_path) {
+        *cache = current;
+    }
     *cache.entry(selection_result.label).or_insert(0) += 1;
     if let Err(e) = save_cache_file(cache_path, cache) {
         log::warn!("cannot save run cache {e:?}");

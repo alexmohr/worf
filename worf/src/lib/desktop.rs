@@ -407,8 +407,18 @@ pub fn save_cache_file<S: BuildHasher>(
     // Convert the HashMap to TOML string
     let toml_string =
         toml::ser::to_string(&data).map_err(|e| Error::ParsingError(e.to_string()))?;
-    fs::write(path, toml_string).map_err(|e| Error::Io(e.to_string()))?;
-    Ok(())
+
+    // Write to a temporary file and rename it, so a crash or a concurrent worf
+    // never leaves a truncated cache behind.
+    let mut tmp_name = path.file_name().unwrap_or_default().to_owned();
+    tmp_name.push(format!(".{}.tmp", std::process::id()));
+    let tmp_path = path.with_file_name(tmp_name);
+    fs::write(&tmp_path, toml_string)
+        .and_then(|()| fs::rename(&tmp_path, path))
+        .map_err(|e| {
+            let _ = fs::remove_file(&tmp_path);
+            Error::Io(e.to_string())
+        })
 }
 
 /// Crates a new file and its parent directories if it does not exist yet.
@@ -495,5 +505,20 @@ mod tests {
         assert_eq!(parse_exec("app --file=%f"), vec!["app", "--file="]);
         assert_eq!(parse_exec("app '' 'a b'"), vec!["app", "", "a b"]);
         assert_eq!(parse_exec("  "), Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_cache_file_round_trip() {
+        let dir = env::temp_dir().join(format!("worf-test-{}", std::process::id()));
+        let path = dir.join("nested").join("cache");
+        create_file_if_not_exists(&path).expect("create failed");
+
+        let data = HashMap::from([("Firefox".to_owned(), 42), ("My App".to_owned(), 1)]);
+        save_cache_file(&path, &data).expect("save failed");
+        assert_eq!(load_cache_file(&path).expect("load failed"), data);
+
+        let leftovers = fs::read_dir(path.parent().unwrap()).unwrap().count();
+        assert_eq!(leftovers, 1, "temporary file was not removed");
+        fs::remove_dir_all(dir).unwrap();
     }
 }
