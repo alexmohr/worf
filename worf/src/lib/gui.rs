@@ -936,11 +936,8 @@ fn set_search_text<T: Clone + Send + 'static>(
     let mut lock = ui.search_text.lock().unwrap();
     query.clone_into(&mut lock);
     if let Some(pw) = meta.config.read().unwrap().password() {
-        let mut ui_text = String::new();
-        for _ in 0..query.len() {
-            ui_text += &pw;
-        }
-        ui.search.set_text(&ui_text);
+        // One mask per char (not byte), so the cursor position matches the query.
+        ui.search.set_text(&pw.repeat(query.chars().count()));
     } else {
         ui.search.set_text(query);
     }
@@ -1087,21 +1084,19 @@ fn handle_key_press<T: Clone + 'static + Send>(
                 let search_text = ui.search_text.lock().unwrap();
                 search_text.clone()
             };
-            if !query.is_empty() {
-                let pos = ui.search.position();
-                let del_pos = if keyboard_key == gdk4::Key::BackSpace {
-                    pos - 1
-                } else {
-                    pos
-                };
-                // position will not be negative
-                #[allow(clippy::cast_sign_loss)]
-                if let Some((start, ch)) = query.char_indices().nth(del_pos as usize) {
-                    let end = start + ch.len_utf8();
-                    query.replace_range(start..end, "");
-                }
+            let pos = ui.search.position();
+            // Backspace removes the char before the cursor, Delete the one after it.
+            let del_pos = if keyboard_key == gdk4::Key::BackSpace {
+                pos - 1
+            } else {
+                pos
+            };
+            if let Ok(del_idx) = usize::try_from(del_pos)
+                && let Some((start, ch)) = query.char_indices().nth(del_idx)
+            {
+                query.replace_range(start..start + ch.len_utf8(), "");
                 set_search_text(ui, meta, &query);
-                ui.search.set_position(pos - 1);
+                ui.search.set_position(del_pos);
                 update_view_from_provider(ui, meta, &query);
             }
         }
@@ -1109,9 +1104,8 @@ fn handle_key_press<T: Clone + 'static + Send>(
             ui.search.set_position(0);
         }
         gdk4::Key::End => {
-            if let Ok(i) = i32::try_from(ui.search_text.lock().unwrap().len() + 1) {
-                ui.search.set_position(i);
-            }
+            // -1 moves the cursor behind the last char
+            ui.search.set_position(-1);
         }
         gdk4::Key::Up | gdk4::Key::Left => {
             return move_selection(ui, meta, &Direction::Up);
