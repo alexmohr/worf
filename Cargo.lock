@@ -2880,7 +2880,7 @@ dependencies = [
 
 [[package]]
 name = "worf-hyprspace"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "Inflector",
  "clap",
@@ -2896,7 +2896,7 @@ dependencies = [
 
 [[package]]
 name = "worf-hyprswitch"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dirs 6.0.0",
  "env_logger",

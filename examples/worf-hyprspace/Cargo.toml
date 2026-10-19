@@ -1,6 +1,6 @@
 [package]
 name = "worf-hyprspace"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 description = "Manage Hyprland workspaces using the Worf API. Features automatic mode detection, workspace renaming, window moving, and more."
