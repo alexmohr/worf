@@ -211,6 +211,7 @@ The command line options have precedence over the configuration file.
 | search_query                  | string           | "https://duckduckgo.com/?q=" | Search query to use                                            |
 | blurred_background            | bool             | false                        | Blur the background of the screen                              |
 | blurred_background_fullscreen | bool             | false                        | Set background to full screen                                  |
+| blurred_background_layer      | bool             | false                        | Draw the background as a layer, animated like the main window  |
 | submit_with_expand            | bool             | true                         | Allow submit with expand key                                   |
 | auto_select_on_search         | bool             | false                        | Auto select when only 1 choice left                            |
 | rollover                      | bool             | true                         | Jump to first/last entry at end/start                          |
@@ -283,6 +284,7 @@ key_detection_type = "Value"
 search_query = "https://duckduckgo.com/?q="
 blurred_background = false
 blurred_background_fullscreen = false
+blurred_background_layer = false
 submit_with_expand = true
 auto_select_on_search = false
 rollover = true
@@ -298,6 +300,24 @@ Enable beautiful blur effects for Worf:
 ```bash
 layerrule = blur, worf
 ```
+
+#### Fullscreen background closing animation
+
+With `blurred_background_fullscreen`, the background is a separate fullscreen
+window. Hyprland animates a closing fullscreen window back to its floating
+size and position, and as the background is fullscreened as soon as it opens,
+that is Hyprland's default floating size in the top left corner: the
+background shrinks into the corner while it fades out. Give the window a
+floating geometry covering the whole monitor, so it has nowhere to go:
+
+```bash
+windowrule = size monitor_w monitor_h, match:class ^(worf)$
+windowrule = move 0 0, match:class ^(worf)$
+```
+
+Alternatively, `blurred_background_layer` draws the background as a layer like
+the main window, so both get the layer animations (`layerrule`) instead of the
+window ones.
 
 ---
 

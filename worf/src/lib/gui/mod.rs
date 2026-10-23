@@ -471,8 +471,13 @@ fn build_ui<T>(
     }
 
     let window_start = Instant::now();
+    // A layer background shares the window's layer; mapped first, it stays below
+    let background_layer = config.read().unwrap().blurred_background_layer();
+    if background_layer && let Some(background) = &ui_elements.background {
+        background.present();
+    }
     ui_elements.window.present();
-    if let Some(background) = &ui_elements.background {
+    if !background_layer && let Some(background) = &ui_elements.background {
         background.present();
     }
 

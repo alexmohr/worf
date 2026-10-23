@@ -648,6 +648,18 @@ pub struct Config {
     )]
     blurred_background_fullscreen: Option<bool>,
 
+    /// Draw the background as a layer shell surface covering the whole
+    /// output, instead of as a separate window. The compositor then animates
+    /// it like the main window (e.g. both fade out together) and it can cover
+    /// bars. Has no effect with `normal_window`.
+    /// Defaults to false.
+    #[clap(
+        long = "blurred-background-layer",
+        num_args = 0..=1,
+        default_missing_value = "true"
+    )]
+    blurred_background_layer: Option<bool>,
+
     /// Allow submitting selected entry with expand key if there is only 1 item left.
     #[clap(long = "submit-with-expand", num_args = 0..=1, default_missing_value = "true")]
     submit_with_expand: Option<bool>,
@@ -955,6 +967,11 @@ impl Config {
     #[must_use]
     pub fn blurred_background_fullscreen(&self) -> bool {
         self.blurred_background_fullscreen.unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn blurred_background_layer(&self) -> bool {
+        self.blurred_background_layer.unwrap_or(false) && !self.normal_window()
     }
 
     #[must_use]
