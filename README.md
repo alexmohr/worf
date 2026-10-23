@@ -301,6 +301,24 @@ Enable beautiful blur effects for Worf:
 layerrule = blur, worf
 ```
 
+#### Fullscreen background closing animation
+
+With `blurred_background_fullscreen`, the background is a separate fullscreen
+window. Hyprland animates a closing fullscreen window back to its floating
+size and position, and as the background is fullscreened as soon as it opens,
+that is Hyprland's default floating size in the top left corner: the
+background shrinks into the corner while it fades out. Give the window a
+floating geometry covering the whole monitor, so it has nowhere to go:
+
+```bash
+windowrule = size monitor_w monitor_h, match:class ^(worf)$
+windowrule = move 0 0, match:class ^(worf)$
+```
+
+Alternatively, `blurred_background_layer` draws the background as a layer like
+the main window, so both get the layer animations (`layerrule`) instead of the
+window ones.
+
 ---
 
 
