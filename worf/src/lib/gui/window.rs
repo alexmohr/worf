@@ -11,7 +11,7 @@ use gtk4::{
     Align, ApplicationWindow, CssProvider, FlowBox, FlowBoxChild, Label, Orientation,
     prelude::{BoxExt, FlowBoxChildExt, GtkWindowExt, NativeExt, OrientableExt, WidgetExt},
 };
-use gtk4_layer_shell::LayerShell;
+use gtk4_layer_shell::{Edge, KeyboardMode, LayerShell};
 use log;
 
 use super::{ChildPosition, CustomKeys, UiElements, select_visible_child};
@@ -55,7 +55,19 @@ pub(super) fn create_background(config: &Config) -> Option<ApplicationWindow> {
             .default_width(100)
             .default_height(100)
             .build();
-        if !config.normal_window() {
+        if config.blurred_background_layer() {
+            // A layer like the main window, so the compositor animates both
+            // the same way; as a toplevel it gets the window animations
+            // instead. Anchored to every edge and ignoring exclusive zones,
+            // it covers the whole output, bars included.
+            background.init_layer_shell();
+            background.set_layer(config.layer().into());
+            background.set_keyboard_mode(KeyboardMode::None);
+            background.set_exclusive_zone(-1);
+            for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+                background.set_anchor(edge, true);
+            }
+        } else if !config.normal_window() {
             background.set_layer(config.layer().into());
         }
         background.set_widget_name("background");

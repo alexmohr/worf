@@ -211,6 +211,7 @@ The command line options have precedence over the configuration file.
 | search_query                  | string           | "https://duckduckgo.com/?q=" | Search query to use                                            |
 | blurred_background            | bool             | false                        | Blur the background of the screen                              |
 | blurred_background_fullscreen | bool             | false                        | Set background to full screen                                  |
+| blurred_background_layer      | bool             | false                        | Draw the background as a layer, animated like the main window  |
 | submit_with_expand            | bool             | true                         | Allow submit with expand key                                   |
 | auto_select_on_search         | bool             | false                        | Auto select when only 1 choice left                            |
 | rollover                      | bool             | true                         | Jump to first/last entry at end/start                          |
@@ -283,6 +284,7 @@ key_detection_type = "Value"
 search_query = "https://duckduckgo.com/?q="
 blurred_background = false
 blurred_background_fullscreen = false
+blurred_background_layer = false
 submit_with_expand = true
 auto_select_on_search = false
 rollover = true
