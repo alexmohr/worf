@@ -116,6 +116,10 @@ cd worf
 cargo build --release
 ```
 
+To also enable the optional Hyprland support for focusing running applications
+(see [Hyprland Integration](#-hyprland-integration)), build with
+`cargo build --release --features hyprland-focus-if-running`.
+
 You will find all worf binaries, including the examples, in `./target/release`.
 Copy the binaries you need into a path that is part of `$PATH`, for example `/usr/bin`.
 Installing via cargo (once available) will put the binaries in `$HOME/.cargo/bin`.
@@ -215,6 +219,7 @@ The command line options have precedence over the configuration file.
 | submit_with_expand            | bool             | true                         | Allow submit with expand key                                   |
 | auto_select_on_search         | bool             | false                        | Auto select when only 1 choice left                            |
 | rollover                      | bool             | true                         | Jump to first/last entry at end/start                          |
+| focus_if_running              | bool             | false                        | drun: focus the window of a running app instead of starting it again (only with `--features hyprland-focus-if-running`, Hyprland with Lua config) |
 | text_output_mode              | TextOutputMode   | Clipboard                    | Output for text modes (i.e. math and emoji)                    |
 
 ### Enum Values
@@ -318,6 +323,43 @@ windowrule = move 0 0, match:class ^(worf)$
 Alternatively, `blurred_background_layer` draws the background as a layer like
 the main window, so both get the layer animations (`layerrule`) instead of the
 window ones.
+
+#### Focus a running application instead of starting it again
+
+In drun mode (and in auto mode when it starts an application), worf can focus
+the window of an application that is already running instead of starting it a
+second time. If no window is found, the application is started as usual.
+
+This talks to Hyprland directly and only supports Hyprland configured with
+Lua (`hyprland.lua`), as it focuses the window with `hl.dsp.focus`. The legacy
+`hyprland.conf` dispatcher syntax is not supported. It needs two things:
+
+1. Build worf with the `hyprland-focus-if-running` cargo feature, which is
+   not part of the default build:
+
+   ```bash
+   cargo build --release --features hyprland-focus-if-running
+   ```
+
+2. Turn the option on, either in the config or on the command line:
+
+   ```toml
+   focus_if_running = true
+   ```
+
+   ```bash
+   worf --show drun --focus-if-running true
+   ```
+
+A window belongs to an application if its class equals (ignoring case) the
+`StartupWMClass` of the desktop entry, the name of the desktop file (without
+`.desktop`), the executable of the `Exec` line, or the name shown in worf.
+Apps whose window class matches none of these are started again.
+Only the main entry of an application is affected; its actions
+(i.e. "New Window") always start the application.
+
+Without the cargo feature the option does not exist: `--focus-if-running` is
+rejected as an unknown argument and `focus_if_running` in the config is ignored.
 
 ---
 
