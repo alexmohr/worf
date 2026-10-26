@@ -2923,6 +2923,7 @@ dependencies = [
  "gdk4",
  "gtk4",
  "gtk4-layer-shell",
+ "hyprland",
  "libc",
  "log",
  "nix",
