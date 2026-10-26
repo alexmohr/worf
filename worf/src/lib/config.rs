@@ -673,6 +673,14 @@ pub struct Config {
     #[clap(long = "rollover", num_args = 0..=1, default_missing_value = "true")]
     rollover: Option<bool>,
 
+    /// In drun mode, focus the window of an already running application
+    /// instead of starting it again. Requires Hyprland with a Lua config.
+    /// Only available when worf is built with the `hyprland-focus-if-running` cargo feature.
+    /// Defaults to false
+    #[cfg(feature = "hyprland-focus-if-running")]
+    #[clap(long = "focus-if-running", num_args = 0..=1, default_missing_value = "true")]
+    focus_if_running: Option<bool>,
+
     /// For text modes, defines which output is used.
     /// This is per default used in math and emoji mode.
     /// Defaults to `Clipboard`
@@ -990,6 +998,14 @@ impl Config {
     }
 
     #[must_use]
+    pub fn focus_if_running(&self) -> bool {
+        #[cfg(feature = "hyprland-focus-if-running")]
+        return self.focus_if_running.unwrap_or(false);
+        #[cfg(not(feature = "hyprland-focus-if-running"))]
+        false
+    }
+
+    #[must_use]
     pub fn text_output_mode(&self) -> TextOutputMode {
         self.text_output_mode
             .clone()
@@ -1285,6 +1301,7 @@ mod tests {
     #[test]
     fn test_bool_options_work_as_flags() {
         let args = Config::parse_from(["worf", "--fork", "-i", "false", "--rollover=false"]);
+        assert!(!args.focus_if_running());
         assert!(args.fork());
         assert!(!args.insensitive());
         assert!(!args.rollover());

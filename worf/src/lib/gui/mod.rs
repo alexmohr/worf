@@ -173,6 +173,10 @@ pub struct MenuItem<T: Clone> {
     /// Allows to store arbitrary additional information
     pub data: Option<T>,
 
+    /// Window classes of the application this item starts, used to find its
+    /// already running window. Empty for items that do not start an application.
+    pub window_classes: Vec<String>,
+
     /// Score the item got in the current search
     search_sort_score: f64,
     /// True if the item is visible
@@ -236,6 +240,7 @@ impl<T: Clone> MenuItem<T> {
             working_dir,
             initial_sort_score,
             data,
+            window_classes: Vec::new(),
             //allow_submit,
             search_sort_score: 0.0,
             visible: true,

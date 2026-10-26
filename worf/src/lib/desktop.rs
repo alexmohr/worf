@@ -453,6 +453,58 @@ pub fn spawn_fork(cmd: &str, working_dir: Option<&String>) -> Result<(), Error> 
     start_forked_cmd(cmd)
 }
 
+/// Focuses an open window belonging to the application started by `cmd`.
+/// A window matches when its class equals one of `window_classes`, the executable
+/// name of `cmd` or `label` (ignoring case). Talks to Hyprland directly, so this only works on Hyprland
+/// configured with Lua.
+/// Returns `true` if a window was focused, `false` if none was found
+/// or Hyprland is not reachable.
+#[cfg(feature = "hyprland-focus-if-running")]
+#[must_use]
+pub fn focus_running_window(cmd: &str, label: &str, window_classes: &[String]) -> bool {
+    use hyprland::{
+        data::Clients,
+        dispatch::{Dispatch, DispatchType},
+        shared::HyprData,
+    };
+
+    let exec_name = parse_exec(cmd).into_iter().next().and_then(|exec| {
+        Path::new(&exec)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+    });
+    let candidates: Vec<String> = window_classes
+        .iter()
+        .cloned()
+        .chain(exec_name)
+        .chain(std::iter::once(label.to_string()))
+        .map(|c| c.to_lowercase())
+        .collect();
+
+    let Ok(clients) = Clients::get() else {
+        return false;
+    };
+    let Some(client) = clients.into_iter().find(|c| {
+        candidates.contains(&c.class.to_lowercase())
+            || candidates.contains(&c.initial_class.to_lowercase())
+    }) else {
+        return false;
+    };
+
+    // Only the Lua dispatcher syntax is supported, the legacy one is rejected
+    // by Hyprland when it is configured with Lua.
+    let lua_focus = format!("hl.dsp.focus({{window='address:{}'}})", client.address);
+    Dispatch::call(DispatchType::Custom(&lua_focus, "")).is_ok()
+}
+
+/// Stub used when worf is built without the `hyprland-focus-if-running` feature,
+/// the `focus_if_running` option does not exist then and this is never reached.
+#[cfg(not(feature = "hyprland-focus-if-running"))]
+#[must_use]
+pub fn focus_running_window(_cmd: &str, _label: &str, _window_classes: &[String]) -> bool {
+    false
+}
+
 fn stdio_unless_terminal(stream: &impl IsTerminal) -> Stdio {
     if stream.is_terminal() {
         Stdio::null()

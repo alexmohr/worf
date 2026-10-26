@@ -176,7 +176,13 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
                             .push(selection_result);
                     }
                     AutoRunType::DRun => {
-                        update_drun_cache_and_run(&cache_path, &mut cache, selection_result)?;
+                        let focus_if_running = config.read().is_ok_and(|c| c.focus_if_running());
+                        update_drun_cache_and_run(
+                            &cache_path,
+                            &mut cache,
+                            selection_result,
+                            focus_if_running,
+                        )?;
                         break;
                     }
                     AutoRunType::File => {

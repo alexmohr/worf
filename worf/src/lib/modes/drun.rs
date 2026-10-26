@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::Instant,
 };
@@ -12,8 +12,9 @@ use crate::{
     Error,
     config::{Config, SortOrder},
     desktop::{
-        ExecFields, expand_field_codes, find_desktop_files_with_paths, get_locale_variants,
-        load_cache_file, lookup_name_with_locale, parse_exec, save_cache_file, spawn_fork,
+        ExecFields, expand_field_codes, find_desktop_files_with_paths, focus_running_window,
+        get_locale_variants, load_cache_file, lookup_name_with_locale, parse_exec, save_cache_file,
+        spawn_fork,
     },
     gui::{self, ArcProvider, ExpandMode, ItemProvider, MenuItem, ProviderData},
     modes::load_cache,
@@ -80,21 +81,17 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                     &file.entry.name.default,
                 );
 
-                let (action, working_dir, in_terminal) = match &file.entry.entry_type {
+                let (action, working_dir, in_terminal, classes) = match &file.entry.entry_type {
                     EntryType::Application(app) => (
                         app.exec.clone(),
                         app.path.clone(),
                         app.terminal.unwrap_or(false),
+                        window_classes(app.startup_wm_class.clone(), &path),
                     ),
                     _ => return None,
                 };
 
-                let cmd_exists = action
-                    .as_deref()
-                    .and_then(|a| parse_exec(a).into_iter().next())
-                    .is_some_and(|cmd| PathBuf::from(&cmd).exists() || which::which(&cmd).is_ok());
-
-                if !cmd_exists {
+                if !exec_exists(action.as_deref()) {
                     log::warn!(
                         "Skipping desktop entry for {name:?} because action {action:?} does not \
                          exist"
@@ -128,6 +125,7 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
                     sort_score,
                     Some(self.data.clone()),
                 );
+                entry.window_classes = classes;
 
                 if !self.no_actions {
                     for action in file.actions.values() {
@@ -199,21 +197,50 @@ impl<T: Clone + Send + Sync> DRunProvider<T> {
     }
 }
 
+/// True if the command of the given `Exec` line exists, as path or in `$PATH`.
+fn exec_exists(exec: Option<&str>) -> bool {
+    exec.and_then(|a| parse_exec(a).into_iter().next())
+        .is_some_and(|cmd| PathBuf::from(&cmd).exists() || which::which(&cmd).is_ok())
+}
+
+/// Window classes an application may use: its `StartupWMClass` and desktop file id.
+fn window_classes(wm_class: Option<String>, desktop_file: &Path) -> Vec<String> {
+    wm_class
+        .into_iter()
+        .chain(
+            desktop_file
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned()),
+        )
+        .collect()
+}
+
 pub(crate) fn update_drun_cache_and_run<T: Clone>(
     cache_path: &PathBuf,
     cache: &mut HashMap<String, i64>,
     selection_result: MenuItem<T>,
+    focus_if_running: bool,
 ) -> Result<(), crate::Error> {
     // Another worf may have updated the cache since it was loaded.
     if let Ok(current) = load_cache_file(cache_path) {
         *cache = current;
     }
-    *cache.entry(selection_result.label).or_insert(0) += 1;
+    *cache.entry(selection_result.label.clone()).or_insert(0) += 1;
     if let Err(e) = save_cache_file(cache_path, cache) {
         log::warn!("cannot save drun cache {e:?}");
     }
 
     if let Some(action) = selection_result.action {
+        if focus_if_running
+            && !selection_result.window_classes.is_empty()
+            && focus_running_window(
+                &action,
+                &selection_result.label,
+                &selection_result.window_classes,
+            )
+        {
+            return Ok(());
+        }
         spawn_fork(&action, selection_result.working_dir.as_ref())
     } else {
         Err(Error::MissingAction)
@@ -233,7 +260,13 @@ pub fn show(config: &Arc<RwLock<Config>>) -> Result<(), Error> {
     match selection_result {
         Ok(s) => {
             let p = provider.lock().unwrap();
-            update_drun_cache_and_run(&p.cache_path, &mut p.cache.clone(), s.menu)?;
+            let focus_if_running = config.read().is_ok_and(|c| c.focus_if_running());
+            update_drun_cache_and_run(
+                &p.cache_path,
+                &mut p.cache.clone(),
+                s.menu,
+                focus_if_running,
+            )?;
         }
         Err(_) => {
             log::error!("No item selected");
