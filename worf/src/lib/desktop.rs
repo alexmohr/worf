@@ -176,7 +176,9 @@ pub fn find_desktop_files_with_paths() -> Vec<(PathBuf, DesktopFile)> {
 
     // Different files can describe the same application (i.e. a package and a local copy).
     // Only entries with the same name and command are duplicates, different applications
-    // may share a name. The first, highest priority entry is kept.
+    // may share a name. The first, highest priority entry is kept. Hidden entries are
+    // not duplicates of visible ones, otherwise they would shadow them (i.e. chrome ships
+    // a hidden com.google.Chrome.desktop next to the visible google-chrome.desktop).
     let mut seen = HashSet::with_capacity(parsed.len());
     let p: Vec<_> = parsed
         .into_iter()
@@ -185,7 +187,9 @@ pub fn find_desktop_files_with_paths() -> Vec<(PathBuf, DesktopFile)> {
                 EntryType::Application(app) => app.exec.clone(),
                 _ => None,
             };
-            seen.insert((desktop_file.entry.name.default.clone(), exec))
+            let hidden = desktop_file.entry.no_display.unwrap_or(false)
+                || desktop_file.entry.hidden.unwrap_or(false);
+            seen.insert((desktop_file.entry.name.default.clone(), exec, hidden))
         })
         .collect();
     log::debug!("Found {} desktop files in {:?}", p.len(), start.elapsed());
