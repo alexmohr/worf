@@ -164,9 +164,12 @@ pub fn find_desktop_files_with_paths() -> Vec<(PathBuf, DesktopFile)> {
     let parsed: Vec<(PathBuf, DesktopFile)> = files
         .into_par_iter()
         .filter_map(|(_, path)| {
-            fs::read_to_string(&path)
+            let content = fs::read_to_string(&path)
+                .inspect_err(|e| log::warn!("Cannot read desktop file {}: {e}", path.display()))
+                .ok()?;
+            parse_desktop_file(&content)
+                .inspect_err(|e| log::warn!("Cannot parse desktop file {}: {e}", path.display()))
                 .ok()
-                .and_then(|content| freedesktop_file_parser::parse(&content).ok())
                 .map(|desktop_file| (path, desktop_file))
         })
         .collect();
@@ -187,6 +190,33 @@ pub fn find_desktop_files_with_paths() -> Vec<(PathBuf, DesktopFile)> {
         .collect();
     log::debug!("Found {} desktop files in {:?}", p.len(), start.elapsed());
     p
+}
+
+/// Parses a desktop file. The parser rejects files with localized `Icon[..]` keys or
+/// repeated keys, which exist in the wild (i.e. nextcloud, chrome). In that case the
+/// offending lines are dropped and parsing is retried.
+fn parse_desktop_file(content: &str) -> Result<DesktopFile, freedesktop_file_parser::ParseError> {
+    freedesktop_file_parser::parse(content).or_else(|err| {
+        let mut seen = HashSet::new();
+        let mut group = "";
+        let sanitized = content
+            .lines()
+            .filter(|line| {
+                let line = line.trim();
+                if line.starts_with('[') {
+                    group = line;
+                    return true;
+                }
+                let Some((key, _)) = line.split_once('=') else {
+                    return true;
+                };
+                let key = key.trim();
+                !key.starts_with("Icon[") && (line.starts_with('#') || seen.insert((group, key)))
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        freedesktop_file_parser::parse(&sanitized).map_err(|_| err)
+    })
 }
 
 /// Return all possible locales based on the users preferences
